@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Review and refactor the following Lean 4 proof snippet according to best practices. Fix any non-terminal simp usage, consolidate redundant rewrites, enforce Mathlib indentation and style guidelines, and explain your changes:\n\n```lean\ntheorem list_len_add (α : Type) (xs ys zs : List α) : (xs ++ ys).length + zs.length = xs.length + (ys ++ zs).length :=\nby\n  simp\n  rw [Nat.add_assoc]\n  rw [Nat.add_comm (ys.length) (zs.length)]\n  rw [← Nat.add_assoc]\n```",
+      "prompt": "Review and refactor the following Lean 4 proof snippet according to best practices. Fix any non-terminal simp usage, consolidate redundant rewrites, enforce Mathlib indentation and style guidelines, and explain your changes:\n\n```lean\ntheorem list_len_add (α : Type) (xs ys zs : List α) : (xs ++ ys).length + zs.length = (xs.length + zs.length) + ys.length :=\nby\n  simp\n  rw [Nat.add_assoc]\n  rw [Nat.add_comm (ys.length) (zs.length)]\n  rw [← Nat.add_assoc]\n```",
       "expected_output": "A refactored proof eliminating the non-terminal simp (using `simp only [List.length_append]` or `omega`), consolidating rewrites, placing `by` on the same line, and following Lean 4 style conventions.",
       "files": []
     },
