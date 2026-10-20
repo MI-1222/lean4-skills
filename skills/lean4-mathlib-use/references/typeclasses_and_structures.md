@@ -166,3 +166,23 @@ omit [MeasurableSpace Ω] in
 theorem independent_lemma (n : ℕ) : n + 0 = n := by
   rfl
 ```
+
+> [!WARNING]
+> **Docstring Placement with `in`**:
+> Command-level prefix modifiers with `in` (such as `omit [...] in`, `open ... in`, or `set_option ... in`) must appear **before** the docstring (`/-- ... -/`), NOT between the docstring and `theorem`/`def`:
+>
+> ```lean
+> -- ⭕ CORRECT: omit placed before docstring
+> omit [MeasurableSpace Ω] in
+> /-- An independent lemma that does not require the ambient measure space. -/
+> theorem independent_lemma (n : ℕ) : n + 0 = n := by
+>   rfl
+>
+> -- ❌ INCORRECT: parser error "unexpected token 'omit'; expected 'lemma'"
+> /-- An independent lemma ... -/
+> omit [MeasurableSpace Ω] in
+> theorem independent_lemma (n : ℕ) : n + 0 = n := by
+>   rfl
+> ```
+>
+> In Lean 4's grammar, `/-- ... -/` begins `declModifiers` which must immediately precede the declaration keyword (`theorem`, `def`, `lemma`). Interleaving a command like `omit` between the docstring and declaration causes a syntax error.
