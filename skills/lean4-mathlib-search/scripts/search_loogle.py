@@ -52,14 +52,10 @@ def find_local_loogle_runner(lake_dir: Optional[str] = None) -> Optional[Tuple[L
             if loogle_pkg.exists() or (parent / "Loogle").exists():
                 return (["lake", "exe", "loogle"], parent)
 
-    # 4. Check if `loogle` binary is directly on PATH
+    # 4. Check if `loogle` binary exists on PATH
     loogle_bin = shutil.which("loogle")
     if loogle_bin:
         return ([loogle_bin], None)
-
-    # 5. Fallback check: if `lake` exists and current directory is a lake project
-    if shutil.which("lake") and ((cwd / "lakefile.lean").exists() or (cwd / "lakefile.toml").exists()):
-        return (["lake", "exe", "loogle"], cwd)
 
     return None
 
@@ -494,7 +490,7 @@ def main() -> int:
             lake_dir=args.lake_dir,
         )
         # Fallback to API if prefer_local was used and local failed
-        if not result["success"] and args.prefer_local and "not found" in result.get("error", ""):
+        if not result["success"] and args.prefer_local:
             result = search_via_rest_api(
                 query=args.query,
                 api_url=args.api_url,
