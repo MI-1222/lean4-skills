@@ -4,9 +4,15 @@ Writing Lean 4 proofs is not just about satisfying the type checker; formal proo
 
 ---
 
-## 1. Canonical File Header & Module Layout
+## 1. File Header & Module Layout
 
-In modern Lean 4 (and Mathlib), files follow a strict structural hierarchy:
+Lean 4 supports two module header styles: the **Classic Style** (standard across existing Mathlib and legacy projects) and the **Modern Module System** (introduced in Lean 4.16+). Understanding both is essential for navigating existing codebases and adopting modern visibility features.
+
+---
+
+### 1.1 Classic Header Layout (Standard Mathlib & Existing Codebases)
+
+The vast majority of existing Lean 4 repositories and Mathlib files use the traditional import style without the `module` keyword. All imported modules are accessible, and declarations are managed via `open`, `export`, or `private`:
 
 ```lean
 /-
@@ -14,11 +20,8 @@ Copyright (c) 2026 Author Name. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Author Name
 -/
-module
-
-public import Mathlib.Basic.Real.Basic
-public import Mathlib.Topology.Basic
-
+import Mathlib.Basic.Real.Basic
+import Mathlib.Topology.Basic
 import Mathlib.Tactic.Linarith
 
 /-!
@@ -44,18 +47,67 @@ Explain the mathematical concepts, prerequisites, and main contributions.
 - [Hardy1952] G. H. Hardy, J. E. Littlewood, and G. Pólya, *Inequalities*.
 -/
 
-public section
-
 -- Module declarations start here
 ```
 
-### Critical Rules for Headers
+---
 
-1. **Module Docstring Placement**: The module docstring `/-! ... -/` **must come after all import statements**. Placing a module docstring before imports will trigger an `invalid 'import' command` error.
-2. **Import Organization**:
-   - `public import`: For modules whose declarations appear in the public types or signatures of this file.
-   - `import`: For modules used solely within proof implementations.
-   - Alphabetize imports within their respective groups.
+### 1.2 Modern Module System Layout (Lean 4.16+)
+
+Starting in Lean 4.16+, Lean introduced a dedicated module system with explicit visibility controls (`module`, `public import`, `public section`). This enables finer encapsulation and reduced transitive dependency leakage:
+
+```lean
+/-
+Copyright (c) 2026 Author Name. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Author Name
+-/
+module
+
+public import Mathlib.Basic.Real.Basic
+public import Mathlib.Topology.Basic
+
+import Mathlib.Tactic.Linarith
+
+/-!
+# Title of the Module
+
+A high-level description of the mathematical content formalized in this file.
+-/
+
+public section
+
+-- Public declarations exported to downstream consumers start here
+
+end
+```
+
+#### Key Differences in Modern Syntax:
+
+- **`module`**: Explicitly marks the file as a module using the new module system.
+- **`public import`**: Re-exports the imported module to any downstream file that imports this module. Use this for libraries whose types or classes appear in your public theorem/definition signatures.
+- **`import` (Private Import)**: Keeps the dependency internal to this module. Downstream files importing this module will not automatically inherit this import. Use this for tactics (e.g., `Mathlib.Tactic.Linarith`) or implementation-only helpers.
+- **`public section`**: Marks all declarations within the section as public by default.
+
+---
+
+### 1.3 Usage & Migration Guidance: Which Style to Use?
+
+| Context                         | Recommended Style | Rationale                                                                                                                      |
+| :------------------------------ | :---------------- | :----------------------------------------------------------------------------------------------------------------------------- |
+| **Contributing to Mathlib**     | **Classic Style** | Mathlib currently adheres to the classic header format across its library. Always follow the surrounding codebase conventions. |
+| **Existing Community Projects** | **Classic Style** | Unless the project explicitly configured modern module syntax, maintain consistency with the existing headers.                 |
+| **New Projects (Lean 4.16+)**   | **Modern Style**  | Take advantage of `public import` vs. `import` to minimize transitive imports and improve modular compilation boundaries.      |
+
+---
+
+### 1.4 Universal Rules for All Headers
+
+Regardless of whether you use the Classic or Modern syntax:
+
+1. **Module Docstring Placement**: The module docstring `/-! ... -/` **must strictly come after all import statements** (or `public import`). Placing a module docstring before imports will trigger an `invalid 'import' command` compile error.
+2. **Alphabetical Ordering**: Alphabetize `import` statements within each section to maintain clean git diffs and prevent duplication.
+3. **Targeted Imports**: Avoid `import Mathlib` at the top of production files; specify only the minimal submodules required.
 
 ---
 
