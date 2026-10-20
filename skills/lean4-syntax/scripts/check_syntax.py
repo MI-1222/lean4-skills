@@ -1,0 +1,536 @@
+#!/usr/bin/env python3
+"""
+Fast syntax and elaboration checker for Lean 4 code snippets and files.
+
+Supports:
+1. Static Lean 3 deprecation linting (detecting obsolete syntax like `begin ... end`,
+   trailing commas, `<-`, deprecated `calc` colons, etc.).
+2. Real-time compiler diagnostics via `lake env lean --json` on temporary files or
+   existing Lean files.
+
+Zero external dependencies: uses only Python standard library.
+"""
+
+import argparse
+import dataclasses
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+from typing import Any, Dict, List, Optional, Tuple
+
+
+@dataclasses.dataclass
+class Diagnostic:
+    severity: str  # "error", "warning", "info"
+    line: int
+    column: int
+    message: str
+    source: str  # "lean-compiler" or "lean3-linter"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "severity": self.severity,
+            "line": self.line,
+            "column": self.column,
+            "message": self.message,
+            "source": self.source,
+        }
+
+
+@dataclasses.dataclass
+class CheckResult:
+    is_valid: bool
+    has_warnings: bool
+    diagnostics: List[Diagnostic]
+    raw_output: str
+    checked_path: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "is_valid": self.is_valid,
+            "has_warnings": self.has_warnings,
+            "checked_path": self.checked_path,
+            "diagnostics": [d.to_dict() for d in self.diagnostics],
+            "raw_output": self.raw_output,
+        }
+
+
+class Lean3Linter:
+    """Detects legacy Lean 3 patterns frequently hallucinated by LLMs."""
+
+    # Patterns to detect Lean 3 syntax
+    RULES: List[Tuple[str, re.Pattern, str, str]] = [
+        (
+            "LEAN3_BEGIN_END",
+            re.compile(r"\bbegin\b"),
+            "error",
+            "Found 'begin' block. Lean 4 uses 'by' for tactic mode, not 'begin ... end'.",
+        ),
+        (
+            "LEAN3_TRAILING_COMMA",
+            re.compile(r"^\s*(?:intro|intros|exact|apply|refine|rw|simp|ring|omega|aesop|linarith|rcases|obtain)\b.*,\s*(?:--.*)?$"),
+            "error",
+            "Found trailing comma at end of tactic line. Lean 4 separates tactics by newline or semicolon ';', never trailing commas.",
+        ),
+        (
+            "LEAN3_ASCII_REWRITE_ARROW",
+            re.compile(r"\brw\s*\[[^\]]*<-\s*"),
+            "warning",
+            "Found '<-' inside rewrite tactic. Lean 4 uses Unicode left arrow '←' (\\l).",
+        ),
+        (
+            "LEAN3_CALC_COLON",
+            re.compile(r"^\s*(?:_|[a-zA-Z0-9_().+*\-\^]+)\s*[=<≤≥>~≃≈]\s*.*[^:]\s*:\s*(?:by|proof|\{|_|[a-zA-Z0-9_]+)\b"),
+            "error",
+            "Found ':' before proof in 'calc' step. Lean 4 uses ':=' instead of ':'.",
+        ),
+        (
+            "LEAN3_HAVE_FROM",
+            re.compile(r"\bhave\s+[^:]+:[^:]+,\s*from\b"),
+            "error",
+            "Found 'have ..., from'. Lean 4 uses 'have ... := ...' without 'from' and without comma.",
+        ),
+        (
+            "LEAN3_INDUCTION_WITH_VARS",
+            re.compile(r"\binduction\s+\S+\s+with\s+(?!\|\s*)[a-zA-Z0-9_]+\s+[a-zA-Z0-9_]+"),
+            "warning",
+            "Found 'induction ... with <var1> <var2>'. Lean 4 pattern-matches induction cases with 'with | zero => ... | succ n ih => ...' or binds them via subsequent 'intro'.",
+        ),
+        (
+            "LEAN3_SPLIT_CONJUNCTION",
+            re.compile(r"^\s*split\s*(?:--.*)?$"),
+            "warning",
+            "Found bare 'split' tactic. In Lean 4, 'split' decomposes 'if-then-else' and 'match' statements; to split a conjunction (P ∧ Q) or constructor target, use 'constructor' or 'refine ⟨?_, ?_⟩'.",
+        ),
+        (
+            "LEAN3_BRACE_SUBGOAL",
+            re.compile(r"^\s*\{\s*(?:--.*)?$"),
+            "warning",
+            "Found standalone opening brace '{' for subgoal. Lean 4 standard practice uses focus dots '·' (\\.) to delimit subgoals.",
+        ),
+    ]
+
+    @classmethod
+    def lint(cls, code: str) -> List[Diagnostic]:
+        diagnostics: List[Diagnostic] = []
+        lines = code.splitlines()
+
+        for line_idx, line in enumerate(lines, start=1):
+            # Skip pure comment lines
+            stripped = line.strip()
+            if stripped.startswith("--") or stripped.startswith("/-"):
+                continue
+
+            for rule_id, pattern, severity, message in cls.RULES:
+                if pattern.search(line):
+                    col = line.find(pattern.search(line).group(0)) + 1
+                    diagnostics.append(
+                        Diagnostic(
+                            severity=severity,
+                            line=line_idx,
+                            column=max(1, col),
+                            message=f"[{rule_id}] {message}",
+                            source="lean3-linter",
+                        )
+                    )
+
+        return diagnostics
+
+
+class Lean4SyntaxChecker:
+    """Validates Lean 4 code syntax and elaboration via `lake env lean --json`."""
+
+    def __init__(self, project_root: Optional[Path] = None, timeout: float = 30.0):
+        self.project_root = self._resolve_project_root(project_root)
+        self.timeout = timeout
+
+    @staticmethod
+    def _resolve_project_root(explicit_root: Optional[Path]) -> Path:
+        if explicit_root:
+            resolved = explicit_root.resolve()
+            if (resolved / "lean-toolchain").exists():
+                return resolved
+            return resolved
+
+        cwd = Path.cwd().resolve()
+        cur = cwd
+        while cur != cur.parent:
+            if (cur / "lean-toolchain").exists() or (cur / "lakefile.lean").exists() or (cur / "lakefile.toml").exists():
+                return cur
+            cur = cur.parent
+
+        return cwd
+
+    def check_file(self, file_path: Path, run_lint: bool = True) -> CheckResult:
+        """Checks an existing Lean file."""
+        if not file_path.exists():
+            return CheckResult(
+                is_valid=False,
+                has_warnings=False,
+                diagnostics=[
+                    Diagnostic(
+                        severity="error",
+                        line=0,
+                        column=0,
+                        message=f"Target file does not exist: {file_path}",
+                        source="lean-compiler",
+                    )
+                ],
+                raw_output="",
+                checked_path=str(file_path),
+            )
+
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except Exception as e:
+            return CheckResult(
+                is_valid=False,
+                has_warnings=False,
+                diagnostics=[
+                    Diagnostic(
+                        severity="error",
+                        line=0,
+                        column=0,
+                        message=f"Failed to read file {file_path}: {e}",
+                        source="lean-compiler",
+                    )
+                ],
+                raw_output="",
+                checked_path=str(file_path),
+            )
+
+        lint_diags = Lean3Linter.lint(content) if run_lint else []
+        compiler_result = self._run_lean_compiler(file_path)
+
+        all_diags = lint_diags + compiler_result.diagnostics
+        has_error = any(d.severity == "error" for d in all_diags)
+        has_warning = any(d.severity == "warning" for d in all_diags)
+
+        return CheckResult(
+            is_valid=(not has_error),
+            has_warnings=has_warning,
+            diagnostics=all_diags,
+            raw_output=compiler_result.raw_output,
+            checked_path=str(file_path),
+        )
+
+    def check_snippet(self, code_snippet: str, run_lint: bool = True) -> CheckResult:
+        """Writes a snippet to a temporary file in `.lake/temp_check/` and validates it."""
+        lint_diags = Lean3Linter.lint(code_snippet) if run_lint else []
+
+        temp_dir = self.project_root / ".lake" / "temp_check"
+        try:
+            temp_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            temp_dir = Path(tempfile.gettempdir())
+
+        temp_file = tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".lean",
+            dir=temp_dir,
+            delete=False,
+            encoding="utf-8",
+        )
+        temp_file_path = Path(temp_file.name)
+
+        try:
+            temp_file.write(code_snippet)
+            temp_file.flush()
+            temp_file.close()
+
+            compiler_result = self._run_lean_compiler(temp_file_path)
+        finally:
+            if temp_file_path.exists():
+                try:
+                    os.remove(temp_file_path)
+                except OSError:
+                    pass
+
+        all_diags = lint_diags + compiler_result.diagnostics
+        has_error = any(d.severity == "error" for d in all_diags)
+        has_warning = any(d.severity == "warning" for d in all_diags)
+
+        return CheckResult(
+            is_valid=(not has_error),
+            has_warnings=has_warning,
+            diagnostics=all_diags,
+            raw_output=compiler_result.raw_output,
+            checked_path="<snippet>",
+        )
+
+    def _run_lean_compiler(self, lean_file: Path) -> CheckResult:
+        """Executes `lake env lean --json <file>`."""
+        cmd = ["lake", "env", "lean", "--json", str(lean_file)]
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(self.project_root),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=self.timeout,
+            )
+        except FileNotFoundError:
+            # Fall back to standalone `lean --json` if lake is not found in PATH
+            cmd_fallback = ["lean", "--json", str(lean_file)]
+            try:
+                proc = subprocess.run(
+                    cmd_fallback,
+                    cwd=str(self.project_root),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=self.timeout,
+                )
+            except Exception as e:
+                return CheckResult(
+                    is_valid=False,
+                    has_warnings=False,
+                    diagnostics=[
+                        Diagnostic(
+                            severity="error",
+                            line=0,
+                            column=0,
+                            message=f"Failed to execute lean command: {e}",
+                            source="lean-compiler",
+                        )
+                    ],
+                    raw_output="",
+                )
+        except subprocess.TimeoutExpired:
+            return CheckResult(
+                is_valid=False,
+                has_warnings=False,
+                diagnostics=[
+                    Diagnostic(
+                        severity="error",
+                        line=0,
+                        column=0,
+                        message=f"Validation timed out after {self.timeout}s",
+                        source="lean-compiler",
+                    )
+                ],
+                raw_output="",
+            )
+        except Exception as e:
+            return CheckResult(
+                is_valid=False,
+                has_warnings=False,
+                diagnostics=[
+                    Diagnostic(
+                        severity="error",
+                        line=0,
+                        column=0,
+                        message=f"Error executing validation: {e}",
+                        source="lean-compiler",
+                    )
+                ],
+                raw_output="",
+            )
+
+        diagnostics: List[Diagnostic] = []
+        has_error = False
+        raw_stdout = proc.stdout.strip()
+
+        if raw_stdout:
+            for line in raw_stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                    records = record if isinstance(record, list) else [record]
+                    for r in records:
+                        sev = r.get("severity", "info").lower()
+                        pos = r.get("pos", {})
+                        data = r.get("data", "")
+                        d = Diagnostic(
+                            severity=sev,
+                            line=pos.get("line", 0),
+                            column=pos.get("column", 0),
+                            message=data.strip(),
+                            source="lean-compiler",
+                        )
+                        diagnostics.append(d)
+                        if sev == "error":
+                            has_error = True
+                except json.JSONDecodeError:
+                    continue
+
+        if proc.returncode != 0 and not has_error:
+            has_error = True
+            err_msg = proc.stderr.strip() or "Lean compilation failed with non-zero exit code"
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    line=0,
+                    column=0,
+                    message=err_msg,
+                    source="lean-compiler",
+                )
+            )
+
+        has_warning = any(d.severity == "warning" for d in diagnostics)
+
+        return CheckResult(
+            is_valid=(not has_error),
+            has_warnings=has_warning,
+            diagnostics=diagnostics,
+            raw_output=raw_stdout,
+        )
+
+
+def format_text_output(result: CheckResult) -> str:
+    status_str = "VALID" if result.is_valid else "INVALID"
+    lines = [
+        f"=== Lean 4 Syntax & Elaboration Check: {status_str} ===",
+        f"Target: {result.checked_path or '<snippet>'}",
+    ]
+
+    if not result.diagnostics:
+        lines.append("No errors or warnings detected.")
+    else:
+        lines.append(f"Total diagnostics: {len(result.diagnostics)}")
+        for d in result.diagnostics:
+            pos_str = f"L{d.line}:C{d.column}" if d.line > 0 else "[-:-]"
+            lines.append(f"[{d.severity.upper():<7}] {pos_str:<10} ({d.source}) {d.message}")
+
+    return "\n".join(lines)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Fast Lean 4 Syntax & Elaboration Checker with Lean 3 Linting"
+    )
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument(
+        "file",
+        nargs="?",
+        type=str,
+        help="Path to an existing .lean file to check",
+    )
+    group.add_argument(
+        "-s",
+        "--snippet",
+        type=str,
+        help="Lean 4 code snippet string to check",
+    )
+    group.add_argument(
+        "--stdin",
+        action="store_true",
+        help="Read code snippet from standard input",
+    )
+
+    parser.add_argument(
+        "--project-root",
+        type=str,
+        default=None,
+        help="Path to Lean project root (defaults to nearest ancestor with lean-toolchain)",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Subprocess execution timeout in seconds (default: 30.0)",
+    )
+    parser.add_argument(
+        "--no-lint",
+        action="store_true",
+        help="Disable Lean 3 deprecation linter",
+    )
+    parser.add_argument(
+        "--lint-only",
+        action="store_true",
+        help="Run only the static Lean 3 linter without calling Lean compiler",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results in JSON format",
+    )
+
+    args = parser.parse_args()
+
+    project_root = Path(args.project_root) if args.project_root else None
+    checker = Lean4SyntaxChecker(project_root=project_root, timeout=args.timeout)
+    run_lint = not args.no_lint
+
+    # Read snippet from stdin if specified
+    if args.stdin or (not args.file and not args.snippet and not sys.stdin.isatty()):
+        code = sys.stdin.read()
+        if args.lint_only:
+            diags = Lean3Linter.lint(code)
+            has_error = any(d.severity == "error" for d in diags)
+            res = CheckResult(
+                is_valid=(not has_error),
+                has_warnings=any(d.severity == "warning" for d in diags),
+                diagnostics=diags,
+                raw_output="",
+                checked_path="<stdin>",
+            )
+        else:
+            res = checker.check_snippet(code, run_lint=run_lint)
+    elif args.snippet:
+        code = args.snippet
+        if args.lint_only:
+            diags = Lean3Linter.lint(code)
+            has_error = any(d.severity == "error" for d in diags)
+            res = CheckResult(
+                is_valid=(not has_error),
+                has_warnings=any(d.severity == "warning" for d in diags),
+                diagnostics=diags,
+                raw_output="",
+                checked_path="<snippet>",
+            )
+        else:
+            res = checker.check_snippet(code, run_lint=run_lint)
+    elif args.file:
+        file_path = Path(args.file)
+        if args.lint_only:
+            if not file_path.exists():
+                res = CheckResult(
+                    is_valid=False,
+                    has_warnings=False,
+                    diagnostics=[
+                        Diagnostic(
+                            severity="error",
+                            line=0,
+                            column=0,
+                            message=f"File not found: {file_path}",
+                            source="lean3-linter",
+                        )
+                    ],
+                    raw_output="",
+                    checked_path=str(file_path),
+                )
+            else:
+                diags = Lean3Linter.lint(file_path.read_text(encoding="utf-8"))
+                has_error = any(d.severity == "error" for d in diags)
+                res = CheckResult(
+                    is_valid=(not has_error),
+                    has_warnings=any(d.severity == "warning" for d in diags),
+                    diagnostics=diags,
+                    raw_output="",
+                    checked_path=str(file_path),
+                )
+        else:
+            res = checker.check_file(file_path, run_lint=run_lint)
+    else:
+        parser.print_help()
+        return 1
+
+    if args.json:
+        print(json.dumps(res.to_dict(), indent=2, ensure_ascii=False))
+    else:
+        print(format_text_output(res))
+
+    return 0 if res.is_valid else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

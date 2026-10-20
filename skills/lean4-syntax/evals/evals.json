@@ -1,0 +1,23 @@
+{
+  "skill_name": "lean4-syntax",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Fix the following Lean 3 proof snippet into valid Lean 4 syntax:\n```lean\ntheorem and_swap (P Q : Prop) : P ∧ Q → Q ∧ P :=\nbegin\n  intro h,\n  split,\n  · exact h.right,\n  · exact h.left,\nend\n```",
+      "expected_output": "The proof should use `by` instead of `begin ... end`, remove all trailing commas, use `constructor` (or `refine ⟨?_, ?_⟩`) instead of `split`, and maintain proper focus dot formatting.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I wrote a calculation proof in Lean 4 but the compiler gives an error around `calc`. Please format this correctly using Lean 4 `calc` syntax:\n```lean\ntheorem trans_example (a b c : Nat) (h1 : a = b) (h2 : b ≤ c) : a + 1 ≤ c + 1 := by\n  calc\n    a + 1 = b + 1 : by rw [h1]\n    b + 1 ≤ c + 1 : by omega\n```",
+      "expected_output": "The proof should use `:=` instead of `:` for calc steps, and use the continuation underscore `_` on the second step (`_ ≤ c + 1 := by omega`).",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Explain why this nested `have` tactic causes `unexpected token 'have'; expected command` in Lean 4, and provide the fixed code:\n```lean\ntheorem test (p : Prop) (hp : p) : p := by\n  have h : p := by\n  exact hp\n  exact h\n```",
+      "expected_output": "Explain Lean 4's offside rule and that tactics inside `:= by` must be indented deeper than the `have` keyword; provide the fixed code with at least 2-space deeper indentation for `exact hp`.",
+      "files": []
+    }
+  ]
+}
