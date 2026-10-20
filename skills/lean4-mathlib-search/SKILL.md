@@ -62,6 +62,22 @@ When working inside a tactic block (`by ...`), Lean 4 provides built-in metaprog
 4. **Replace and Validate**: Permanently substitute `exact?` with the suggested code (`exact Nat.add_comm x y`) and verify diagnostics are clean.
 5. **Fallback**: If `exact?` fails (goal cannot be closed in one step), fall back to `apply?` or `rw?`.
 
+### Limitations & Performance Considerations
+
+While inline tactics are powerful and direct, keep these two critical constraints in mind:
+
+1. **Strictly Limited to Imported Modules**:
+   - `exact?`, `apply?`, and `rw?` only index declarations that are **already imported** in the current file.
+   - If Mathlib contains the exact lemma you need, but its module is not yet imported, inline tactics will fail with `no applicable declaration found`.
+   - **Rule**: If an inline tactic fails on a standard mathematical fact, **do not assume Mathlib lacks the lemma**. Switch immediately to **Strategy 2 (Loogle)** to search the entire global Mathlib index.
+
+2. **Computational Overhead & Heartbeat Exhaustion**:
+   - Searching via `rw?` or `apply?` in files with broad imports (e.g. `import Mathlib`) initiates higher-order unification against tens of thousands of candidate lemmas.
+   - This can cause language server freezes, long compilation hangs, or `(deterministic) timeout at ... maximum heartbeat count exceeded` errors.
+   - **Remedy**:
+     - Maintain granular imports (e.g. `import Mathlib.Data.Nat.Basic`) rather than monolithic ones.
+     - Never leave unresolved `exact?`, `apply?`, or `rw?` calls in a saved file; if they do not produce a suggestion within a few seconds, delete them and query `search_loogle.py` via CLI.
+
 ---
 
 ## 3. Strategy 2: Type Signature Search via Loogle (`search_loogle.py`)
@@ -204,6 +220,8 @@ When you only know high-level mathematical terminology in English (e.g., "Banach
 
 ### Anti-Patterns to Avoid
 
+- **Assuming inline tactic failure means Mathlib lacks the lemma**: `exact?` and `rw?` only inspect transitively imported modules in the current file. If an inline search fails on a reasonable mathematical step, do not assume the theorem does not exist in Mathlib; transition to Loogle (`search_loogle.py`) to search the global library.
+- **Leaving expensive inline search tactics active under broad imports**: Inserting `rw?` or `apply?` into a file that imports monolithic modules (such as `import Mathlib`) triggers unbounded unification across tens of thousands of declarations, causing severe language server lag or heartbeat exhaustion errors.
 - **Forgetting to import the lemma's module**: Loogle searches the entire Mathlib corpus across all unimported modules. Finding a lemma like `Real.sin` or `Real.sqrt_le_sqrt` does NOT mean it is currently in scope. Always extract the `Module` attribute from the result and add `import <Module>` to your file header before using it.
 - **Never guess lemma names without checking**: Hallucinating identifiers (e.g., `Mathlib.Theorem.pythagorean`) causes `unknown identifier` compilation errors.
 - **Do not overload Loogle queries**: Writing overly complex signatures with 10 type variables causes Loogle timeouts. Start with key constants or subexpressions (e.g., `_ * (_ ^ _)`), then refine.
@@ -212,8 +230,8 @@ When you only know high-level mathematical terminology in English (e.g., "Banach
 ### Verification Checklist
 
 - [ ] Identified active goal with `lean_goal.py`?
-- [ ] Attempted inline `exact?` / `apply?` / `rw?` first?
-- [ ] Tested type signature pattern with `search_loogle.py`?
+- [ ] Attempted inline `exact?` / `apply?` / `rw?` first on active goals?
+- [ ] If inline tactics failed or timed out, transitioned to Loogle search (`search_loogle.py`)?
 - [ ] Checked search result `Module` and added `import <Module>` to the Lean file header?
 - [ ] Verified that the identifier resolves cleanly (`#check <lemma_name>`)?
 - [ ] Checked for clean compilation without `sorry` or warnings?
