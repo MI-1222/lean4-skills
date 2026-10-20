@@ -42,6 +42,12 @@ LAKE_GENERIC_ERROR_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Lake progress lines (e.g., "[2071/2071] Built ...") and build summary lines.
+LAKE_PROGRESS_OR_STATUS_RE = re.compile(
+    r"^\s*(?:(?:[⚠ℹ✔✖]\s*)?\[\d+/\d+\].*|Build (?:completed|failed).*)$",
+    re.IGNORECASE,
+)
+
 
 def strip_ansi(text: str) -> str:
     """
@@ -81,6 +87,11 @@ def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
             # Treat empty lines as paragraph breaks in multi-line messages.
             if current_diag is not None:
                 current_diag["message"] += "\n"
+            continue
+
+        # Ignore Lake progress and status lines.
+        if LAKE_PROGRESS_OR_STATUS_RE.match(line):
+            flush_current()
             continue
 
         # 1. Match standard direct Lean diagnostic line (path:line:col: severity: message).
