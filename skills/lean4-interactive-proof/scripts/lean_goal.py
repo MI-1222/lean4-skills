@@ -319,26 +319,18 @@ def extract_goal_and_diagnostics(
         rendered = goal_result.get("rendered") if goal_result else None
         goals = goal_result.get("goals", []) if goal_result else []
 
-        # Check if goals are completed
-        is_done = False
-        if rendered:
-            clean_rendered = rendered.strip()
-            if "goals accomplished" in clean_rendered or "no goals" in clean_rendered:
-                is_done = True
-            elif len(goals) == 0 and not any(d.get("severity", 1) == 1 for d in client.diagnostics):
-                is_done = True
-        elif goal_result is not None and len(goals) == 0:
-            is_done = True
-
-        # Process compiler diagnostics (severity: 1=Error, 2=Warning, 3=Info, 4=Hint)
+        # Compiler diagnostics.
         formatted_diags = []
         severity_map = {1: "Error", 2: "Warning", 3: "Info", 4: "Hint"}
+        has_errors = False
         for diag in client.diagnostics:
+            severity_num = diag.get("severity", 1)
+            if severity_num == 1:
+                has_errors = True
             d_range = diag.get("range", {})
             start_pos = d_range.get("start", {})
-            d_line = start_pos.get("line", 0) + 1  # convert to 1-indexed
+            d_line = start_pos.get("line", 0) + 1  # 1-indexed に変換
             d_col = start_pos.get("character", 0) + 1
-            severity_num = diag.get("severity", 1)
             formatted_diags.append(
                 {
                     "line": d_line,
@@ -347,6 +339,20 @@ def extract_goal_and_diagnostics(
                     "message": diag.get("message", "").strip(),
                 }
             )
+
+        # Determine if the proof is complete.
+        # IMPORTANT: If compiler errors (severity: 1) exist, elaboration has failed or been interrupted.
+        # Lean 4's plainGoal returns "no goals" even during type errors, so is_done must never be set to True when errors are present.
+        is_done = False
+        if not has_errors:
+            if rendered:
+                clean_rendered = rendered.strip()
+                if "goals accomplished" in clean_rendered or "no goals" in clean_rendered:
+                    is_done = True
+                elif len(goals) == 0:
+                    is_done = True
+            elif goal_result is not None and len(goals) == 0:
+                is_done = True
 
         return {
             "success": True,

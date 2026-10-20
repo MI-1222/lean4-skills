@@ -58,7 +58,7 @@ python3 <skill-path>/scripts/lean_goal.py <lean_file> --line <line_number> [--co
 
 - `rendered`: Markdown-formatted string representing the active proof goals, hypotheses, and target.
 - `goals`: Array of individual subgoal strings. Empty when all goals are discharged.
-- `is_done`: Boolean flag indicating whether all proof goals are completed (`true` when `goals accomplished` or `no goals`).
+- `is_done`: Boolean flag indicating whether all proof goals are completed (`true` when `goals accomplished` or `no goals` and no compiler errors exist; always `false` if compilation errors are present).
 - `diagnostics`: List of compiler errors, warnings, and informational diagnostics for the file/position.
 - `success`: Boolean indicating whether the LSP query completed successfully.
 
