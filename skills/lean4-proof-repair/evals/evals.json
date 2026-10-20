@@ -1,0 +1,29 @@
+{
+  "skill_name": "lean4-proof-repair",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "When compiling the following Lean 4 code, I get `tactic 'rewrite' failed, motive is not type correct`:\n```lean\ntheorem fin_eq_subst (n m : Nat) (h : n = m) (v : Fin n) : Fin m := by\n  rw [h] at v\n  exact v\n```\nExplain why Lean fails with this motive error and provide the corrected proof using the appropriate repair strategy.",
+      "expected_output": "The response should diagnose that `rw` fails because `v`'s type depends on `n`, making simple `Eq.rec` motive synthesis invalid. It should repair the proof by using `subst h` (or `subst n`), or alternatively reverting `v` before rewriting.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I wrote this function in Lean 4 to filter elements, but Lean gives `failed to synthesize instance Decidable (P x)`:\n```lean\ndef selectPos (α : Type) (P : α → Prop) (l : List α) : List α :=\n  l.filter (fun x => if P x then true else false)\n```\nHow do I fix this error if I want to allow classical reasoning or if I want to require decidability?",
+      "expected_output": "The response should provide two standard repair paths: (1) add `[DecidablePred P]` to the function signature for constructive code, or (2) add `open scoped Classical` or `classical` for classical noncomputable code.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "My proof below fails with `tactic 'linarith' failed`:\n```lean\ntheorem nat_ineq (n : Nat) (h : n > 0) : n ≥ 1 := by\n  linarith\n```\nWhy does `linarith` fail on this obvious inequality, and how should it be repaired in Lean 4?",
+      "expected_output": "The response should explain that `linarith` is designed for linear real/rational arithmetic and does not know discrete properties of natural numbers like `n > 0 → n ≥ 1`. It should repair the proof by switching to `omega`.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Compiling this proof causes `(deterministic) timeout, maximum number of heartbeats (200000) has been reached`:\n```lean\nimport Mathlib\n\ntheorem simp_loop_fix (a b : Nat) (h : a + b = b + a) : a + b + 0 = b + a := by\n  simp [add_comm]\n```\nExplain what caused the timeout and provide a stable repair.",
+      "expected_output": "The response should explain that `add_comm` is a symmetric commutativity rule that causes an infinite rewriting loop inside open `simp`. It should repair the proof by replacing `simp` with `rw [add_comm, add_zero]` or `simp only [add_zero]` after rewriting.",
+      "files": []
+    }
+  ]
+}
