@@ -1,0 +1,23 @@
+{
+  "skill_name": "lean4-cli",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Parse a compilation log from Lean 4 containing type mismatch errors, unused variable warnings, and general Lake build messages into structured JSON using parse_diagnostics.py.",
+      "expected_output": "A valid structured JSON object containing success status, error counts, warning counts, and a list of diagnostics with accurate file paths, line/column numbers, severity, and messages.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I made a small change to a single lemma in MathProof/GroupTheory.lean within a Mathlib-dependent repository. Explain and demonstrate the fastest command to type-check this file without triggering a heavy rebuild of Mathlib or other project modules.",
+      "expected_output": "Recommendation to use `lake env lean MathProof/GroupTheory.lean` (Level 1 fast file gate), with explanation of why it avoids dependency recompilation and how to parse the result.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Our CI or local build started failing with corrupted olean errors inside Mathlib files during lake build. How do we verify our toolchain health and force-refresh the pre-compiled Mathlib cache?",
+      "expected_output": "Guidance on checking toolchains with `elan show`, executing `lake exe cache get!` to force re-download the cache, and cleaning artifacts with `lake clean` if necessary.",
+      "files": []
+    }
+  ]
+}
