@@ -1,11 +1,31 @@
 ---
 name: lean4-best-practice
 description: Comprehensive best practices guide for formal mathematical proving in Lean 4 and Mathlib. Use whenever designing, structuring, refactoring, profiling, or reviewing Lean 4 proofs, including declaration header fence rules (theorem signature immutability, preventing goal drift), docstring scoping rules (Rules A/B/C for proof vs review vs authoring), top-down (sorry-driven) proof decomposition, non-terminal `simp` elimination and `simp only` discipline, Mathlib naming reverse-lookup patterns, heartbeat / performance optimization (`set_option maxHeartbeats`), documentation standards (docstrings, module docstrings, `calc` chains), or proof golfing and simplification.
+compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib).
+metadata:
+  target-lean-version: '>=4.14.0'
+  tested-lean-version: 'v4.35.0'
+  tested-mathlib-version: 'v4.35.0'
 ---
 
 # Lean 4 Best Practice Guide
 
 This skill provides an authoritative guide to writing clean, maintainable, performant, and idiomatic Lean 4 mathematical proofs adhering to Mathlib community standards.
+
+---
+
+## 0. Environment & Version Compatibility
+
+| Component   | Target / Supported          | Verified / Tested Version             | Notes                                              |
+| :---------- | :-------------------------- | :------------------------------------ | :------------------------------------------------- |
+| **Lean 4**  | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified against modern Mathlib style guidelines   |
+| **Mathlib** | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Mathlib naming conventions and `simp only` hygiene |
+
+### Version-Specific Conventions
+
+- **Line Width**: Lean 4 and Mathlib enforce a 100-character line width standard (do not wrap at 80 characters).
+- **Simp Hygiene**: Avoid non-terminal `simp` in all modern Lean 4 code; use `simp?` to squeeze into `simp only [...]` for long-term build stability.
+- **Anonymous Instances**: Modern Lean 4 (4.14+) uses anonymous `have : Class α := ...` over deprecated `haveI`.
 
 ---
 

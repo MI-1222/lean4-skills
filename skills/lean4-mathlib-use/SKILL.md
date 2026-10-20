@@ -2,11 +2,31 @@
 name: lean4-mathlib-use
 description: >-
   Comprehensive guide for effectively utilizing Mathlib libraries, structures, and conventions in Lean 4. Use whenever managing Mathlib imports (avoiding monolithic `import Mathlib`, selecting domain-specific submodules, running `lake shake`), navigating mathematical structures and typeclass hierarchies (`autoImplicit false`, explicit type annotations, plain `have` instance injection over deprecated `haveI`, avoiding instance pollution via ambient instance pinning and `omit [...] in`, resolving instance loops), handling partial functions with Mathlib's total function design (junk values for `0 / 0`, `deriv`, `tsum`, `sSup`, establishing side conditions like `h : y ≠ 0` or `DifferentiableAt`), managing classical logic and scoping (`open scoped Classical in`, `classical` tactic, avoiding `openClassical` linter errors, `noncomputable section`), selectively enabling mathematical notations (`open scoped BigOperators Pointwise`), or applying domain-specific proof patterns across analysis, measure theory (integrability via `Integrable.of_bound`, `ae` manipulation with `ae_of_all` / `filter_upwards`, measurability automation), geometry (`Sbtw.sbtw_lineMap_iff`, `Real.Angle`), and algebra (`gcongr`, `field_simp`, `positivity`).
+compatibility: Target Lean 4.14.0+ and Mathlib v4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib).
+metadata:
+  target-lean-version: '>=4.14.0'
+  tested-lean-version: 'v4.35.0'
+  tested-mathlib-version: 'v4.35.0'
 ---
 
 # Lean 4 Mathlib Usage Guide
 
 This skill provides an authoritative guide for AI agents and human practitioners on navigating and leveraging the Mathlib mathematical library efficiently, cleanly, and without compilation bottlenecks.
+
+---
+
+## 0. Environment & Version Compatibility
+
+| Component   | Target / Supported  | Verified / Tested Version             | Notes                                                     |
+| :---------- | :------------------ | :------------------------------------ | :-------------------------------------------------------- |
+| **Lean 4**  | `^4.14.0` (4.14.0+) | `v4.35.0` (Release, commit `eb6cafb`) | Verified against modern Mathlib module structures         |
+| **Mathlib** | `v4.14.0`+          | Contemporary with Lean `v4.35.0`      | Uses scoped classical opening and granular module imports |
+
+### Version-Specific Conventions
+
+- **Modular Imports**: Avoid monolithic `import Mathlib`. In contemporary Mathlib, import only domain submodules (e.g., `Mathlib.Data.Nat.Basic`) and prune via `lake exe shake`.
+- **Classical Scoping**: Use `open scoped Classical in` instead of global `open Classical` to satisfy Mathlib linters.
+- **Instance Management**: Use plain anonymous `have` rather than `haveI`, and `omit [...] in` to control instance scope on Lean 4.14+.
 
 ---
 

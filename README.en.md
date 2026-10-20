@@ -10,10 +10,13 @@ A suite of skills designed for AI coding agents to autonomously perform formal m
 - **Lean LSP Interaction Loop**: Queries `lean --server` via Language Server Protocol (LSP) to inspect proof goals (Tactic State) step-by-step.
 - **Zero External Dependencies**: All bundled scripts rely exclusively on the Python 3 standard library (`subprocess`, `json`, `urllib`). No third-party packages required.
 
-## Prerequisites
+## Prerequisites & Compatibility
 
-- **Python 3.10+** (standard library only)
-- **Lean 4 / Lake** (installed via [elan](https://github.com/leanprover/elan))
+| Component         | Target / Supported          | Verified / Tested Version             | Notes                                                                   |
+| :---------------- | :-------------------------- | :------------------------------------ | :---------------------------------------------------------------------- |
+| **Lean 4 / Lake** | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Installation via [elan](https://github.com/leanprover/elan) recommended |
+| **Mathlib**       | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Uses modular domain imports and modern syntax                           |
+| **Python**        | `>=3.10`                    | `3.14.7`                              | Standard library only (required for script-bundled skills)              |
 
 ## Skills Overview
 

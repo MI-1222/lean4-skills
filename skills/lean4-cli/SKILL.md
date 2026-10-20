@@ -1,11 +1,32 @@
 ---
 name: lean4-cli
 description: Manage Lean 4 and Lake CLI workflows, build targets, fetch pre-built Mathlib caches, execute fast file-level verification, audit proof soundness and axioms via `#print axioms`, and parse compiler diagnostic logs into structured JSON. Use whenever running `lake build`, `lake env lean`, or `lake exe cache get`, verifying proof soundness without `sorryAx`, diagnosing compilation errors, checking Lean/Elan toolchain health, or automating project build pipelines.
+compatibility: Target Lean 4.14.0+ / Lake build system (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for parse_diagnostics.py.
+metadata:
+  target-lean-version: '>=4.14.0'
+  tested-lean-version: 'v4.35.0'
+  tested-mathlib-version: 'v4.35.0'
 ---
 
 # Lean 4 CLI and Lake Build Management
 
 This skill provides operational workflows and automated tools for managing Lean 4 projects using Lake (the Lean build tool) and Elan (the Lean version manager). It guides agents in fetching pre-compiled Mathlib caches, executing fast file-level type checks, running incremental or full project builds, auditing proof soundness via `#print axioms`, and parsing compiler diagnostics into structured JSON.
+
+---
+
+## 0. Environment & Version Compatibility
+
+| Component         | Target / Supported          | Verified / Tested Version             | Notes                                            |
+| :---------------- | :-------------------------- | :------------------------------------ | :----------------------------------------------- |
+| **Lean 4 / Lake** | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified via Lake CLI build & single-file check  |
+| **Mathlib**       | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Uses `lake exe cache get` for pre-built `.olean` |
+| **Python**        | `>=3.10`                    | `3.14.x`                              | Required for `scripts/parse_diagnostics.py`      |
+
+### Version-Specific CLI & Build Notes
+
+- **Lake Configuration**: Modern Lean 4 projects use either `lakefile.toml` or `lakefile.lean`. Ensure commands are executed in the project root containing `lean-toolchain`.
+- **Diagnostic Formatting**: Modern Lean 4 compiler output is parsed into structured JSON via `scripts/parse_diagnostics.py`.
+- **Mathlib Cache Retrieval**: Always invoke `lake exe cache get` before full compilation to avoid building Mathlib from source.
 
 ---
 

@@ -1,6 +1,11 @@
 ---
 name: lean4-syntax
 description: Comprehensive syntax guide and fast syntax/elaboration checker for Lean 4 mathematical proofs. Use whenever generating, checking, or repairing Lean 4 proof code, validating snippets or files with `check_syntax.py`, preventing Lean 3 syntax contamination (such as `begin ... end`, trailing commas, `<-`, or invalid `split`), enforcing Mathlib style conventions (100-character line width, `fun x ↦ ...`, `show P by tac`, anonymous `have` for typeclasses), formatting `calc` blocks, managing tactic indentation and focus dots (`·`), or debugging compilation errors.
+compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for check_syntax.py.
+metadata:
+  target-lean-version: '>=4.14.0'
+  tested-lean-version: 'v4.35.0'
+  tested-mathlib-version: 'v4.35.0'
 ---
 
 # Lean 4 Syntax & Proof Conventions
@@ -8,6 +13,22 @@ description: Comprehensive syntax guide and fast syntax/elaboration checker for 
 This skill provides a canonical syntax reference, indentation guidelines, and an automated verification tool (`check_syntax.py`) for Lean 4 mathematical proofs.
 
 In Lean 4, syntax parsing and type elaboration are tightly coupled. Formatting errors (such as offside rule violations or obsolete Lean 3 syntax) cause fatal compilation errors before any proof search or tactic automation can take place. Follow this guide to produce syntactically robust Lean 4 code.
+
+---
+
+## 0. Environment & Version Compatibility
+
+| Component   | Target / Supported          | Verified / Tested Version             | Notes                                     |
+| :---------- | :-------------------------- | :------------------------------------ | :---------------------------------------- |
+| **Lean 4**  | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified via syntax validation test suite |
+| **Mathlib** | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Uses `fun x ↦ ...` and anonymous `have`   |
+| **Python**  | `>=3.10`                    | `3.14.x`                              | Required for `scripts/check_syntax.py`    |
+
+### Version-Specific Conventions & Caveats
+
+- **Typeclass Instance Registration**: In modern Lean 4 (4.14+), anonymous `have : Class α := pf` automatically registers into instance search. Obsolete `haveI` triggers linter warnings or errors.
+- **Strict File Header Order**: Lean 4 enforces that `import` statements appear at the very beginning of the command stream. Module docstrings `/-! ... -/` must strictly follow imports.
+- **Rewrite Operators**: Use `rw [← h]` (`\l`), as ASCII `<-` conflicts with monad bind syntax and is strictly rejected.
 
 ---
 

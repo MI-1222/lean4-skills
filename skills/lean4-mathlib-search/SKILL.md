@@ -1,6 +1,11 @@
 ---
 name: lean4-mathlib-search
 description: Search Mathlib for theorems, lemmas, definitions, and tactics in Lean 4. Use whenever searching for mathematical lemmas, looking up theorem names by type signature with Loogle (`search_loogle.py`), finding lemmas using inline search tactics (`exact?`, `apply?`, `rw?`), querying by natural language or semantic meaning (LeanSearch / Moogle), or deriving candidate theorem names from Mathlib naming conventions. Make sure to consult this skill whenever encountering unknown theorem names, unproven proof goals, or missing lemmas.
+compatibility: Target Lean 4.14.0+ and Mathlib v4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for scripts/search_loogle.py.
+metadata:
+  target-lean-version: '>=4.14.0'
+  tested-lean-version: 'v4.35.0'
+  tested-mathlib-version: 'v4.35.0'
 ---
 
 # Lean 4 Mathlib Search
@@ -8,6 +13,22 @@ description: Search Mathlib for theorems, lemmas, definitions, and tactics in Le
 This skill provides a systematic, multi-tiered search methodology for discovering definitions, theorems, and lemmas across Mathlib and the Lean 4 core library.
 
 Mathlib is vast (over 100,000 theorems and definitions). Blind guessing or hallucinating lemma names inevitably fails. Instead, use the structured 4-tiered search pipeline below to locate and verify the exact lemmas required for your proof.
+
+---
+
+## 0. Environment & Version Compatibility
+
+| Component   | Target / Supported          | Verified / Tested Version             | Notes                                                 |
+| :---------- | :-------------------------- | :------------------------------------ | :---------------------------------------------------- |
+| **Lean 4**  | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified with inline search tactics (`exact?`, `rw?`) |
+| **Mathlib** | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Indexes modern naming conventions and module layout   |
+| **Python**  | `>=3.10`                    | `3.14.x`                              | Required for `scripts/search_loogle.py`               |
+
+### Version-Specific Search Notes
+
+- **Inline Tactics**: `exact?`, `apply?`, and `rw?` rely on active goal elaboration in modern Lean 4/Mathlib.
+- **External Search APIs**: Loogle and LeanSearch API queries search indexed Mathlib snapshots; ensure lemma names match the target project's Mathlib version.
+- **Naming Conventions**: Mathlib camelCase / dot-notation conventions (e.g., `Nat.add_comm`) are stable across 4.x.
 
 ---
 
