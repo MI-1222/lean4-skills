@@ -194,8 +194,10 @@ calc
   _ = 2 * (a ^ 2 + b ^ 2)                 := by ring
 ```
 
-### `calc` Formatting Checklist
+### `calc` Formatting & State Alignment Checklist
 
+- **Align with Actual Goal after Simplification**: Never guess the first line of a `calc` chain. If `simp` or `filter_upwards` ran prior to `calc`, start the LHS with the **exact expression present in the goal**, not the pre-simp formula.
+- **Respect Canonical Forms**: Work with Mathlib normal forms (e.g., `(m : ℝ)⁻¹` instead of `1 / (m : ℝ)`); do not fight the simplifier with manual reversals.
 - Align the relation symbols (`=`, `≤`, `<`, `≥`, `>`).
 - Use `_` for continuation terms on the left.
 - Provide a concise justification for every line using `:= by ...` or a direct proof term.

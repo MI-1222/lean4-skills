@@ -131,6 +131,7 @@ theorem and_comm_proof (P Q : Prop) : P ∧ Q → Q ∧ P := by
 - First step: `<lhs> <rel> <intermediate> := <proof>`
 - Continuation steps: `_ <rel> <next> := <proof>`
 - Always use `:=` (not `:`). The relation `<rel>` must have a `Trans` instance (e.g. `=`, `≤`, `<`, `⊆`, `↔`).
+- **Align with Actual Goal after `simp`**: When opening `calc` after `simp` (or `filter_upwards with ω; simp`), start the chain from the **actual goal state produced by `simp`**, never the pre-simplification formula. Respect Mathlib canonical normal forms (e.g. `(m:ℝ)⁻¹` instead of `1/(m:ℝ)`). See [Proof Syntax Patterns](./references/proof_syntax_patterns.md) for details.
 
 ```lean
 import Mathlib.Algebra.Ring.Basic

@@ -36,7 +36,7 @@ theorem and_comm_proof (P Q : Prop) : P ∧ Q → Q ∧ P := by
 
 The `calc` construct formats chains of equalities, inequalities, or equivalences step-by-step.
 
-### Syntax Specifications:
+### 2.1. Syntax Specifications
 
 1. The first line establishes the start: `<lhs> <rel> <intermediate> := <proof>`
 2. All continuation lines use `_` as a placeholder for the preceding right-hand side: `_ <rel> <next> := <proof>`
@@ -53,6 +53,42 @@ theorem calc_example (h1 : a = b) (h2 : b ≤ c) : a + 1 ≤ c + 1 := by
     a + 1 = b + 1 := by rw [h1]
     _     ≤ c + 1 := by omega
 ```
+
+### 2.2. Critical Interaction: `simp` Before `calc`
+
+A common failure mode is running a simplifier tactic (e.g., `simp`, `dsimp`, or `filter_upwards with ω; simp [...]`) immediately before opening a `calc` block, and writing the first `calc` line based on what the goal was **before** `simp` ran, or what you **hoped** it became.
+
+**The Golden Rule:** Start the `calc` chain from the **actual goal state produced by `simp`**, never the pre-simplification expression.
+
+```lean
+-- ❌ ERROR: calc chain starts with pre-simp expression
+filter_upwards with ω; simp [Real.norm_eq_abs]
+-- If simp already transformed |(1/(m:ℝ)) * ∑...| into (m:ℝ)⁻¹ * |∑...|
+calc |(1/(m:ℝ)) * ∑ k : Fin m, f k|
+    = |(m:ℝ)⁻¹ * ∑ k : Fin m, f k| := by rw [one_div]
+  _ = ...
+-- ERROR: invalid 'calc' step, left-hand side is (m:ℝ)⁻¹ * |∑ ...| but is expected to be |(1/(m:ℝ)) * ∑ ...|
+
+-- ✅ CORRECT: Inspect goal after simp, start calc with the already-simplified form
+filter_upwards with ω; simp [Real.norm_eq_abs]
+calc (m:ℝ)⁻¹ * |∑ k : Fin m, f k|
+    _ ≤ (m:ℝ)⁻¹ * ∑ k : Fin m, |f k| := by
+      gcongr; exact Finset.abs_sum_le_sum_abs _ _
+  _ ≤ ...
+```
+
+### 2.3. Respect Canonical Normal Forms (Don't Fight `simp`)
+
+Mathlib's simplifier rewrites expressions into canonical normal forms:
+
+- `(m : ℝ)⁻¹` rather than `1 / (m : ℝ)`
+- `a * b⁻¹` rather than `a / b` (in group/field contexts)
+- `|x|` (`Real.norm_eq_abs`) rather than `‖x‖` when working with reals under scalar absolute values
+
+**Guidelines:**
+
+1. **Check the actual goal with LSP/interactive tools**: If `simp` changed the representation, accept the canonical form in the `calc` chain rather than introducing manual reversal steps (`rw [← one_div]`).
+2. **One simplification pass**: Let `simp only [...]` normalize terms upfront, then perform mathematical estimation/reasoning in `calc` using specialized tools (`gcongr`, `linarith`, `positivity`, `ring`). Do not invoke non-terminal `simp` inside individual `calc` steps.
 
 ---
 

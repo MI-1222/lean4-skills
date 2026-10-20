@@ -94,3 +94,20 @@ When defining new lemmas in your project, do not blindly attach `@[simp]`. Follo
    - Never introduce rules where the LHS can be reconstructed downstream, triggering non-terminating simplification loops.
 4. **Prefer Scoped or Local Simp**:
    - If a rewrite is only useful within a single file or mathematical domain, use `attribute [local simp] my_lemma` inside the section rather than exporting it globally.
+
+---
+
+## 5. Interaction Between `simp` and Calculation Chains (`calc`)
+
+When structuring algebraic derivations or analytical inequalities, `simp` is frequently used to simplify subterms before entering a `calc` block. Maintain the following discipline:
+
+### Rule 1: Always Align `calc` LHS with the Actual Goal State After `simp`
+
+- Never write the first line of a `calc` chain based on what you _hoped_ `simp` would produce or what the goal was _prior_ to `simp`.
+- If `simp` (or `filter_upwards with ω; simp [...]`) rewrites the expression into a canonical representation (e.g., `(m:ℝ)⁻¹` instead of `1/(m:ℝ)`), start the `calc` chain directly from that canonical representation.
+- Attempting to force the pre-simplification representation triggers `invalid 'calc' step` type mismatches.
+
+### Rule 2: One Upfront Normalization Pass
+
+- Normalize terms upfront with an explicit `simp only [...]` pass, and then rely on domain-specific decision procedures (`gcongr`, `linarith`, `ring`, `omega`, `positivity`) inside the `calc` steps.
+- Avoid calling open `simp` within intermediate steps of a `calc` chain, as it obscures which subterm is being transformed and easily degrades elaboration performance.
