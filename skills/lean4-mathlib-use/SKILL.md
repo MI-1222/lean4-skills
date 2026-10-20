@@ -1,7 +1,7 @@
 ---
 name: lean4-mathlib-use
 description: >-
-  Comprehensive guide for effectively utilizing Mathlib libraries, structures, and conventions in Lean 4. Use whenever managing Mathlib imports (avoiding monolithic `import Mathlib`, selecting domain-specific submodules, running `lake shake`), navigating mathematical structures and typeclass hierarchies (`autoImplicit false`, explicit type annotations, `haveI`/`letI` instance injection, resolving instance loops), handling partial functions with Mathlib's total function design (junk values for `0 / 0`, `deriv`, `tsum`, `sSup`, establishing side conditions like `h : y ≠ 0` or `DifferentiableAt`), managing classical logic and scoping (`open scoped Classical in`, `classical` tactic, avoiding `openClassical` linter errors, `noncomputable section`), or selectively enabling mathematical notations (`open scoped BigOperators Pointwise`).
+  Comprehensive guide for effectively utilizing Mathlib libraries, structures, and conventions in Lean 4. Use whenever managing Mathlib imports (avoiding monolithic `import Mathlib`, selecting domain-specific submodules, running `lake shake`), navigating mathematical structures and typeclass hierarchies (`autoImplicit false`, explicit type annotations, plain `have` instance injection over deprecated `haveI`, avoiding instance pollution via ambient instance pinning and `omit [...] in`, resolving instance loops), handling partial functions with Mathlib's total function design (junk values for `0 / 0`, `deriv`, `tsum`, `sSup`, establishing side conditions like `h : y ≠ 0` or `DifferentiableAt`), managing classical logic and scoping (`open scoped Classical in`, `classical` tactic, avoiding `openClassical` linter errors, `noncomputable section`), or selectively enabling mathematical notations (`open scoped BigOperators Pointwise`).
 ---
 
 # Lean 4 Mathlib Usage Guide
@@ -25,11 +25,11 @@ Adhering to these four foundational practices ensures maintainable, performant, 
  [1. Minimal Imports] [2. Typeclass Guiding]    [3. Junk Value Hygiene] [4. Classical Scoping]
   No `import Mathlib`  `autoImplicit false`      Total function design   `open scoped Classical in`
   Domain submodules    Explicit type anchors     Side conditions early   `classical` tactic
-  `lake shake --fix`   `haveI` / `letI` inject   `₀` subscript lemmas    `open scoped` notations
+  `lake shake --fix`   Plain `have` / `omit`     `₀` subscript lemmas    `open scoped` notations
 ```
 
 1. **Minimal & Targeted Imports**: Never rely on monolithic `import Mathlib`. Select domain-specific modules (`.Defs`, `.Basic`) to minimize elaboration footprint and cache invalidation. Prune redundant imports using `lake shake`.
-2. **Typeclass Hierarchy Control**: Guard against invisible dependency explosions and ambiguous synthesis paths. Disable `autoImplicit`, pin numeric literals with explicit type annotations (e.g., `(0 : ℝ)`), and supply missing context with `haveI` / `letI`.
+2. **Typeclass & Instance Control**: Guard against invisible dependency explosions, ambiguous synthesis paths, and instance pollution. Disable `autoImplicit`, pin numeric literals with explicit type annotations (e.g., `(0 : ℝ)`), register local instances using standard `have : C := ⟨pf⟩` (avoiding legacy `haveI`), pin ambient instances when defining sub-structures, and exclude unwanted section variables with `omit [...] in`.
 3. **Total Function & Junk Value Discipline**: Recognize that Mathlib assigns default values (junk values) to classically undefined expressions (e.g., $x / 0 = 0$, non-differentiable derivatives = $0$). Formulate side conditions (`y ≠ 0`, `DifferentiableAt`, `Summable`) before attempting rewrites or cancellations (`mul_div_cancel₀`).
 4. **Scoped Classical Logic & Notations**: Respect the `openClassical` style linter. Confine classical logic to individual theorems (`open scoped Classical in`) or tactic blocks (`classical`). Use `open scoped` for notations (`BigOperators`, `Pointwise`) to avoid namespace pollution.
 
@@ -49,7 +49,8 @@ Before running verification or committing code that uses Mathlib, check against 
 
 - [ ] **`autoImplicit` Disabled**: Is `set_option autoImplicit false` active to prevent accidental free variables?
 - [ ] **Anchored Types**: Are numeric constants and expressions with coercions explicitly type-annotated (e.g., `(0 : ℝ)`, `(n : ℝ)`)?
-- [ ] **Instance Injection**: If typeclass resolution fails or loops, is `haveI` or `letI` used to supply the missing structure locally?
+- [ ] **Modern Instance Injection**: If typeclass resolution fails, is standard `have : C := pf` used (avoiding deprecated `haveI` which triggers linter warnings)?
+- [ ] **Instance Pollution Guarded**: When working with sub-structures (e.g. `MeasurableSpace`, `MetricSpace`, `Preorder`), is the ambient instance pinned (`[m0 : ...]`) and ambient facts passed via `@`? Are unneeded ambient section variables excluded with `omit [...] in`?
 
 ### Stage C: Hypotheses & Domain Validity
 
@@ -71,7 +72,7 @@ For comprehensive technical explanations, domain-by-domain modules, and code pat
 | Topic                               | Key Techniques & Best Practices                                                                                                    | Reference Guide                                                                         |
 | :---------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
 | **Minimal Imports & Shake**         | Eliminating `import Mathlib`, domain submodule catalog, `lake exe cache get`, running `lake shake --fix`                           | [minimal_imports_and_shake.md](references/minimal_imports_and_shake.md)                 |
-| **Typeclasses & Structures**        | Multiple inheritance, invisible dependencies, `autoImplicit false`, type pinning, `haveI`/`letI` local instances                   | [typeclasses_and_structures.md](references/typeclasses_and_structures.md)               |
+| **Typeclasses & Structures**        | Multiple inheritance, invisible dependencies, `autoImplicit false`, plain `have`, avoiding instance pollution, `omit [...] in`     | [typeclasses_and_structures.md](references/typeclasses_and_structures.md)               |
 | **Junk Values & Partial Functions** | Total functions in type theory, junk values table ($x/0$, `deriv`, `tsum`, `sSup`), subscript-`₀` convention, domain preconditions | [junk_values_and_partial_functions.md](references/junk_values_and_partial_functions.md) |
 | **Classical Logic & Scoping**       | `openClassical` style linter, single-declaration scoping, `classical` tactic, `noncomputable section`, `open scoped` notations     | [classical_logic_and_scoping.md](references/classical_logic_and_scoping.md)             |
 

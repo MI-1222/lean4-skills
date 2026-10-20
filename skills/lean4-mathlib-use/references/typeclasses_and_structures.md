@@ -57,16 +57,20 @@ example (n : ℕ) : 0 ≤ (n : ℝ) := by
 
 ---
 
-## 4. Local Instance Injection with `haveI` and `letI`
+## 4. Local Instance Injection: Plain `have` vs `haveI` / `letI`
 
 When working with quotient structures, field extensions, localized rings, or conditional metric spaces, the global typeclass synthesizer might fail to discover an instance that holds conditionally in the local context.
 
-Instead of fighting the synthesizer, inject the instance directly into the local hypothesis context using `haveI` or `letI`:
+### Modern Lean 4 & Mathlib Rule: Prefer Plain `have`
 
-| Tactic                          | Usage & Characteristics                                                                                                        |
-| :------------------------------ | :----------------------------------------------------------------------------------------------------------------------------- |
-| `haveI : InstanceType := proof` | Injects an instance into the local typeclass cache without retaining the term in the value context (erased after elaboration). |
-| `letI : InstanceType := proof`  | Injects a definitionally transparent instance into the context (preserves definitional equality).                              |
+In modern Lean 4, a plain `have : InstanceType := proof` **automatically registers** the instance in the local typeclass cache!
+The legacy `haveI` tactic only inlines the value and is flagged by Mathlib's `haveI`/`letI` style linter.
+
+| Tactic / Pattern             | Usage & Characteristics                                                                                           |
+| :--------------------------- | :---------------------------------------------------------------------------------------------------------------- |
+| `have : InstanceType := pf`  | **Standard in Lean 4/Mathlib.** Registers the instance into the local typeclass cache cleanly.                    |
+| `letI : InstanceType := pf`  | Injects a definitionally transparent instance into the context when definitional equality must be preserved.      |
+| `haveI : InstanceType := pf` | _Legacy._ Avoid in Mathlib code unless specifically working around pre-v4.8 elaborator quirks; flagged by linter. |
 
 ### Example: Supplying a Local Group Instance
 
@@ -78,8 +82,8 @@ variable {G : Type*}
 -- When a subgroup or custom structure provides an instance conditionally:
 theorem subgroup_element_mul_inv (H : Subgroup G) (x : H) :
     x * x⁻¹ = 1 := by
-  -- In case automatic instance resolution fails for the subtype H:
-  haveI : Group H := Subgroup.toGroup H
+  -- In modern Lean 4, plain have registers the instance into typeclass search:
+  have : Group H := Subgroup.toGroup H
   exact mul_inv_cancel x
 ```
 
@@ -102,3 +106,63 @@ Instance synthesis loops typically occur when:
 - If heartbeats expire during instance synthesis, verify that:
   - All type parameters have explicit class constraints (e.g., `[CommRing R]` rather than just `(R : Type*)`).
   - No conflicting duplicate instances exist in the active `open` namespaces.
+
+---
+
+## 6. Avoiding Instance Pollution (Sub-σ-algebras, Orders, Metrics)
+
+### The Problem
+
+When multiple instances of the same typeclass exist in the same scope (e.g., sub-σ-algebras `MeasurableSpace Ω`, multiple metrics `MetricSpace α`, or alternative orderings `Preorder β`), Lean's elaborator preferentially selects the **most recently bound local constant** rather than the ambient instance.
+
+This leads to cryptic errors like:
+
+```text
+type mismatch
+  synthesized: mSub, inferred: inst✝
+```
+
+or 500k+ heartbeat timeout explosions.
+
+### Prevention & Recovery Patterns
+
+#### Pattern 1: Name and Pin the Ambient Instance
+
+Name the ambient instance in the declaration signature:
+
+```lean
+theorem my_theorem (Ω β : Type*) [m0 : MeasurableSpace Ω] [MeasurableSpace β]
+    (Z : Ω → β) (hZ : Measurable Z) : ... := by
+```
+
+If the signature is fixed (e.g., from an upstream project or library specification), capture the ambient instance on the very first line before creating any local sub-structures:
+
+```lean
+  let m0 : MeasurableSpace Ω := ‹MeasurableSpace Ω›
+```
+
+_(The `‹…›` French quote syntax captures the currently active local instance)._
+
+#### Pattern 2: Use Explicit `@` Application for Ambient Facts
+
+When referencing lemmas that rely on the ambient structure, explicitly pass the pinned ambient instance:
+
+```lean
+  -- Explicitly anchor to ambient m0:
+  have h_meas : @Measurable Ω β m0 _ Z := hZ
+```
+
+#### Pattern 3: Avoid Local Class-Typed Bindings When Possible
+
+Instead of declaring `let mSub : MeasurableSpace Ω := ...` early in the proof (which immediately shadows the ambient instance), inline the expression or introduce it only after all ambient facts have been elaborated.
+
+#### Pattern 4: Exclude Unwanted Section Variables via `omit`
+
+When an ambient section declares a typeclass variable that a specific lemma or theorem does not require (which would otherwise pollute search or induce looping):
+
+```lean
+-- Exclude MeasurableSpace Ω for this specific lemma:
+omit [MeasurableSpace Ω] in
+theorem independent_lemma (n : ℕ) : n + 0 = n := by
+  rfl
+```
