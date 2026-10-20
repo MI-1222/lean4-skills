@@ -33,7 +33,7 @@ Mathlib modules follow a hierarchical structure:
 | :----------------------------------------- | :--------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------- |
 | **Elementary Algebra (Groups, Rings)**     | `Mathlib.Algebra.Group.Defs`<br>`Mathlib.Algebra.Group.Basic`<br>`Mathlib.Algebra.Ring.Basic`        | Semigroups, monoids, groups, rings, basic algebraic operations   |
 | **Order & Lattice Theory**                 | `Mathlib.Order.Bounds`<br>`Mathlib.Order.Monotone.Basic`<br>`Mathlib.Order.Lattice`                  | Partial orders, bounds (`sSup`, `sInf`), monotone maps, lattices |
-| **Real & Complex Numbers**                 | `Mathlib.Data.Real.Basic`<br>`Mathlib.Data.Complex.Basic`                                            | Complete ordered field structure of `ℝ`, complex arithmetic      |
+| **Real & Complex Numbers**                 | `Mathlib.Basic.Real.Basic`<br>`Mathlib.Data.Complex.Basic`                                           | Complete ordered field structure of `ℝ`, complex arithmetic      |
 | **Elementary Calculus / Analysis**         | `Mathlib.Analysis.Calculus.Deriv.Basic`<br>`Mathlib.Analysis.SpecialFunctions.Pow.Real`              | Single-variable derivatives (`deriv`), real powers, exp, log     |
 | **Topology**                               | `Mathlib.Topology.Basic`<br>`Mathlib.Topology.Constructions`<br>`Mathlib.Topology.MetricSpace.Basic` | Open sets, neighborhoods, continuity, metric spaces              |
 | **Linear Arithmetic & Inequality Tactics** | `Mathlib.Tactic.Linarith`<br>`Mathlib.Tactic.Ring`<br>`Mathlib.Tactic.Positivity`                    | `linarith`, `nlinarith`, `ring`, `positivity` tactics            |
@@ -92,7 +92,7 @@ theorem square_nonneg_real (x : ℝ) : 0 ≤ x^2 := by
 
 ```lean
 -- Good: Loads only the real numbers, basic ring order axioms, and necessary tactics
-import Mathlib.Data.Real.Basic
+import Mathlib.Basic.Real.Basic
 import Mathlib.Algebra.Order.Ring.Defs
 import Mathlib.Tactic.Linarith
 

@@ -69,7 +69,7 @@ Before applying differentiation, summation, or algebraic cancellation lemmas, ex
 ### Example 1: Division Cancellation
 
 ```lean
-import Mathlib.Data.Real.Basic
+import Mathlib.Basic.Real.Basic
 
 theorem cancel_div_example (x y : ℝ) (hy : y ≠ 0) :
     (x * y) / y = x := by

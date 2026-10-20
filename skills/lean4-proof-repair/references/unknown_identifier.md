@@ -38,7 +38,7 @@ A lemma is present in Mathlib, but the specific module has not been imported.
     ```lean
     import Mathlib
     ```
-  - For clean modular builds, look up the module path (e.g., `Mathlib.Data.Real.Basic`, `Mathlib.Topology.ContinuousOn`).
+  - For clean modular builds, look up the module path (e.g., `Mathlib.Basic.Real.Basic`, `Mathlib.Topology.ContinuousOn`).
 
 ---
 
