@@ -18,19 +18,27 @@ from typing import Any, Dict, List, Optional, Tuple
 # Regex pattern to strip ANSI color escape sequences.
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
-# Regex pattern matching standard Lean 4 diagnostic lines.
+# Regex pattern matching direct Lean 4 compiler output (path:line:col: severity: message).
 # e.g.: /path/to/File.lean:12:4: error: type mismatch
 # e.g.: File.lean:12:4: warning: unused variable `x`
-DIAGNOSTIC_HEADER_RE = re.compile(
-    r"^(?P<file>[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s+(?P<severity>error|warning|info):\s*(?P<message>.*)$",
+DIAGNOSTIC_HEADER_LEAN_RE = re.compile(
+    r"^\s*(?P<file>[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s+(?P<severity>error|warning|info):\s*(?P<message>.*)$",
     re.IGNORECASE,
 )
 
-# Regex pattern matching generic Lake error/warning lines.
+# Regex pattern matching Lake build output (severity: path:line:col: message).
+# e.g.: warning: MathProof/Algebra/Group.lean:32:2: `simp` is a flexible tactic
+# e.g.: error: MathProof/Basic.lean:10:4: type mismatch
+DIAGNOSTIC_HEADER_LAKE_RE = re.compile(
+    r"^\s*(?P<severity>error|warning|info):\s+(?P<file>[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s*(?P<message>.*)$",
+    re.IGNORECASE,
+)
+
+# Regex pattern matching generic Lake error/warning lines without file positions.
 # e.g.: error: build failed
 # e.g.: error: > lean --make ... failed
 LAKE_GENERIC_ERROR_RE = re.compile(
-    r"^(?P<severity>error|warning|info):\s*(?P<message>.*)$",
+    r"^\s*(?P<severity>error|warning|info):\s*(?P<message>.*)$",
     re.IGNORECASE,
 )
 
@@ -75,34 +83,46 @@ def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
                 current_diag["message"] += "\n"
             continue
 
-        # 1. Match standard diagnostic line with file position.
-        file_match = DIAGNOSTIC_HEADER_RE.match(line)
-        if file_match:
+        # 1. Match standard direct Lean diagnostic line (path:line:col: severity: message).
+        lean_match = DIAGNOSTIC_HEADER_LEAN_RE.match(line)
+        if lean_match:
             flush_current()
             current_diag = {
-                "file": file_match.group("file").strip(),
-                "line": int(file_match.group("line")),
-                "column": int(file_match.group("col")),
-                "severity": file_match.group("severity").lower(),
-                "message": file_match.group("message"),
+                "file": lean_match.group("file").strip(),
+                "line": int(lean_match.group("line")),
+                "column": int(lean_match.group("col")),
+                "severity": lean_match.group("severity").lower(),
+                "message": lean_match.group("message"),
             }
             continue
 
-        # 2. Match generic Lake error/warning line without file position.
-        lake_match = LAKE_GENERIC_ERROR_RE.match(line)
-        if lake_match:
-            # Record Lake generic notifications as independent diagnostic entries.
+        # 2. Match Lake build diagnostic line (severity: path:line:col: message).
+        lake_file_match = DIAGNOSTIC_HEADER_LAKE_RE.match(line)
+        if lake_file_match:
+            flush_current()
+            current_diag = {
+                "file": lake_file_match.group("file").strip(),
+                "line": int(lake_file_match.group("line")),
+                "column": int(lake_file_match.group("col")),
+                "severity": lake_file_match.group("severity").lower(),
+                "message": lake_file_match.group("message"),
+            }
+            continue
+
+        # 3. Match generic Lake error/warning line without file position.
+        lake_generic_match = LAKE_GENERIC_ERROR_RE.match(line)
+        if lake_generic_match:
             flush_current()
             current_diag = {
                 "file": None,
                 "line": None,
                 "column": None,
-                "severity": lake_match.group("severity").lower(),
-                "message": lake_match.group("message"),
+                "severity": lake_generic_match.group("severity").lower(),
+                "message": lake_generic_match.group("message"),
             }
             continue
 
-        # 3. Continuation lines for the current diagnostic (stack traces, details, etc.).
+        # 4. Continuation lines for the current diagnostic (stack traces, details, etc.).
         if current_diag is not None:
             current_diag["message"] += "\n" + line
         else:
