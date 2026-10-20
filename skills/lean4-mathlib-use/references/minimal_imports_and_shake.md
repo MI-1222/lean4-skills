@@ -74,6 +74,22 @@ Mathlib provides a dedicated static analysis tool called `shake` to detect and r
    ```
    This automatically rewrites the import headers of affected files, pruning redundant dependencies while preserving required modules.
 
+### Limitations & Constraints of `lake shake`
+
+Keep these constraints in mind when using `lake shake`:
+
+1. **Strict Standard Module Requirement**:
+   - `lake shake` currently only operates on standard Lean module identifiers (`MyProject.Algebra.Basic`).
+   - If your project contains directories or filenames with hyphens (e.g., `«my-subproject»` requiring French quote escaping or permitted via `allowNonModules = true`), `lake shake` will abort with:
+     ```text
+     error: `lake shake` only works with `module`s currently
+     ```
+   - **Workaround**: In projects containing escaped or non-module paths, avoid running whole-project `lake shake`. Either restrict targets, normalize directory names to standard Lean module identifiers (PascalCase or snake_case without hyphens), or inspect and prune imports manually.
+
+2. **Tactic and Typeclass Instance Dependencies**:
+   - `shake` relies on AST syntax inspection. If an imported module solely provides a behind-the-scenes tactic, macro, or typeclass instance that is not explicitly named in the file, `shake` may mistakenly consider it unused.
+   - **Rule**: Always run `lake build` immediately after `lake shake --fix` to confirm that all tactics and typeclass instances remain functional.
+
 ---
 
 ## 5. Exemplary Import Pattern
