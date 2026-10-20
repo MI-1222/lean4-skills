@@ -316,6 +316,7 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
   - `column`: 1-indexed column number (`null` if file-level or general).
   - `severity`: `"error"`, `"warning"`, or `"info"`.
   - `message`: Diagnostic message, including multi-line indentation details.
+- `prints`: (Optional) List of non-diagnostic top-level command output strings (such as `#print axioms` results, `#check` types, or `#eval` values), cleanly separated from compiler warnings and errors.
 
 ### Capturing "Try this:" Suggestions Headlessly
 

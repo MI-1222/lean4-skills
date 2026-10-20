@@ -50,6 +50,21 @@ LAKE_PROGRESS_OR_STATUS_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Regex pattern matching Lean `#print axioms` output lines.
+# e.g.: 'MyModule.my_theorem' depends on axioms: [propext]
+# e.g.: 'MyModule.my_theorem' does not depend on any axioms
+LEAN_AXIOM_PRINT_RE = re.compile(
+    r"^\s*'(?:[^'\n\r]+)'\s+(?:depends on axioms:|does not depend on any axioms)",
+    re.IGNORECASE,
+)
+
+# Regex pattern matching other Lean top-level command prints (#check, #print, etc.).
+# e.g.: 'MyModule.foo' : Nat -> Nat
+# e.g.: def MyModule.foo : ...
+LEAN_TOPLEVEL_PRINT_RE = re.compile(
+    r"^\s*(?:'(?:[^'\n\r]+)'\s*:|(?:def|theorem|inductive|structure|class)\s+[a-zA-Z0-9_.]+\s*:)",
+)
+
 
 def strip_ansi(text: str) -> str:
     """
@@ -61,18 +76,20 @@ def strip_ansi(text: str) -> str:
     return ANSI_ESCAPE_RE.sub("", text)
 
 
-def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
+def parse_build_output(raw_text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
-    Parse console output from Lean 4 and Lake, returning a list of diagnostics.
+    Parse console output from Lean 4 and Lake, separating diagnostics from top-level command prints.
 
     :param raw_text: Raw compiler or build output text.
-    :return: List of structured diagnostic dictionaries.
+    :return: Tuple of (structured diagnostics list, list of non-diagnostic print/command output strings).
     """
     clean_text = strip_ansi(raw_text)
     lines = clean_text.splitlines()
 
     diagnostics: List[Dict[str, Any]] = []
+    prints: List[str] = []
     current_diag: Optional[Dict[str, Any]] = None
+    in_print_block: bool = False
 
     def flush_current():
         """Finalize and append the accumulated diagnostic object to the list."""
@@ -89,17 +106,20 @@ def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
             # Treat empty lines as paragraph breaks in multi-line messages.
             if current_diag is not None:
                 current_diag["message"] += "\n"
+            in_print_block = False
             continue
 
         # Ignore Lake progress and status lines.
         if LAKE_PROGRESS_OR_STATUS_RE.match(line):
             flush_current()
+            in_print_block = False
             continue
 
         # 1. Match standard direct Lean diagnostic line (path:line:col: severity: message).
         lean_match = DIAGNOSTIC_HEADER_LEAN_RE.match(line)
         if lean_match:
             flush_current()
+            in_print_block = False
             current_diag = {
                 "file": lean_match.group("file").strip(),
                 "line": int(lean_match.group("line")),
@@ -113,6 +133,7 @@ def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
         lake_file_match = DIAGNOSTIC_HEADER_LAKE_RE.match(line)
         if lake_file_match:
             flush_current()
+            in_print_block = False
             current_diag = {
                 "file": lake_file_match.group("file").strip(),
                 "line": int(lake_file_match.group("line")),
@@ -126,6 +147,7 @@ def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
         lake_generic_match = LAKE_GENERIC_ERROR_RE.match(line)
         if lake_generic_match:
             flush_current()
+            in_print_block = False
             current_diag = {
                 "file": None,
                 "line": None,
@@ -135,7 +157,19 @@ def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
             }
             continue
 
-        # 4. Continuation lines for the current diagnostic (stack traces, details, etc.).
+        # 4. Check for top-level non-diagnostic prints (#print axioms, #check, #print, etc.).
+        if LEAN_AXIOM_PRINT_RE.match(line) or LEAN_TOPLEVEL_PRINT_RE.match(line):
+            flush_current()
+            in_print_block = True
+            prints.append(stripped_line)
+            continue
+
+        if in_print_block:
+            # Continuation line for print block (e.g., multi-line axiom list [..., ...])
+            prints.append(stripped_line)
+            continue
+
+        # 5. Continuation lines for the current diagnostic (stack traces, details, etc.).
         if current_diag is not None:
             current_diag["message"] += "\n" + line
         else:
@@ -148,8 +182,22 @@ def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
                     "severity": "error",
                     "message": line,
                 }
+            elif stripped_line.startswith("'") and ("depends on" in stripped_line or "does not depend" in stripped_line):
+                prints.append(stripped_line)
 
     flush_current()
+    return diagnostics, prints
+
+
+def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
+    """
+    Parse console output from Lean 4 and Lake, returning a list of diagnostics.
+    Maintains backward compatibility by extracting only the diagnostic list.
+
+    :param raw_text: Raw compiler or build output text.
+    :return: List of structured diagnostic dictionaries.
+    """
+    diagnostics, _ = parse_build_output(raw_text)
     return diagnostics
 
 
@@ -238,7 +286,7 @@ def main():
             parser.print_help()
             sys.exit(0)
 
-    diagnostics = parse_diagnostics_text(raw_output)
+    diagnostics, prints = parse_build_output(raw_output)
 
     error_count = sum(1 for d in diagnostics if d["severity"] == "error")
     warning_count = sum(1 for d in diagnostics if d["severity"] == "warning")
@@ -257,6 +305,8 @@ def main():
 
     if not args.summary_only:
         result["diagnostics"] = diagnostics
+        if prints:
+            result["prints"] = prints
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
     sys.exit(0 if success else 1)

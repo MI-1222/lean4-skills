@@ -54,6 +54,17 @@ EOF
 
 _(If `sorryAx` appears, the proof is not mathematically sound)._
 
+> [!TIP]
+> **Structured Audit via `parse_diagnostics.py`**:
+> When piped through `parse_diagnostics.py`, axiom audit outputs are automatically recognized and isolated into the `"prints"` JSON array, preventing them from being swallowed into preceding compiler warnings (such as `declaration uses 'sorry'`):
+>
+> ```bash
+> lake env lean --stdin <<EOF 2>&1 | python3 skills/lean4-cli/scripts/parse_diagnostics.py
+> import MyProject.MyModule
+> #print axioms MyProject.MyModule.my_theorem
+> EOF
+> ```
+
 ### Method B: Inline Inspection (Local Debugging)
 
 Temporarily append the inspection at the bottom of the active `.lean` file:
