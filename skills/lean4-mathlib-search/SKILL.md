@@ -1,0 +1,180 @@
+---
+name: lean4-mathlib-search
+description: Search Mathlib for theorems, lemmas, definitions, and tactics in Lean 4. Use whenever searching for mathematical lemmas, looking up theorem names by type signature with Loogle (`search_loogle.py`), finding lemmas using inline search tactics (`exact?`, `apply?`, `rw?`), querying by natural language or semantic meaning (LeanSearch / Moogle), or deriving candidate theorem names from Mathlib naming conventions. Make sure to consult this skill whenever encountering unknown theorem names, unproven proof goals, or missing lemmas.
+---
+
+# Lean 4 Mathlib Search
+
+This skill provides a systematic, multi-tiered search methodology for discovering definitions, theorems, and lemmas across Mathlib and the Lean 4 core library.
+
+Mathlib is vast (over 100,000 theorems and definitions). Blind guessing or hallucinating lemma names inevitably fails. Instead, use the structured 4-tiered search pipeline below to locate and verify the exact lemmas required for your proof.
+
+---
+
+## 1. Search Strategy Decision Tree
+
+Always consult this decision tree to pick the fastest and most precise tool for your current proof state:
+
+```mermaid
+graph TD
+    Start["Need a Lemma or Definition"] --> Q1{"Do you have an active proof goal in Lean?"}
+    Q1 -- "Yes, active local goal" --> TryLocal["Strategy 1: Inline Tactics (`exact?`, `apply?`, `rw?`)"]
+    TryLocal --> LCheck{"Did `Try this:` succeed?"}
+    LCheck -- "Yes" --> Replace["Replace tactic with suggested lemma"]
+    LCheck -- "No" --> Q2
+
+    Q1 -- "No active goal / exploring library" --> Q2{"Do you know the type signature or equation shape?"}
+    Q2 -- "Yes (e.g. `?a + ?b = ?b + ?a` or `List.map`)" --> Loogle["Strategy 2: Loogle (`search_loogle.py`)"]
+    Q2 -- "No, only informal math concept" --> Q3{"Do you know standard Mathlib terminology?"}
+
+    Q3 -- "Yes, standard terms" --> Naming["Strategy 3: Mathlib Naming Convention + Grep"]
+    Q3 -- "No, abstract / high-level concept" --> Semantic["Strategy 4: Semantic Search (LeanSearch / Moogle)"]
+```
+
+---
+
+## 2. Strategy 1: Inline Tactic Search (`exact?`, `apply?`, `rw?`)
+
+When working inside a tactic block (`by ...`), Lean 4 provides built-in metaprogramming tactics that search the environment in-memory. This is the **fastest and most deterministic** search method because it operates directly against your exact local proof context (hypotheses and type universe).
+
+| Tactic   | Scope                                                  | Goal Transformation                       | Success Output                 |
+| :------- | :----------------------------------------------------- | :---------------------------------------- | :----------------------------- |
+| `exact?` | Closes the active goal immediately with a single lemma | Leaves no remaining subgoals              | `Try this: exact <lemma_name>` |
+| `apply?` | Matches the conclusion of the goal with a lemma        | Leaves premise conditions as new subgoals | `Try this: apply <lemma_name>` |
+| `rw?`    | Searches for equations matching subexpressions         | Rewrites target or specified hypotheses   | `Try this: rw [<lemma_name>]`  |
+
+### Tactic Insertion Workflow
+
+1. **Insert Tactic**: Replace `sorry` or insert the tactic at the active goal line:
+   ```lean
+   theorem add_comm_example (x y : Nat) : x + y = y + x := by
+     exact?
+   ```
+2. **Collect Compiler Diagnostics**: Run `lake env lean <file>` or use `lean4-interactive-proof` (`lean_goal.py`) to inspect compiler messages.
+3. **Extract `Try this:` Suggestion**:
+   ```text
+   Try this: exact Nat.add_comm x y
+   ```
+4. **Replace and Validate**: Permanently substitute `exact?` with the suggested code (`exact Nat.add_comm x y`) and verify diagnostics are clean.
+5. **Fallback**: If `exact?` fails (goal cannot be closed in one step), fall back to `apply?` or `rw?`.
+
+---
+
+## 3. Strategy 2: Type Signature Search via Loogle (`search_loogle.py`)
+
+When inline tactics fail or when searching outside an active proof file, use **Loogle**. Loogle evaluates structural type patterns and nonlinear metavariables against Mathlib's entire index.
+
+The skill bundles `scripts/search_loogle.py`, a standalone Python script supporting both the public Loogle REST API and local `loogle` CLI.
+
+### CLI Usage
+
+```bash
+python3 <skill-path>/scripts/search_loogle.py "<query>" [-n <limit>] [--json] [--local] [--prefer-local] [--lake-dir <dir>]
+```
+
+- `<query>`: The search query string. Enclose in quotes.
+- `-n`, `--limit`: Maximum number of results to display (default: `10`, `0` for all).
+- `--json`: Output full structured JSON containing declaration names, modules, and signatures.
+- `--local`: Run search locally via `lake exe loogle` or `loogle` CLI. Automatically detects Lake projects in current/parent workspace directories, or uses `--lake-dir` / `LOOGLE_PROJECT_DIR`.
+- `--prefer-local`: Use local `loogle` if available, falling back to the REST API.
+- `--lake-dir`: Path to a Lake project directory containing `loogle` (optional; auto-detected if omitted).
+- `--timeout`: Timeout in seconds (default: `25.0`).
+
+### Loogle Query Syntax Guide
+
+Loogle provides expressive query patterns:
+
+| Pattern Type           | Syntax         | Example                            | Purpose / Meaning                                     |
+| :--------------------- | :------------- | :--------------------------------- | :---------------------------------------------------- |
+| **Anonymous Wildcard** | `_` or `?_`    | `_ * (_ ^ _)`                      | Any expression or type                                |
+| **Nonlinear Wildcard** | `?a`, `?b`     | `Real.sqrt ?a * Real.sqrt ?a`      | Same variable must match identically on both sides    |
+| **Constant Inclusion** | Identifier     | `Real.sin` or `List.map`           | Statement must reference this constant                |
+| **Name Substring**     | `"string"`     | `"differ"`                         | Declaration identifier contains the substring         |
+| **Conclusion Filter**  | `\|- ...`      | `\|- tsum _ = _ * tsum _`          | Target conclusion (right of `→` and `∀`) matches      |
+| **Prop vs Type**       | `⊢ (_ : Prop)` | `⊢ (_ : Prop)`                     | Filter only for theorems/proofs (exclude definitions) |
+| **Compound Query**     | `,` (comma)    | `"differ", Real.sin, ⊢ (_ : Prop)` | Logical **AND** of all specified criteria             |
+
+### Practical Examples
+
+```bash
+# 1. Non-linear pattern: product of square roots of the same number
+python3 scripts/search_loogle.py "Real.sqrt ?a * Real.sqrt ?a"
+
+# 2. Function composition with Measurable
+python3 scripts/search_loogle.py "Measurable ?f -> Measurable ?g -> Measurable (?g ∘ ?f)"
+
+# 3. Filtering by constant and name substring
+python3 scripts/search_loogle.py '"differ", Real.sin' -n 5
+
+# 4. JSON output for automated agent parsing
+python3 scripts/search_loogle.py "List ?a -> (?a -> ?b) -> List ?b" --json
+```
+
+---
+
+## 4. Strategy 3: Mathlib Naming Conventions
+
+Mathlib follows strict, predictable naming conventions. If you know the types and operations involved, you can often deduce the exact lemma name deterministically.
+
+### Core Structure: `Type.operation_property` or `concept_subconcept`
+
+- **Namespace**: Governed by the primary type (e.g., `Nat`, `Real`, `List`, `Continuous`).
+- **Operation**: The head symbol or operation (`add`, `mul`, `sub`, `neg`, `map`, `comp`).
+- **Property**: The mathematical property or relation (`comm`, `assoc`, `zero`, `one`, `mono`, `le`, `lt`, `eq`).
+
+### Standard Suffix Vocabulary
+
+| Suffix             | Meaning                                                     | Example                           |
+| :----------------- | :---------------------------------------------------------- | :-------------------------------- |
+| `_comm`            | Commutativity ($a \star b = b \star a$)                     | `Nat.add_comm`, `mul_comm`        |
+| `_assoc`           | Associativity ($(a \star b) \star c = a \star (b \star c)$) | `add_assoc`, `mul_assoc`          |
+| `_left` / `_right` | Left/right side orientation                                 | `mul_one`, `one_mul`, `div_self`  |
+| `_zero` / `_one`   | Neutral element interaction                                 | `add_zero`, `zero_add`, `mul_one` |
+| `_self`            | Operation applied to identical arguments ($a \star a$)      | `mul_self_sqrt`, `sub_self`       |
+| `_mono`            | Monotonicity                                                | `List.map_mono`, `add_le_add`     |
+| `_of_...`          | Implication / constructor from a premise                    | `le_of_lt`, `eq_of_sub_eq_zero`   |
+| `_iff`             | If and only if ($\iff$) equivalence                         | `mul_eq_zero_iff`, `subset_def`   |
+
+### Verification via Fast Grep / `lean_goal.py`
+
+Once a candidate name is deduced:
+
+1. Search within Mathlib imports:
+   ```bash
+   rg "theorem add_comm" .lake/packages/mathlib/Mathlib/
+   ```
+2. Verify immediately with `lean4-interactive-proof`:
+   ```lean
+   #check Nat.add_comm
+   ```
+
+---
+
+## 5. Strategy 4: Semantic & Natural Language Search
+
+When you only know high-level mathematical terminology in English (e.g., "Banach-Steinhaus theorem", "Euler totient formula", "Heine-Borel compactness"), use semantic search systems:
+
+- **LeanSearch (`https://leansearch.net`)**: High-accuracy semantic search engine over Mathlib theorems using hierarchical informalization and neural re-ranking.
+- **Moogle (`https://www.moogle.ai`)**: Natural language neural search for Lean 4.
+- **Lean Exploration Workflow**:
+  1. Query natural language terms to find candidate Mathlib module paths (e.g., `Mathlib.Analysis.NormedSpace.BanachSteinhaus`).
+  2. Add the required `import` to your Lean file.
+  3. Use `search_loogle.py` or inline `exact?` to pinpoint the specific sub-lemma within that module.
+
+---
+
+## 6. Best Practices & Anti-Patterns
+
+### Anti-Patterns to Avoid
+
+- **Never guess lemma names without checking**: Hallucinating identifiers (e.g., `Mathlib.Theorem.pythagorean`) causes `unknown identifier` compilation errors.
+- **Do not overload Loogle queries**: Writing overly complex signatures with 10 type variables causes Loogle timeouts. Start with key constants or subexpressions (e.g., `_ * (_ ^ _)`), then refine.
+- **Avoid plain text searches in Loogle**: Querying `"Measure.map"` as a type signature yields 0 hits because Loogle searches structural types. For constant presence, omit quotes (`Measure.map`); for name substring, use quotes (`"map"`).
+
+### Verification Checklist
+
+- [ ] Identified active goal with `lean_goal.py`?
+- [ ] Attempted inline `exact?` / `apply?` / `rw?` first?
+- [ ] Tested type signature pattern with `search_loogle.py`?
+- [ ] Verified that the required module is imported (`import Mathlib...`)?
+- [ ] Checked for clean compilation without `sorry` or warnings?

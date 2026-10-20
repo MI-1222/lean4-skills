@@ -1,0 +1,26 @@
+{
+  "skill_name": "lean4-mathlib-search",
+  "evals": [
+    {
+      "id": 1,
+      "name": "loogle-type-pattern-search",
+      "prompt": "Search Mathlib for a lemma stating that multiplying the square root of a real number by itself yields the original number (e.g. `√x * √x = x`) using lean4-mathlib-search. Find the exact theorem name and its type signature.",
+      "expected_output": "Identifies `Real.mul_self_sqrt` with signature `{x : ℝ} (h : 0 ≤ x) : √x * √x = x` by running `search_loogle.py` with a pattern like `Real.sqrt ?a * Real.sqrt ?a`.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "compound-filter-search",
+      "prompt": "Find theorems in Mathlib concerning the differentiability of the trigonometric sine function on real numbers using lean4-mathlib-search. Use a compound query combining constant reference and name substring.",
+      "expected_output": "Executes `search_loogle.py` with a compound query such as `'\"differ\", Real.sin'` and identifies lemmas like `Real.differentiable_sin` and `Real.differentiableAt_sin`.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "inline-tactic-search-workflow",
+      "prompt": "I have an active proof goal in Lean 4: `theorem test_add (a b : Nat) : a + b = b + a := by sorry`. How should I find the exact lemma to close this goal directly using inline proof search tactics according to lean4-mathlib-search?",
+      "expected_output": "Recommends temporarily replacing `sorry` with `exact?`, inspecting the compiler output for `Try this: exact Nat.add_comm a b`, and substituting it back into the proof.",
+      "files": []
+    }
+  ]
+}
