@@ -72,19 +72,24 @@ class Lean3Linter:
         ),
         (
             "LEAN3_TRAILING_COMMA",
-            re.compile(r"^\s*(?:intro|intros|exact|apply|refine|rw|simp|ring|omega|aesop|linarith|rcases|obtain)\b.*,\s*(?:--.*)?$"),
+            re.compile(
+                r"^\s*(?:[·•\-]\s*)?(?:intro|intros|exact|apply|refine|rw|simp|dsimp|ring|omega|aesop|linarith|nlinarith|positivity|gcongr|rcases|obtain|cases|split|rfl|constructor|left|right|ext|norm_num|assumption|contradiction|subst|revert|clear)\b.*,\s*(?:--.*)?$"
+            ),
             "error",
             "Found trailing comma at end of tactic line. Lean 4 separates tactics by newline or semicolon ';', never trailing commas.",
         ),
         (
             "LEAN3_ASCII_REWRITE_ARROW",
-            re.compile(r"\brw\s*\[[^\]]*<-\s*"),
+            re.compile(r"\b(?:rw|simp_rw|simp|dsimp)\s*\[[^\]]*<-\s*"),
             "warning",
             "Found '<-' inside rewrite tactic. Lean 4 uses Unicode left arrow '←' (\\l).",
         ),
         (
             "LEAN3_CALC_COLON",
-            re.compile(r"^\s*(?:_|[a-zA-Z0-9_().+*\-\^]+)\s*[=<≤≥>~≃≈]\s*.*[^:]\s*:\s*(?:by|proof|\{|_|[a-zA-Z0-9_]+)\b"),
+            re.compile(
+                r"^(?!\s*(?:theorem|lemma|def|instance|axiom|variable|have|let)\b)"
+                r"\s*(?:calc\s+)?(?:_|.+?)\s*[=<≤≥>~≃≈]\s*.*?(?<!:):(?!=)\s*(?:by|proof|\{|_|[a-zA-Z0-9_]+)\b"
+            ),
             "error",
             "Found ':' before proof in 'calc' step. Lean 4 uses ':=' instead of ':'.",
         ),
@@ -95,14 +100,38 @@ class Lean3Linter:
             "Found 'have ..., from'. Lean 4 uses 'have ... := ...' without 'from' and without comma.",
         ),
         (
+            "LEAN3_SUFFICES_FROM",
+            re.compile(r"\bsuffices\s+[^:]+:[^:]+,\s*from\b"),
+            "error",
+            "Found 'suffices ..., from'. Lean 4 uses 'suffices ... := ...' or 'suffices ... by ...' without 'from' and without comma.",
+        ),
+        (
+            "LEAN3_OPEN_LOCALE",
+            re.compile(r"^\s*open_locale\b"),
+            "error",
+            "Found 'open_locale'. Lean 4 uses 'open scoped <Namespace>' (e.g. 'open scoped Classical').",
+        ),
+        (
+            "LEAN3_UNIVERSES_PLURAL",
+            re.compile(r"^\s*universes\b"),
+            "error",
+            "Found 'universes' (plural). Lean 4 uses 'universe' (singular) or 'variable {u v : Level}'.",
+        ),
+        (
             "LEAN3_INDUCTION_WITH_VARS",
             re.compile(r"\binduction\s+\S+\s+with\s+(?!\|\s*)[a-zA-Z0-9_]+\s+[a-zA-Z0-9_]+"),
             "warning",
             "Found 'induction ... with <var1> <var2>'. Lean 4 pattern-matches induction cases with 'with | zero => ... | succ n ih => ...' or binds them via subsequent 'intro'.",
         ),
         (
+            "LEAN3_CASES_WITH_VARS",
+            re.compile(r"^\s*(?:[·•\-]\s*)?cases\s+\S+\s+with\s+(?!\|\s*)[a-zA-Z0-9_]+\s+[a-zA-Z0-9_]+"),
+            "warning",
+            "Found 'cases ... with <var1> <var2>'. Lean 4 uses 'rcases ... with ⟨...⟩', 'obtain', or pattern matching with 'with | ... => ...'.",
+        ),
+        (
             "LEAN3_SPLIT_CONJUNCTION",
-            re.compile(r"^\s*split\s*(?:--.*)?$"),
+            re.compile(r"^\s*(?:[·•\-]\s*)?split\b\s*,?\s*(?:--.*)?$"),
             "warning",
             "Found bare 'split' tactic. In Lean 4, 'split' decomposes 'if-then-else' and 'match' statements; to split a conjunction (P ∧ Q) or constructor target, use 'constructor' or 'refine ⟨?_, ?_⟩'.",
         ),
@@ -118,6 +147,26 @@ class Lean3Linter:
     def lint(cls, code: str) -> List[Diagnostic]:
         diagnostics: List[Diagnostic] = []
         lines = code.splitlines()
+
+        # Check for module docstrings `/-!` placed before `import` statements
+        has_seen_mod_doc = False
+        mod_doc_line = 0
+        for line_idx, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            if stripped.startswith("/-!"):
+                has_seen_mod_doc = True
+                mod_doc_line = line_idx
+            elif (stripped.startswith("import ") or stripped.startswith("public import ")) and has_seen_mod_doc:
+                diagnostics.append(
+                    Diagnostic(
+                        severity="error",
+                        line=mod_doc_line,
+                        column=1,
+                        message="[LEAN4_MODULE_DOC_BEFORE_IMPORT] Module docstring `/-! ... -/` must be placed AFTER all `import` statements. Placing it before imports triggers an `invalid 'import' command` compile error.",
+                        source="lean3-linter",
+                    )
+                )
+                has_seen_mod_doc = False
 
         for line_idx, line in enumerate(lines, start=1):
             # Skip pure comment lines
