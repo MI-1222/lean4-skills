@@ -76,6 +76,33 @@ Replace `simp?` with the proposed `simp only [...]` call.
 
 Often `simp?` lists 10 lemmas when only 2 were actually necessary. Test removing lemmas from the `simp only [...]` brackets until you find the minimal set that advances the proof.
 
+### Technique 3: Automated CLI Extraction Workflow for AI Agents
+
+For autonomous coding agents operating via headless CLI without an interactive VS Code Infoview, follow this 3-step automated extraction pipeline:
+
+1. **Inject `simp?` Temporarily**:
+   Replace the open `simp` in the source file with `simp?`.
+2. **Capture the `Try this:` Info Diagnostic**:
+   Query compiler diagnostics using either `check_syntax.py` (from `lean4-syntax`) or `lean_goal.py` (from `lean4-interactive-proof`):
+
+   ```bash
+   # Method A: Via check_syntax.py (fast compilation & diagnostic collection)
+   python3 skills/lean4-syntax/scripts/check_syntax.py <file-path>
+   # Look for: [INFO   ] L<line>:C<col> (lean-compiler) Try this: simp only [...]
+
+   # Method B: Via lean_goal.py (LSP-based diagnostic extraction)
+   python3 skills/lean4-interactive-proof/scripts/lean_goal.py <file-path> --line <line-num>
+   # Inspect the "diagnostics" array in the JSON response for "message": "Try this: simp only [...]"
+
+   # Method C: Via parse_diagnostics.py + lake env lean
+   lake env lean <file-path> 2>&1 | python3 skills/lean4-cli/scripts/parse_diagnostics.py
+   ```
+
+3. **Automate Replacement**:
+   - Extract the suggested string after `Try this: ` (e.g. `simp only [Nat.add_zero, MulZeroClass.mul_zero]`).
+   - Use `replace_file_content` to substitute `simp?` with the extracted `simp only [...]`.
+   - Re-validate with `check_syntax.py` to ensure the goal closes cleanly without residual warnings.
+
 ---
 
 ## 4. `@[simp]` Lemma Hygiene (Authoring New Lemmas)

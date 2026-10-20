@@ -147,6 +147,8 @@ Add the tactic to the file, and run `lean_goal.py` on the modified line.
 
 - Check `diagnostics`: If any `"severity": "Error"` appears, do not proceed to subsequent lines. Fix or replace the failing tactic immediately.
 - Check `rendered`: Note how the goal and hypotheses transformed.
+- **Harvest `Try this:` Suggestions**:
+  When applying exploratory tactics (`simp?`, `exact?`, `apply?`, `rw?`, `grind?`), inspect the `"diagnostics"` array in the JSON returned by `lean_goal.py`. Look for informational entries with `"message": "Try this: <replacement>"`. Extract the suggested code (e.g. `simp only [h1, h2]`) and immediately substitute it back into the file.
 
 ### Step 4: Handle Remaining Goals with `done`
 

@@ -317,6 +317,22 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
   - `severity`: `"error"`, `"warning"`, or `"info"`.
   - `message`: Diagnostic message, including multi-line indentation details.
 
+### Capturing "Try this:" Suggestions Headlessly
+
+When running suggestion tactics like `simp?`, `exact?`, or `grind?`, the Lean compiler outputs candidate replacements as `info` level diagnostics:
+
+```json
+{
+  "file": "MathProof/Basic.lean",
+  "line": 42,
+  "column": 2,
+  "severity": "info",
+  "message": "Try this: simp only [Nat.add_zero, MulZeroClass.mul_zero]"
+}
+```
+
+AI agents can parse this JSON via `parse_diagnostics.py`, extract the replacement string following `Try this: `, and programmatically substitute it into the source file without relying on an interactive editor infoview.
+
 ---
 
 ## 6. Troubleshooting Common CLI Issues

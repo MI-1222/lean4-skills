@@ -120,5 +120,6 @@ graph TD
 
 - When constructing a top-down proof, use `skills/lean4-interactive-proof` to inspect goals between `sorry` placeholders.
 - When searching for lemmas conforming to Mathlib naming, use `skills/lean4-mathlib-search`.
+- When converting fragile open `simp` to deterministic `simp only`, use the **Automated `simp?` Extraction Pipeline**: inject `simp?`, harvest the `Try this: simp only [...]` suggestion from compiler diagnostics via `skills/lean4-syntax` (`check_syntax.py`) or `skills/lean4-interactive-proof` (`lean_goal.py`), and substitute it automatically.
 - If a proof refactoring produces compiler errors, triage them with `skills/lean4-proof-repair`.
 - Validate overall project health and compilation times using `skills/lean4-cli`.
