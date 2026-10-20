@@ -19,18 +19,20 @@ from typing import Any, Dict, List, Optional, Tuple
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 # Regex pattern matching direct Lean 4 compiler output (path:line:col: severity: message).
+# Handles Windows absolute paths with drive letters (e.g. C:\path\to\File.lean:12:4: error: ...).
 # e.g.: /path/to/File.lean:12:4: error: type mismatch
-# e.g.: File.lean:12:4: warning: unused variable `x`
+# e.g.: C:\path\to\File.lean:12:4: warning: unused variable `x`
 DIAGNOSTIC_HEADER_LEAN_RE = re.compile(
-    r"^\s*(?P<file>[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s+(?P<severity>error|warning|info):\s*(?P<message>.*)$",
+    r"^\s*(?P<file>(?:[a-zA-Z]:)?[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s+(?P<severity>error|warning|info):\s*(?P<message>.*)$",
     re.IGNORECASE,
 )
 
 # Regex pattern matching Lake build output (severity: path:line:col: message).
+# Handles Windows absolute paths with drive letters.
 # e.g.: warning: MathProof/Algebra/Group.lean:32:2: `simp` is a flexible tactic
-# e.g.: error: MathProof/Basic.lean:10:4: type mismatch
+# e.g.: error: C:\path\to\Basic.lean:10:4: type mismatch
 DIAGNOSTIC_HEADER_LAKE_RE = re.compile(
-    r"^\s*(?P<severity>error|warning|info):\s+(?P<file>[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s*(?P<message>.*)$",
+    r"^\s*(?P<severity>error|warning|info):\s+(?P<file>(?:[a-zA-Z]:)?[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s*(?P<message>.*)$",
     re.IGNORECASE,
 )
 
