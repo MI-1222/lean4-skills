@@ -1,0 +1,23 @@
+{
+  "skill_name": "lean4-best-practice",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Review and refactor the following Lean 4 proof snippet according to best practices. Fix any non-terminal simp usage, consolidate redundant rewrites, enforce Mathlib indentation and style guidelines, and explain your changes:\n\n```lean\ntheorem list_len_add (α : Type) (xs ys zs : List α) : (xs ++ ys).length + zs.length = xs.length + (ys ++ zs).length :=\nby\n  simp\n  rw [Nat.add_assoc]\n  rw [Nat.add_comm (ys.length) (zs.length)]\n  rw [← Nat.add_assoc]\n```",
+      "expected_output": "A refactored proof eliminating the non-terminal simp (using `simp only [List.length_append]` or `omega`), consolidating rewrites, placing `by` on the same line, and following Lean 4 style conventions.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I want to formalize the AM-GM inequality for two positive real numbers: `∀ (a b : ℝ), 0 < a → 0 < b → Real.sqrt (a * b) ≤ (a + b) / 2`. Instead of diving into a single monolithic proof, design a top-down sorry-driven proof plan. Show the decomposed helper lemmas with `sorry`, the main theorem skeleton using these lemmas, and proper module/theorem docstrings following Mathlib standards.",
+      "expected_output": "A clean, top-down proof structure featuring: 1) Proper docstrings, 2) Standalone helper lemma(s) such as `(a - b) ^ 2 ≥ 0` and monotonicity of square root with `sorry`, 3) A clean main theorem proof that references the helpers, demonstrating sorry-driven top-down design.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "The following Lean 4 proof is slow and requires increasing heartbeats to compile. Identify the performance antipattern, optimize the proof to run efficiently without `set_option maxHeartbeats`, and explain why the original proof was problematic:\n\n```lean\nset_option maxHeartbeats 500000 in\ntheorem slow_arithmetic (a b c d : ℕ) (h1 : a + 2 * b ≤ c) (h2 : c + 3 * d ≤ 10) : a ≤ 10 := by\n  have h_trans : a ≤ c := by\n    have : a + 0 ≤ a + 2 * b := by simp\n    linarith\n  have h_trans2 : c ≤ 10 := by\n    have : c + 0 ≤ c + 3 * d := by simp\n    linarith\n  linarith\n```",
+      "expected_output": "Identification of the antipatterns (unnecessary `maxHeartbeats`, slow subproofs with non-terminal `simp` and manual transitivity), followed by a streamlined 1-line or 2-line solution using `omega` that compiles in a few milliseconds without increased heartbeats.",
+      "files": []
+    }
+  ]
+}
