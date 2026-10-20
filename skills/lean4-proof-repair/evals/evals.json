@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "When compiling the following Lean 4 code, I get `tactic 'rewrite' failed, motive is not type correct`:\n```lean\ntheorem fin_eq_subst (n m : Nat) (h : n = m) (v : Fin n) : Fin m := by\n  rw [h] at v\n  exact v\n```\nExplain why Lean fails with this motive error and provide the corrected proof using the appropriate repair strategy.",
+      "prompt": "When compiling the following Lean 4 code, I get `tactic 'rewrite' failed, motive is not type correct`:\n```lean\ndef fin_eq_subst (n m : Nat) (h : n = m) (v : Fin n) : Fin m := by\n  rw [h] at v\n  exact v\n```\nExplain why Lean fails with this motive error and provide the corrected proof using the appropriate repair strategy.",
       "expected_output": "The response should diagnose that `rw` fails because `v`'s type depends on `n`, making simple `Eq.rec` motive synthesis invalid. It should repair the proof by using `subst h` (or `subst n`), or alternatively reverting `v` before rewriting.",
       "files": []
     },
