@@ -1,0 +1,23 @@
+{
+  "skill_name": "lean4-mathlib-use",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a Lean 4 file that starts with `import Mathlib`. It only proves a basic theorem about real numbers: `theorem real_pos (x : ℝ) : 0 < x^2 + 1`. Refactor the file according to Mathlib usage best practices: replace the monolithic import with minimal targeted submodules, add the mandatory autoImplicit setting, explain how `lake shake` would be used, and provide the clean refactored Lean code.",
+      "expected_output": "A refactored Lean 4 file replacing `import Mathlib` with targeted submodules (e.g., `Mathlib.Data.Real.Basic`, `Mathlib.Algebra.Order.Ring.Defs`, `Mathlib.Tactic.Linarith`), setting `set_option autoImplicit false`, explaining the role of `lake shake --fix` in eliminating redundant imports, and presenting a clean proof.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "A continuous integration job for my Mathlib project failed with a linter error: `Mathlib.Linter.linter.style.openClassical: do not open Classical globally`. Here is the offending code snippet:\n\n```lean\nimport Mathlib.Data.Set.Basic\n\nopen Classical\nopen Finset\n\ntheorem set_compl_involutive {α : Type*} (s : Set α) : (sᶜ)ᶜ = s := by\n  ext x\n  by_cases hx : x ∈ s\n  · simp [hx]\n  · simp [hx]\n```\n\nExplain why this violates Mathlib linters and how to fix both the classical scoping and the broad namespace opening.",
+      "expected_output": "Explanation of the `openClassical` linter (destruction of computability across the entire module), followed by fixing the code: replacing `open Classical` with `open scoped Classical in` on the declaration or using the `classical` tactic inside the proof, and replacing `open Finset` with `open scoped` if specific notations were needed or qualifying names to prevent pollution.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "The following Lean 4 proof fails to compile because the agent tried to apply a cancellation lemma on real numbers without handling division by zero:\n\n```lean\nimport Mathlib.Data.Real.Basic\n\ntheorem field_div_cancel (x y : ℝ) : (x * y) / y = x := by\n  rw [mul_div_cancel]\n```\n\nExplain how Mathlib's total function design and junk values cause this failure, what hypothesis is missing, which lemma name with a subscript convention must be used, and provide the corrected theorem and proof.",
+      "expected_output": "An explanation of Mathlib's total function design (where `x / 0 = 0` as a junk value), noting that cancellation requires `hy : y ≠ 0` and the subscript-0 lemma `mul_div_cancel_right₀` (or `mul_div_cancel₀`), followed by the correct theorem statement and proof with `(hy : y ≠ 0)`.",
+      "files": []
+    }
+  ]
+}
