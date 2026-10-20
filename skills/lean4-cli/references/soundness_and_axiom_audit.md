@@ -34,7 +34,7 @@ To audit a theorem without modifying your repository source files, pipe an ephem
 
 ```bash
 # Template:
-lake env lean --run - <<EOF
+lake env lean --stdin <<EOF
 import MyProject.MyModule
 #print axioms MyProject.MyModule.my_theorem
 EOF

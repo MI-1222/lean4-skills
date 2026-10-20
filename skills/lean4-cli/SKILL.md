@@ -241,7 +241,7 @@ If you see `sorryAx` or any custom identifier, the proof is **not complete**. Im
 Run without editing the source file:
 
 ```bash
-lake env lean --run - <<EOF
+lake env lean --stdin <<EOF
 import MyProject.MyModule
 #print axioms MyProject.MyModule.my_theorem
 EOF
