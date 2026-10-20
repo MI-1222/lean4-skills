@@ -99,3 +99,38 @@ theorem rcases_example (P Q R : Prop) (h : (P ∧ Q) ∨ R) : P ∨ R := by
 | **$\exists x, P(x)$**  | `⟨x, hpx⟩`                | `use x` or `refine ⟨x, ?_⟩`                      |
 | **$P \iff Q$**         | `⟨h_mp, h_mpr⟩`           | `constructor` (produces `⊢ P → Q` and `⊢ Q → P`) |
 | **Falsehood ($\bot$)** | `h.elim` / `nomatch h`    | `contradiction` or `exfalso`                     |
+
+---
+
+## 5. Mathlib Code Conventions: Lambdas, Line Width, and `show`
+
+When formalizing proofs adhering to Mathlib conventions:
+
+### 5.1. 100-Character Line Limit
+
+- Mathlib standardizes on **100 characters** per line.
+- Do not artificially wrap lines at 80 characters. If an expression fits cleanly under 100 characters, keep it on a single line.
+
+### 5.2. Mathematical Lambdas (`↦` vs `=>`)
+
+- For ordinary mathematical functions, maps, and abstractions, write `fun x ↦ ...` (`\mapsto` or `\map`).
+- Reserve `=>` strictly for pattern matching (`match ... with`), `do` syntax, or metaprogramming.
+
+```lean
+-- ✅ IDIOMATIC MATHLIB
+def add_one : ℕ → ℕ := fun n ↦ n + 1
+
+-- ❌ AVOID
+def add_one_old : ℕ → ℕ := fun n => n + 1
+```
+
+### 5.3. `show` Syntax Discipline
+
+- Use `show P by tac` when providing a tactic proof block.
+- Use `show P from term` only when providing a direct proof term.
+- Never write `show P from by tac` (`from` before `by` is redundant).
+
+### 5.4. Typeclass Instance Registration in Proofs
+
+- Use standard anonymous `have : Class α := ⟨proof⟩` in proofs to supply local instances.
+- Avoid legacy `haveI`—it only inlines the value and is flagged by Mathlib's `haveI`/`letI` style linter. Use `letI` only when definitional equality must be preserved.
