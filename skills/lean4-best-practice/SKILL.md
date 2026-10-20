@@ -67,10 +67,11 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 - [ ] **Module Header**: Does the file contain a proper module docstring `/-! ... -/` after imports explaining its mathematical purpose?
 - [ ] **Line Length**: Are all lines within 100 characters?
 
-### Stage D: Performance & Maintenance
+### Stage D: Performance, Hygiene & Soundness
 
 - [ ] **No Artificial Heartbeat Inflation**: Does the proof build cleanly without increased `maxHeartbeats`?
 - [ ] **Clean Hygiene**: Are there any leftover debugging traces, `#check`, `#eval`, or unused variables?
+- [ ] **Soundness & Axiom Check**: Has `#print axioms <Theorem>` been checked to confirm the proof depends strictly on standard axioms (`propext`, `Classical.choice`, `Quot.sound`) with no residual `sorryAx` or custom axioms?
 
 ---
 
