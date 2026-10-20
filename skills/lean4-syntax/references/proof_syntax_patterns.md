@@ -11,7 +11,7 @@ Lean 4 supports two complementary styles of proving mathematical statements: **T
 A common anti-pattern among LLMs is writing `:= by exact <term>` or `:= by apply <lemma>` for one-line trivialities. Initiating tactic mode creates metavariables and runs elaboration machinery unnecessarily.
 
 - **Use Term Mode** for direct lemma applications, lambda abstractions (`fun ... => ...`), and tuple/constructor packaging.
-- **Use Tactic Mode** for multi-step derivations, goal rewriting (`rw`, `simp`), induction, and automated decision procedures (`omega`, `ring`, `linarith`).
+- **Use Tactic Mode** for multi-step derivations, goal rewriting (`rw`, `simp`), induction, and automated decision procedures (`omega` (Lean 4.7+ Core), `ring`, `linarith`).
 
 ```lean
 -- Clean Term Mode (No metavariable overhead)
@@ -32,7 +32,7 @@ theorem and_comm_proof (P Q : Prop) : P ∧ Q → Q ∧ P := by
 
 ---
 
-## 2. Calculation Chains (`calc`)
+## 2. Calculation Chains (`calc`) (Lean 4.0.0+)
 
 The `calc` construct formats chains of equalities, inequalities, or equivalences step-by-step.
 
@@ -128,13 +128,13 @@ theorem rcases_example (P Q R : Prop) (h : (P ∧ Q) ∨ R) : P ∨ R := by
 
 ## 4. Logical Constructors & Structural Proofs
 
-| Proposition            | Term Mode Constructor     | Tactic Mode Equivalent                           |
-| :--------------------- | :------------------------ | :----------------------------------------------- |
-| **$P \land Q$**        | `⟨hp, hq⟩`                | `constructor` then solve both subgoals           |
-| **$P \lor Q$**         | `Or.inl hp` / `Or.inr hq` | `left; exact hp` or `right; exact hq`            |
-| **$\exists x, P(x)$**  | `⟨x, hpx⟩`                | `use x` or `refine ⟨x, ?_⟩`                      |
-| **$P \iff Q$**         | `⟨h_mp, h_mpr⟩`           | `constructor` (produces `⊢ P → Q` and `⊢ Q → P`) |
-| **Falsehood ($\bot$)** | `h.elim` / `nomatch h`    | `contradiction` or `exfalso`                     |
+| Proposition            | Term Mode Constructor     | Tactic Mode Equivalent                                                  |
+| :--------------------- | :------------------------ | :---------------------------------------------------------------------- |
+| **$P \land Q$**        | `⟨hp, hq⟩`                | `constructor` (Lean 4.35+ warns if multiple match) or `refine ⟨?_, ?_⟩` |
+| **$P \lor Q$**         | `Or.inl hp` / `Or.inr hq` | `left; exact hp` or `right; exact hq`                                   |
+| **$\exists x, P(x)$**  | `⟨x, hpx⟩`                | `use x` or `refine ⟨x, ?_⟩`                                             |
+| **$P \iff Q$**         | `⟨h_mp, h_mpr⟩`           | `constructor` (produces `⊢ P → Q` and `⊢ Q → P`)                        |
+| **Falsehood ($\bot$)** | `h.elim` / `nomatch h`    | `contradiction` or `exfalso`                                            |
 
 ---
 
@@ -168,5 +168,47 @@ def add_one_old : ℕ → ℕ := fun n => n + 1
 
 ### 5.4. Typeclass Instance Registration in Proofs
 
-- Use standard anonymous `have : Class α := ⟨proof⟩` in proofs to supply local instances.
-- Avoid legacy `haveI`—it only inlines the value and is flagged by Mathlib's `haveI`/`letI` style linter. Use `letI` only when definitional equality must be preserved.
+- Use standard anonymous `have : Class α := ⟨proof⟩` (Lean 4.14+) in proofs to supply local instances.
+- Avoid legacy `haveI` (deprecated since Lean 4.14)—it only inlines the value and is flagged by Mathlib's `haveI`/`letI` style linter. Use `letI` only when definitional equality must be preserved.
+
+---
+
+## 6. Advanced Syntax Patterns by Version
+
+### 6.1. Structural Recursion: `termination_by structural` (Lean 4.11+)
+
+In Lean 4.11+, specify structural recursion directly without forcing well-founded recursion:
+
+```lean
+def list_len {α : Type} (xs : List α) : Nat :=
+  match xs with
+  | [] => 0
+  | _ :: t => list_len t + 1
+termination_by structural xs
+```
+
+### 6.2. Inaccessible Binders in `intro` / `ext` (Lean 4.20+)
+
+Lean 4.20+ allows passing `_` to `intro`, `ext`, or conv `enter` to introduce an inaccessible hypothesis name:
+
+```lean
+example (p q : Prop) : p → q → p := by
+  intro hp _  -- Discards or makes the second argument inaccessible
+  exact hp
+```
+
+### 6.3. Omitting `=>` in `cases` / `induction` (Lean 4.20+)
+
+Lean 4.20+ supports omitting `=> ...` in `cases` and `induction` branches, automatically treating omitted bodies as `=> ?_`:
+
+```lean
+example (p : Nat × Nat) : p.1 = p.1 := by
+  cases p with | _ p1 p2
+  rfl
+```
+
+### 6.4. Rewrite and Assumption Discipline (`rwa`) (Lean 4.35+)
+
+- In Lean 4.35+, `rwa` was redesigned to only close goals matching the rewritten premise.
+- Do NOT use `rwa [h] at *` or `rwa [h] at h₁ h₂` (deprecated); use `rw [h] at * <;> assumption`.
+- Do NOT use `rwa` when `rw` alone suffices (flagged by `linter.unnecessaryRwa`).

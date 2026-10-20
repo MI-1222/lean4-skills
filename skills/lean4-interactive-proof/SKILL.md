@@ -1,11 +1,33 @@
 ---
 name: lean4-interactive-proof
 description: Interactively prove theorems in Lean 4 by inspecting tactic states (proof goals) and compiler diagnostics step-by-step using LSP. Use whenever writing, completing, debugging, or verifying formal mathematical proofs in Lean 4 or Mathlib, inspecting intermediate proof goals, inserting `done` to expose remaining subgoals, or verifying whether a tactic successfully advanced the proof state.
+compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for scripts/lean_goal.py.
+metadata:
+  target-lean-version: '>=4.14.0'
+  tested-lean-version: 'v4.35.0'
+  tested-mathlib-version: 'v4.35.0'
+  version: '1.2.0'
 ---
 
 # Lean 4 Interactive Proof
 
 This skill provides an interactive, tactic-by-tactic workflow for formal theorem proving in Lean 4. By querying the Lean 4 Language Server (LSP) in real-time, AI agents can inspect active proof goals (hypotheses and targets), observe goal state transformations, and catch compiler diagnostics immediately after each tactic application.
+
+---
+
+## 0. Environment & Version Compatibility
+
+| Component        | Target / Supported          | Verified / Tested Version             | Notes                                                |
+| :--------------- | :-------------------------- | :------------------------------------ | :--------------------------------------------------- |
+| **Lean 4 / LSP** | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified via `lake serve` / `lean --server` JSON-RPC |
+| **Mathlib**      | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Provides proof state inspection on Mathlib theories  |
+| **Python**       | `>=3.10`                    | `3.14.x`                              | Required for `scripts/lean_goal.py`                  |
+
+### Version-Specific LSP & Tactic Notes
+
+- **LSP JSON-RPC**: `scripts/lean_goal.py` interfaces with standard Lean 4 LSP protocol (`textDocument/plainGoal`).
+- **Goal Completion**: Use `done` or focus dots `·` to ensure subgoals are fully discharged and prevent goal state desynchronization.
+- **Incremental Diagnostics**: Modern Lean 4 reports position-indexed elaboration errors immediately upon file mutation.
 
 ---
 
@@ -113,10 +135,10 @@ In Lean 4, `sorry` is a macro tactic that artificially discharges the active goa
 Choose the most direct tactic for the active goal:
 
 - **Definitional equality**: `rfl`
-- **Simplification / arithmetic**: `simp`, `ring`, `omega`, `linarith`
+- **Simplification / arithmetic**: `simp`, `ring`, `omega` (Lean 4.7+ Core), `linarith`
 - **Hypothesis introduction**: `intro x h`
 - **Rewriting / Substitution**: `rw [h]`, `subst h`
-- **Splitting cases**: `cases n`, `rcases ...`, `obtain ...`
+- **Splitting cases**: `cases n`, `rcases ...` (Lean 4.7+ Core), `obtain ...`
 - **Exact match**: `exact h`
 
 ### Step 3: Apply Tactic and Immediately Query

@@ -8,19 +8,20 @@ Mathlib covers vast mathematical domains, each having specialized abstractions, 
 
 Before writing manual step-by-step rewrites, check if your goal falls into one of Mathlib's automated decision procedures:
 
-| Domain / Goal Nature                                                              | Recommended Tactic         | Secondary / Fallback                | Avoid                                           |
-| :-------------------------------------------------------------------------------- | :------------------------- | :---------------------------------- | :---------------------------------------------- |
-| **Integer / Natural Linear Arithmetic** ($+$, $-$, $\le$, $<$, $\cdot$ by const)  | `omega`                    | `decide`                            | Manual induction on `n`                         |
-| **Real / Rational Linear Arithmetic** ($+$, $-$, $\le$, $<$, linear combinations) | `linarith`                 | `nlinarith`                         | `omega` (cannot handle $\mathbb{R}/\mathbb{Q}$) |
-| **Nonlinear Real Arithmetic** ($x^2 \ge 0$, squares, products)                    | `nlinarith`, `positivity`  | `polyrith`                          | Naked `linarith`                                |
-| **Pure Algebraic Equalities** (CommRing, Field)                                   | `ring`                     | `field_simp; ring`                  | `simp`                                          |
-| **Fraction Clearing & Division**                                                  | `field_simp`               | `ring`                              | Manual `mul_inv_cancel₀`                        |
-| **Congruence in Inequalities** ($f(a) \le f(b)$, sums, integrals)                 | `gcongr`                   | `rel [...]`                         | Manual `Finset.sum_le_sum`                      |
-| **Strict Positivity / Nonnegativity** ($0 < x$, $0 \le \mu(s)$)                   | `positivity`               | `norm_num`                          | Manual case analysis                            |
-| **Pure Continuity Proofs**                                                        | `continuity`, `fun_prop`   | `continuous_def`                    | Manual $\varepsilon$-$\delta$                   |
-| **Borel / Space Measurability**                                                   | `measurability`            | `fun_prop (disch := measurability)` | Manual `measurable_pi_apply` chains             |
-| **Angle Arithmetic** ($\mathbb{R}/\mathbb{Z}$ quotient)                           | `linarith` on `Real.Angle` | `ring`                              | Manual modulus unwrapping                       |
-| **Mixed Cross-Domain Constraints** (Equalities + inequalities + cases)            | `grind` / `grind?`         | `aesop`                             | Unbounded `simp`                                |
+| Domain / Goal Nature                                                              | Recommended Tactic                      | Secondary / Fallback                | Avoid                                           |
+| :-------------------------------------------------------------------------------- | :-------------------------------------- | :---------------------------------- | :---------------------------------------------- |
+| **Integer / Natural Linear Arithmetic** ($+$, $-$, $\le$, $<$, $\cdot$ by const)  | `omega` (Lean 4.7+ Core)                | `decide`                            | Manual induction on `n`                         |
+| **Real / Rational Linear Arithmetic** ($+$, $-$, $\le$, $<$, linear combinations) | `linarith`                              | `nlinarith`                         | `omega` (cannot handle $\mathbb{R}/\mathbb{Q}$) |
+| **Nonlinear Real Arithmetic** ($x^2 \ge 0$, squares, products)                    | `nlinarith`, `positivity`               | `polyrith`                          | Naked `linarith`                                |
+| **Pure Algebraic Equalities** (CommRing, Field)                                   | `ring`                                  | `field_simp; ring`                  | `simp`                                          |
+| **Fraction Clearing & Division**                                                  | `field_simp`                            | `ring`                              | Manual `mul_inv_cancel₀`                        |
+| **Congruence in Inequalities** ($f(a) \le f(b)$, sums, integrals)                 | `gcongr`                                | `rel [...]`                         | Manual `Finset.sum_le_sum`                      |
+| **Strict Positivity / Nonnegativity** ($0 < x$, $0 \le \mu(s)$)                   | `positivity`                            | `norm_num`                          | Manual case analysis                            |
+| **Pure Continuity Proofs**                                                        | `continuity`, `fun_prop`                | `continuous_def`                    | Manual $\varepsilon$-$\delta$                   |
+| **Borel / Space Measurability**                                                   | `measurability`                         | `fun_prop (disch := measurability)` | Manual `measurable_pi_apply` chains             |
+| **Angle Arithmetic** ($\mathbb{R}/\mathbb{Z}$ quotient)                           | `linarith` on `Real.Angle`              | `ring`                              | Manual modulus unwrapping                       |
+| **Bit-Vector & Boolean Arithmetic** (`BitVec`, `Bool`, bitwise ops)               | `bv_decide` (Lean 4.12+ Core)           | `decide`                            | Manual bitwise induction                        |
+| **Mixed Cross-Domain Constraints** (Equalities + inequalities + cases)            | `grind` / `grind?` (Lean 4.16+ / 4.20+) | `aesop`                             | Unbounded `simp`                                |
 
 ---
 

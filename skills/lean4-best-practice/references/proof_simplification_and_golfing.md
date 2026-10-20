@@ -62,20 +62,20 @@ omega
 
 #### Decision Tactic Cheat Sheet
 
-| Tactic           | Target Domain & Problem Class                        | Strengths                                                                       | Limitations                                                                                |
-| :--------------- | :--------------------------------------------------- | :------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------- |
-| **`omega`**      | Presburger arithmetic on `ℕ`, `ℤ`                    | Linear inequalities, addition, constant multiplication, integer division/modulo | Fails on variable-by-variable products ($a \cdot b$), powers, roots, or opaque functions   |
-| **`linarith`**   | Linear arithmetic on `ℚ`, `ℝ` (ordered rings/fields) | Linear combinations of inequalities, contradictions                             | Purely linear; cannot reason about nonlinear terms directly                                |
-| **`ring`**       | Commutative rings/semirings                          | Polynomial identities, algebraic simplification ($(a+b)^2 = a^2 + 2ab + b^2$)   | Equalities only; ignores inequalities and order relations                                  |
-| **`nlinarith`**  | Nonlinear inequalities on `ℚ`, `ℝ`                   | Heuristic nonlinear reasoning (e.g., squares are non-negative $x^2 \ge 0$)      | Heuristic and slower; incomplete for arbitrary polynomials                                 |
-| **`positivity`** | Non-negativity, positivity, non-zero tests           | Automatically proves `0 ≤ x`, `0 < x`, `x ≠ 0` from types and structures        | Verifies sign properties only; does not solve arbitrary inequalities                       |
-| **`gcongr`**     | Generalized congruence                               | Solves relations like $f(a) \le f(b)$ via monotonicity                          | Requires registered monotonicity lemmas (`@[gcongr]`)                                      |
-| **`grind`**      | SMT-style mixed constraints (Lean 4 Core)            | Congruence closure, E-matching, case-splitting, cross-domain equality/algebra   | Search space can explode on unconstrained case-splitting; use `(splits := 0)` as safe test |
-| **`tauto`**      | Propositional logic                                  | Tautologies involving `∧`, `∨`, `¬`, `→`, `↔`                                   | Propositional level only; does not unfold domain definitions                               |
+| Tactic                           | Target Domain & Problem Class                        | Strengths                                                                       | Limitations                                                                                |
+| :------------------------------- | :--------------------------------------------------- | :------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------- |
+| **`omega`** (Lean 4.7+ Core)     | Presburger arithmetic on `ℕ`, `ℤ`                    | Linear inequalities, addition, constant multiplication, integer division/modulo | Fails on variable-by-variable products ($a \cdot b$), powers, roots, or opaque functions   |
+| **`linarith`**                   | Linear arithmetic on `ℚ`, `ℝ` (ordered rings/fields) | Linear combinations of inequalities, contradictions                             | Purely linear; cannot reason about nonlinear terms directly                                |
+| **`ring`**                       | Commutative rings/semirings                          | Polynomial identities, algebraic simplification ($(a+b)^2 = a^2 + 2ab + b^2$)   | Equalities only; ignores inequalities and order relations                                  |
+| **`nlinarith`**                  | Nonlinear inequalities on `ℚ`, `ℝ`                   | Heuristic nonlinear reasoning (e.g., squares are non-negative $x^2 \ge 0$)      | Heuristic and slower; incomplete for arbitrary polynomials                                 |
+| **`positivity`**                 | Non-negativity, positivity, non-zero tests           | Automatically proves `0 ≤ x`, `0 < x`, `x ≠ 0` from types and structures        | Verifies sign properties only; does not solve arbitrary inequalities                       |
+| **`gcongr`**                     | Generalized congruence                               | Solves relations like $f(a) \le f(b)$ via monotonicity                          | Requires registered monotonicity lemmas (`@[gcongr]`)                                      |
+| **`grind`** (Lean 4.16+ / 4.20+) | SMT-style mixed constraints (Lean 4 Core)            | Congruence closure, E-matching, case-splitting, cross-domain equality/algebra   | Search space can explode on unconstrained case-splitting; use `(splits := 0)` as safe test |
+| **`tauto`**                      | Propositional logic                                  | Tautologies involving `∧`, `∨`, `¬`, `→`, `↔`                                   | Propositional level only; does not unfold domain definitions                               |
 
 ---
 
-#### Critical Boundaries & Pitfalls of `omega`
+#### Critical Boundaries & Pitfalls of `omega` (Lean 4.7+ Core)
 
 While `omega` is the premier decision procedure for natural and integer arithmetic, be aware of its strict theoretical boundaries:
 
@@ -91,9 +91,9 @@ While `omega` is the premier decision procedure for natural and integer arithmet
 
 ---
 
-#### Using the `grind` SMT-Style Automation Tactic
+#### Using the `grind` SMT-Style Automation Tactic (Lean 4.16+ / 4.20+)
 
-`grind` (built into Lean 4 Core since `v4.14.0`, enhanced with `grind?` in `v4.17.0+`) brings SMT-style solving into Lean proofs by coordinating congruence closure, E-matching, case-splitting, and algebraic sub-solvers.
+`grind` (previewed in Lean 4 Core in `v4.16.0`, stabilized and expanded in `v4.20.0+`, enhanced with `grind?` in `v4.17.0+` / `v4.27.0+`) brings SMT-style solving into Lean proofs by coordinating congruence closure, E-matching, case-splitting, and algebraic sub-solvers.
 
 ##### Decision Flow: When to Reach for `grind`
 

@@ -10,15 +10,16 @@ When Lean reports `tactic '<name>' failed`, it means the tactic's heuristic or d
 
 Before diagnosing decision procedure failures, verify whether the tactic is built into Core Lean or requires a Mathlib import:
 
-| Tactic           | Origin          | Required Import                    | Domain                                         |
-| :--------------- | :-------------- | :--------------------------------- | :--------------------------------------------- |
-| `omega`          | **Lean 4 Core** | _None (built-in since Lean 4.3)_   | Presburger arithmetic on `Nat` and `Int`       |
-| `linarith`       | **Mathlib**     | `import Mathlib.Tactic.Linarith`   | Linear arithmetic on ordered fields (`ℝ`, `ℚ`) |
-| `nlinarith`      | **Mathlib**     | `import Mathlib.Tactic.Nlinarith`  | Non-linear inequalities via cross products     |
-| `positivity`     | **Mathlib**     | `import Mathlib.Tactic.Positivity` | Proving terms are non-negative or positive     |
-| `ring` / `ring1` | **Mathlib**     | `import Mathlib.Tactic.Ring`       | Equalities in commutative (semi)rings          |
-| `gcongr`         | **Mathlib**     | `import Mathlib.Tactic.GCongr`     | Monotonic function congruences                 |
-| `grind`          | **Lean 4 Core** | _None (built-in since Lean 4.14)_  | SMT-style mixed constraints and E-matching     |
+| Tactic                        | Origin          | Required Import                                    | Domain                                         |
+| :---------------------------- | :-------------- | :------------------------------------------------- | :--------------------------------------------- |
+| `omega` (Lean 4.7+ Core)      | **Lean 4 Core** | _None (built-in since Lean 4.7.0)_                 | Presburger arithmetic on `Nat` and `Int`       |
+| `linarith`                    | **Mathlib**     | `import Mathlib.Tactic.Linarith`                   | Linear arithmetic on ordered fields (`ℝ`, `ℚ`) |
+| `nlinarith`                   | **Mathlib**     | `import Mathlib.Tactic.Nlinarith`                  | Non-linear inequalities via cross products     |
+| `positivity`                  | **Mathlib**     | `import Mathlib.Tactic.Positivity`                 | Proving terms are non-negative or positive     |
+| `ring` / `ring1`              | **Mathlib**     | `import Mathlib.Tactic.Ring`                       | Equalities in commutative (semi)rings          |
+| `gcongr`                      | **Mathlib**     | `import Mathlib.Tactic.GCongr`                     | Monotonic function congruences                 |
+| `bv_decide` (Lean 4.12+ Core) | **Lean 4 Core** | _None (built-in since Lean 4.12.0)_                | SAT decision on `BitVec` and `Bool` arithmetic |
+| `grind` (Lean 4.16+ / 4.20+)  | **Lean 4 Core** | _None (preview in Lean 4.16.0, stabilized v4.20+)_ | SMT-style mixed constraints and E-matching     |
 
 ---
 
@@ -35,11 +36,11 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
 
 ---
 
-### 1.2 `omega` Failed _(Lean 4 Core: No Imports Needed)_
+### 1.2 `omega` Failed _(Lean 4.7+ Core: No Imports Needed)_
 
 `omega` is Lean 4's built-in decision procedure for Presburger arithmetic on `Nat` and `Int`.
 
-> **Note**: `omega` is standard in Lean 4 Core (since 4.3.0). **Do NOT add `import Mathlib.Tactic.Omega`**; it is fully available in pure Lean files without Mathlib dependencies.
+> **Note**: `omega` is standard in Lean 4 Core (since 4.7.0). **Do NOT add `import Mathlib.Tactic.Omega`**; it is fully available in pure Lean files without Mathlib dependencies.
 
 - **Failure Cause 1: Real numbers or Floats**. `omega` only works on integers and naturals.
   - _Fix_: Use `linarith` for `ℝ` or `ℚ` (requires `import Mathlib.Tactic.Linarith`).
@@ -74,7 +75,7 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
 
 ---
 
-### 1.5 `grind` Failed _(Lean 4 Core: No Imports Needed)_
+### 1.5 `grind` Failed _(Lean 4.16+ / 4.20+ Core: No Imports Needed)_
 
 `grind` coordinates congruence closure, E-matching, case-splitting, and arithmetic sub-solvers for mixed-constraint goals.
 
@@ -121,15 +122,33 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
 
 ---
 
+### 2.4 `constructor` Ambiguity / Warnings (Lean 4.35+)
+
+In Lean 4.35+, `constructor` warns when several constructors match the target type (e.g. `warning: several constructors match, choosing ...`).
+
+- **Fix**: Avoid naked `constructor` when ambiguity exists; use explicit `refine ⟨?_, ?_⟩`, `left`, `right`, or apply the named constructor directly (e.g., `apply And.intro`).
+
+---
+
+### 2.5 `rwa` Failed or Redundant (Lean 4.35+)
+
+- **Cause 1: Goal not closed by rewritten premise**. In Lean 4.35+, `rwa [h]` only succeeds if the rewritten assumption actually closes the goal.
+  - _Fix_: If other assumptions are needed to close the goal, separate into `rw [h]; assumption` or `rw [h] <;> assumption`.
+- **Cause 2: `linter.unnecessaryRwa` triggered**. If `rw` alone closes the goal without needing `assumption`, Lean 4.35+ flags `rwa` as unnecessary.
+  - _Fix_: Replace `rwa` with plain `rw`.
+
+---
+
 ## 3. Tactic Selection Cheatsheet
 
-| Target Problem                                      | Primary Tactic | Fallback / Prerequisite               |
-| :-------------------------------------------------- | :------------- | :------------------------------------ |
-| Polynomial equality (`a * (b + c) = a * b + a * c`) | `ring`         | `field_simp` (if division)            |
-| Linear inequality on `ℕ` / `ℤ`                      | `omega`        | `zify` then `linarith`                |
-| Linear inequality on `ℝ` / `ℚ`                      | `linarith`     | `nlinarith` (non-linear)              |
-| Positivity / non-negativity (`0 < x ^ 2 + 1`)       | `positivity`   | `norm_num`                            |
-| Deep structured equality with matching shape        | `gcongr`       | `congr!`                              |
-| Direct numerical calculation (`2 + 2 = 4`)          | `norm_num`     | `decide`                              |
-| Mixed constraints / cross-domain SMT reasoning      | `grind`        | `grind (splits := 0)` / `simp; grind` |
-| General logical search                              | `aesop`        | `tauto`, `clarify`                    |
+| Target Problem                                      | Primary Tactic                | Fallback / Prerequisite               |
+| :-------------------------------------------------- | :---------------------------- | :------------------------------------ |
+| Polynomial equality (`a * (b + c) = a * b + a * c`) | `ring`                        | `field_simp` (if division)            |
+| Linear inequality on `ℕ` / `ℤ`                      | `omega` (Lean 4.7+ Core)      | `zify` then `linarith`                |
+| Linear inequality on `ℝ` / `ℚ`                      | `linarith`                    | `nlinarith` (non-linear)              |
+| Bit-Vector / Boolean arithmetic                     | `bv_decide` (Lean 4.12+ Core) | `decide`                              |
+| Positivity / non-negativity (`0 < x ^ 2 + 1`)       | `positivity`                  | `norm_num`                            |
+| Deep structured equality with matching shape        | `gcongr`                      | `congr!`                              |
+| Direct numerical calculation (`2 + 2 = 4`)          | `norm_num`                    | `decide`                              |
+| Mixed constraints / cross-domain SMT reasoning      | `grind` (Lean 4.16+ / 4.20+)  | `grind (splits := 0)` / `simp; grind` |
+| General logical search                              | `aesop`                       | `tauto`, `clarify`                    |
