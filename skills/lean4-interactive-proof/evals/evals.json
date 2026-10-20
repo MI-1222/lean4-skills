@@ -1,0 +1,26 @@
+{
+  "skill_name": "lean4-interactive-proof",
+  "evals": [
+    {
+      "id": 1,
+      "name": "basic-definitional-equality",
+      "prompt": "Complete the formal proof for `theorem add_zero_id (n : Nat) : n + 0 = n := by sorry` using lean4-interactive-proof. Inspect the goal first, apply the correct tactic, and verify that the proof is completed without errors.",
+      "expected_output": "Proof completed with `rfl` after checking goal with `lean_goal.py`, resulting in `is_done: true` and zero diagnostics.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "hypothesis-rewriting",
+      "prompt": "Complete the formal proof for `theorem eq_trans_apply (x y z : Nat) (h1 : x = y) (h2 : y = z) : x = z := by sorry` in Lean 4. Use lean_goal.py to inspect the hypotheses in the goal state, apply the rewrite tactics, and verify completion.",
+      "expected_output": "Proof completed using `rw [h1, h2]` or equivalent, verified via `lean_goal.py` showing `is_done: true`.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "induction-proof",
+      "prompt": "Prove `theorem zero_add_id (n : Nat) : 0 + n = n := by sorry` step-by-step in Lean 4. Use lean_goal.py after introducing induction on n, inspect each subcase goal, and close each branch.",
+      "expected_output": "Proof structured with induction on n, each branch solved and verified step-by-step with `lean_goal.py`, finishing with no remaining goals.",
+      "files": []
+    }
+  ]
+}
