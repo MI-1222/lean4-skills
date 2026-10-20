@@ -86,6 +86,8 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
   - _Fix_: Use `omega` for `ℕ`/`ℤ`, `linarith` for `ℝ`/`ℚ`, or `ring` for commutative rings.
 - **Failure Cause 3: Unsimplified context**.
   - _Fix_: Run `simp only [...]` or `simp at *` before `grind`. Use `grind?` to inspect and extract suggested parameters.
+- **Failure Cause 4: Abstract Mathlib domains (Analysis, Measure Theory, Topology, etc.)**. Higher-level Mathlib structures often lack custom E-matching attribute registration (`@[grind]`), causing `grind` to loop or fail on goals requiring domain-specific mathematical facts.
+  - _Fix_: Do not treat `grind` as an all-purpose solver in abstract Mathlib domains. Revert to domain-specific decision procedures (`omega`, `linarith`, `ring`, `gcongr`) and targeted domain lemmas discovered with `loogle` or `exact?`.
 
 ---
 
