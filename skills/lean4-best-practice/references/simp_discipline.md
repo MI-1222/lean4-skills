@@ -138,3 +138,23 @@ When structuring algebraic derivations or analytical inequalities, `simp` is fre
 
 - Normalize terms upfront with an explicit `simp only [...]` pass, and then rely on domain-specific decision procedures (`gcongr`, `linarith`, `ring`, `omega`, `positivity`) inside the `calc` steps.
 - Avoid calling open `simp` within intermediate steps of a `calc` chain, as it obscures which subterm is being transformed and easily degrades elaboration performance.
+
+### Rule 3: Recovery Recipes for Syntactic `calc` Mismatches
+
+If an `invalid 'calc' step` error occurs due to representation differences between `simp`'s output and your intended `calc` starting point (e.g., division `/` vs reciprocal `* ·⁻¹`, or monus `-`):
+
+1. **Definitional Alignment via `change`**:
+   ```lean
+   change (m : ℝ)⁻¹ * ∑ k : Fin m, f k ≤ ε
+   calc
+     (m : ℝ)⁻¹ * ∑ k : Fin m, f k ≤ ... := by gcongr
+   ```
+2. **Goal Anchoring via `show ... from calc`**:
+   ```lean
+   show (m : ℝ)⁻¹ * |x| ≤ ε from
+     calc
+       (m : ℝ)⁻¹ * |x| ≤ ... := by gcongr
+   ```
+3. **Pre-normalization via `dsimp only`**:
+   Definitional rewrites like `dsimp only [div_eq_mul_inv]` adjust syntax prior to `calc` without accumulating proof terms or heartbeats.
+   (See full details in [documentation_and_style.md](documentation_and_style.md#41-recovery-recipes-for-invalid-calc-step-syntactic--definitional-mismatches)).

@@ -89,6 +89,7 @@ Mathlib's simplifier rewrites expressions into canonical normal forms:
 
 1. **Check the actual goal with LSP/interactive tools**: If `simp` changed the representation, accept the canonical form in the `calc` chain rather than introducing manual reversal steps (`rw [← one_div]`).
 2. **One simplification pass**: Let `simp only [...]` normalize terms upfront, then perform mathematical estimation/reasoning in `calc` using specialized tools (`gcongr`, `linarith`, `positivity`, `ring`). Do not invoke non-terminal `simp` inside individual `calc` steps.
+3. **Definitional bridging with `change` or `show ... from calc`**: If a definitional mismatch triggers `invalid 'calc' step`, prefix with `change <desired_LHS> ≤ _` or wrap in `show ... from calc` instead of fighting the syntax.
 
 ---
 
