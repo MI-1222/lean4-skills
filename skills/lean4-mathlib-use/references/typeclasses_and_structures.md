@@ -57,20 +57,20 @@ example (n : ℕ) : 0 ≤ (n : ℝ) := by
 
 ---
 
-## 4. Local Instance Injection: Plain `have` vs `haveI` / `letI`
+## 4. Local Instance Injection: Plain `have` (Lean 4.14+) vs `haveI` / `letI`
 
 When working with quotient structures, field extensions, localized rings, or conditional metric spaces, the global typeclass synthesizer might fail to discover an instance that holds conditionally in the local context.
 
-### Modern Lean 4 & Mathlib Rule: Prefer Plain `have`
+### Modern Lean 4 & Mathlib Rule: Prefer Plain `have` (Lean 4.14+)
 
-In modern Lean 4, a plain `have : InstanceType := proof` **automatically registers** the instance in the local typeclass cache!
-The legacy `haveI` tactic only inlines the value and is flagged by Mathlib's `haveI`/`letI` style linter.
+In modern Lean 4 (4.14+), a plain `have : InstanceType := proof` **automatically registers** the instance in the local typeclass cache!
+The legacy `haveI` tactic (deprecated since Lean 4.14) only inlines the value and is flagged by Mathlib's `haveI`/`letI` style linter.
 
-| Tactic / Pattern             | Usage & Characteristics                                                                                           |
-| :--------------------------- | :---------------------------------------------------------------------------------------------------------------- |
-| `have : InstanceType := pf`  | **Standard in Lean 4/Mathlib.** Registers the instance into the local typeclass cache cleanly.                    |
-| `letI : InstanceType := pf`  | Injects a definitionally transparent instance into the context when definitional equality must be preserved.      |
-| `haveI : InstanceType := pf` | _Legacy._ Avoid in Mathlib code unless specifically working around pre-v4.8 elaborator quirks; flagged by linter. |
+| Tactic / Pattern             | Usage & Characteristics                                                                                      |
+| :--------------------------- | :----------------------------------------------------------------------------------------------------------- |
+| `have : InstanceType := pf`  | **Standard in Lean 4.14+/Mathlib.** Registers the instance into the local typeclass cache cleanly.           |
+| `letI : InstanceType := pf`  | Injects a definitionally transparent instance into the context when definitional equality must be preserved. |
+| `haveI : InstanceType := pf` | _Legacy._ Avoid in Mathlib code (deprecated since Lean 4.14); flagged by linter.                             |
 
 ### Example: Supplying a Local Group Instance
 
@@ -156,7 +156,7 @@ When referencing lemmas that rely on the ambient structure, explicitly pass the 
 
 Instead of declaring `let mSub : MeasurableSpace Ω := ...` early in the proof (which immediately shadows the ambient instance), inline the expression or introduce it only after all ambient facts have been elaborated.
 
-#### Pattern 4: Exclude Unwanted Section Variables via `omit`
+#### Pattern 4: Exclude Unwanted Section Variables via `omit` (Lean 4.11+)
 
 When an ambient section declares a typeclass variable that a specific lemma or theorem does not require (which would otherwise pollute search or induce looping):
 

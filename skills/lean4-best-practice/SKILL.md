@@ -26,7 +26,7 @@ This skill provides an authoritative guide to writing clean, maintainable, perfo
 
 - **Line Width**: Lean 4 and Mathlib enforce a 100-character line width standard (do not wrap at 80 characters).
 - **Simp Hygiene**: Avoid non-terminal `simp` in all modern Lean 4 code; use `simp?` to squeeze into `simp only [...]` for long-term build stability.
-- **Anonymous Instances**: Modern Lean 4 (4.14+) uses anonymous `have : Class α := ...` over deprecated `haveI`.
+- **Anonymous Instances**: Modern Lean 4 (4.14+) uses anonymous `have : Class α := ...` over deprecated `haveI` (deprecated since Lean 4.14).
 
 ---
 
@@ -42,7 +42,7 @@ graph TD
     Root --> P3["3. simp Discipline<br/>No non-terminal simp / Prefer `simp only`"]
     Root --> P4["4. Mathlib Naming<br/>Predictable names & dot notation"]
     Root --> P5["5. Performance<br/>Heartbeat control & irreducible wrappers"]
-    Root --> P6["6. Documentation<br/>Docstrings & structured calc chains"]
+    Root --> P6["6. Documentation<br/>Docstrings & structured calc chains (Lean 4.0.0+)"]
     Root --> P7["7. Simplification<br/>Combine redundant steps & automate"]
 ```
 
@@ -52,7 +52,7 @@ graph TD
 4. **Mathlib Naming Fluency**: Leverage predictable naming schemes (`Type.op_property`) and dot notation to deduce existing lemma names without endless searches.
 5. **Performance & Heartbeat Control**: Keep elaboration times small. Never treat `set_option maxHeartbeats` as a permanent fix; resolve instance loops, pin type parameters, and use targeted tactics.
 6. **Human-Readable Documentation & Style**: Formal proofs must be readable by mathematicians. Write informative docstrings, maintain a 100-character line limit, and use structured `calc` proofs for calculational arguments.
-7. **Principled Simplification (Golfing)**: Eliminate redundant tactics and intermediate hypotheses. Prefer domain decision tactics (`omega`, `ring`, `linarith`, `gcongr`) for single domains and SMT-style `grind` for cross-domain mixed constraints over fragile manual rewrites.
+7. **Principled Simplification (Golfing)**: Eliminate redundant tactics and intermediate hypotheses. Prefer domain decision tactics (`omega` (Lean 4.7+ Core), `ring`, `linarith`, `gcongr`) for single domains and SMT-style `grind` (Lean 4.16+ / 4.20+) for cross-domain mixed constraints over fragile manual rewrites.
 
 ---
 
@@ -70,9 +70,9 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 
 - [ ] **No Non-Terminal `simp`**: Does every `simp` either close the goal completely or use an explicit lemma list (`simp only [...]`)?
 - [ ] **Focus Dots (`·`)**: Are all branches in `induction`, `cases`, `constructor`, or `apply` isolated using focus dots?
-- [ ] **Arithmetic Segregation**: Is `omega` used for `ℕ`/`ℤ` Presburger arithmetic, and `linarith` reserved for linear relations over `ℝ`/`ℚ`?
-- [ ] **Cross-Domain Automation**: For mixed goals involving equalities, inequalities, and case analysis, is `grind` tested safely (`grind (splits := 0)` or `grind?`) rather than unconstrained searches?
-- [ ] **Calculation Legibility**: Are multi-step inequalities or equalities laid out with `calc` rather than a sequence of opaque rewrites?
+- [ ] **Arithmetic Segregation**: Is `omega` (Lean 4.7+ Core) used for `ℕ`/`ℤ` Presburger arithmetic, and `linarith` reserved for linear relations over `ℝ`/`ℚ`?
+- [ ] **Cross-Domain Automation**: For mixed goals involving equalities, inequalities, and case analysis, is `grind` (Lean 4.16+ / 4.20+) tested safely (`grind (splits := 0)` or `grind?`) rather than unconstrained searches?
+- [ ] **Calculation Legibility**: Are multi-step inequalities or equalities laid out with `calc` (Lean 4.0.0+) rather than a sequence of opaque rewrites?
 
 ### Stage C: Documentation & Layout
 

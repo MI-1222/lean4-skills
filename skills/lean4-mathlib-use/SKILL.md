@@ -1,7 +1,7 @@
 ---
 name: lean4-mathlib-use
 description: >-
-  Comprehensive guide for effectively utilizing Mathlib libraries, structures, and conventions in Lean 4. Use whenever managing Mathlib imports (avoiding monolithic `import Mathlib`, selecting domain-specific submodules, running `lake shake`), navigating mathematical structures and typeclass hierarchies (`autoImplicit false`, explicit type annotations, plain `have` instance injection over deprecated `haveI`, avoiding instance pollution via ambient instance pinning and `omit [...] in`, resolving instance loops), handling partial functions with Mathlib's total function design (junk values for `0 / 0`, `deriv`, `tsum`, `sSup`, establishing side conditions like `h : y ≠ 0` or `DifferentiableAt`), managing classical logic and scoping (`open scoped Classical in`, `classical` tactic, avoiding `openClassical` linter errors, `noncomputable section`), selectively enabling mathematical notations (`open scoped BigOperators Pointwise`), or applying domain-specific proof patterns across analysis, measure theory (integrability via `Integrable.of_bound`, `ae` manipulation with `ae_of_all` / `filter_upwards`, measurability automation), geometry (`Sbtw.sbtw_lineMap_iff`, `Real.Angle`), and algebra (`gcongr`, `field_simp`, `positivity`).
+  Comprehensive guide for effectively utilizing Mathlib libraries, structures, and conventions in Lean 4. Use whenever managing Mathlib imports (avoiding monolithic `import Mathlib`, selecting domain-specific submodules, running `lake shake`), navigating mathematical structures and typeclass hierarchies (`autoImplicit false`, explicit type annotations, plain `have` instance injection (Lean 4.14+) over deprecated `haveI` (deprecated since Lean 4.14), avoiding instance pollution via ambient instance pinning and `omit [...] in` (Lean 4.11+), resolving instance loops), handling partial functions with Mathlib's total function design (junk values for `0 / 0`, `deriv`, `tsum`, `sSup`, establishing side conditions like `h : y ≠ 0` or `DifferentiableAt`), managing classical logic and scoping (`open scoped Classical in`, `classical` tactic, avoiding `openClassical` linter errors, `noncomputable section`), selectively enabling mathematical notations (`open scoped BigOperators Pointwise`), or applying domain-specific proof patterns across analysis, measure theory (integrability via `Integrable.of_bound`, `ae` manipulation with `ae_of_all` / `filter_upwards`, measurability automation), geometry (`Sbtw.sbtw_lineMap_iff`, `Real.Angle`), and algebra (`gcongr`, `field_simp`, `positivity`).
 compatibility: Target Lean 4.14.0+ and Mathlib v4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib).
 metadata:
   target-lean-version: '>=4.14.0'
@@ -27,7 +27,7 @@ This skill provides an authoritative guide for AI agents and human practitioners
 
 - **Modular Imports**: Avoid monolithic `import Mathlib`. In contemporary Mathlib, import only domain submodules (e.g., `Mathlib.Data.Nat.Basic`) and prune via `lake exe shake`.
 - **Classical Scoping**: Use `open scoped Classical in` instead of global `open Classical` to satisfy Mathlib linters.
-- **Instance Management**: Use plain anonymous `have` rather than `haveI`, and `omit [...] in` to control instance scope on Lean 4.14+.
+- **Instance Management**: Use plain anonymous `have` (Lean 4.14+) rather than `haveI` (deprecated since Lean 4.14), and `omit [...] in` (Lean 4.11+) to control instance scope.
 
 ---
 
@@ -39,17 +39,17 @@ Adhering to these five foundational practices ensures maintainable, performant, 
 graph TD
     Root["Lean 4 Mathlib Usage Principles"]
     Root --> P1["1. Minimal Imports<br/>No `import Mathlib` / Domain submodules / `lake shake`"]
-    Root --> P2["2. Typeclass Guiding<br/>`autoImplicit false` / Explicit type anchors / Plain `have` & `omit`"]
+    Root --> P2["2. Typeclass Guiding<br/>`autoImplicit false` / Explicit type anchors / Plain `have` (Lean 4.14+) & `omit` (Lean 4.11+)"]
     Root --> P3["3. Junk Value Hygiene<br/>Total function design / Side conditions early / `₀` subscript lemmas"]
     Root --> P4["4. Classical Scoping<br/>`open scoped Classical in` / `classical` tactic / `open scoped` notations"]
-    Root --> P5["5. Domain Patterns<br/>Automation triage / `omega`, `linarith`, `gcongr` / Measure theory `ae`"]
+    Root --> P5["5. Domain Patterns<br/>Automation triage / `omega` (Lean 4.7+ Core), `linarith`, `gcongr` / Measure theory `ae`"]
 ```
 
 1. **Minimal & Targeted Imports**: Never rely on monolithic `import Mathlib`. Select domain-specific modules (`.Defs`, `.Basic`) to minimize elaboration footprint and cache invalidation. Prune redundant imports using `lake shake`.
-2. **Typeclass & Instance Control**: Guard against invisible dependency explosions, ambiguous synthesis paths, and instance pollution. Disable `autoImplicit`, pin numeric literals with explicit type annotations (e.g., `(0 : ℝ)`), register local instances using standard `have : C := ⟨pf⟩` (avoiding legacy `haveI`), pin ambient instances when defining sub-structures, and exclude unwanted section variables with `omit [...] in`.
+2. **Typeclass & Instance Control**: Guard against invisible dependency explosions, ambiguous synthesis paths, and instance pollution. Disable `autoImplicit`, pin numeric literals with explicit type annotations (e.g., `(0 : ℝ)`), register local instances using standard `have : C := ⟨pf⟩` (Lean 4.14+) (avoiding legacy `haveI` (deprecated since Lean 4.14)), pin ambient instances when defining sub-structures, and exclude unwanted section variables with `omit [...] in` (Lean 4.11+).
 3. **Total Function & Junk Value Discipline**: Recognize that Mathlib assigns default values (junk values) to classically undefined expressions (e.g., $x / 0 = 0$, non-differentiable derivatives = $0$). Formulate side conditions (`y ≠ 0`, `DifferentiableAt`, `Summable`) before attempting rewrites or cancellations (`mul_div_cancel₀`).
 4. **Scoped Classical Logic & Notations**: Respect the `openClassical` style linter. Confine classical logic to individual theorems (`open scoped Classical in`) or tactic blocks (`classical`). Use `open scoped` for notations (`BigOperators`, `Pointwise`) to avoid namespace pollution.
-5. **Domain-Specific Patterns & Triage**: Select targeted decision procedures before manual rewrites (`omega` for $\mathbb{N}/\mathbb{Z}$, `linarith` for $\mathbb{R}/\mathbb{Q}$, `gcongr` for relational congruence, `positivity` for nonnegativity). Apply verified domain conventions (e.g., `Integrable.of_bound` with `ae_of_all`, `filter_upwards` for almost everywhere hypotheses, `measurability` and `fun_prop` for function properties).
+5. **Domain-Specific Patterns & Triage**: Select targeted decision procedures before manual rewrites (`omega` (Lean 4.7+ Core) for $\mathbb{N}/\mathbb{Z}$, `linarith` for $\mathbb{R}/\mathbb{Q}$, `gcongr` for relational congruence, `positivity` for nonnegativity). Apply verified domain conventions (e.g., `Integrable.of_bound` with `ae_of_all`, `filter_upwards` for almost everywhere hypotheses, `measurability` and `fun_prop` for function properties).
 
 ---
 
@@ -67,8 +67,8 @@ Before running verification or committing code that uses Mathlib, check against 
 
 - [ ] **`autoImplicit` Disabled**: Is `set_option autoImplicit false` active to prevent accidental free variables?
 - [ ] **Anchored Types**: Are numeric constants and expressions with coercions explicitly type-annotated (e.g., `(0 : ℝ)`, `(n : ℝ)`)?
-- [ ] **Modern Instance Injection**: If typeclass resolution fails, is standard `have : C := pf` used (avoiding deprecated `haveI` which triggers linter warnings)?
-- [ ] **Instance Pollution Guarded**: When working with sub-structures (e.g. `MeasurableSpace`, `MetricSpace`, `Preorder`), is the ambient instance pinned (`[m0 : ...]`) and ambient facts passed via `@`? Are unneeded ambient section variables excluded with `omit [...] in`?
+- [ ] **Modern Instance Injection**: If typeclass resolution fails, is standard `have : C := pf` (Lean 4.14+) used (avoiding deprecated `haveI` (deprecated since Lean 4.14) which triggers linter warnings)?
+- [ ] **Instance Pollution Guarded**: When working with sub-structures (e.g. `MeasurableSpace`, `MetricSpace`, `Preorder`), is the ambient instance pinned (`[m0 : ...]`) and ambient facts passed via `@`? Are unneeded ambient section variables excluded with `omit [...] in` (Lean 4.11+)?
 
 ### Stage C: Hypotheses & Domain Validity
 
@@ -83,7 +83,7 @@ Before running verification or committing code that uses Mathlib, check against 
 
 ### Stage E: Domain Patterns & Automation Triage
 
-- [ ] **Right Tactic Selected**: Is `omega` used for $\mathbb{N}/\mathbb{Z}$, `linarith` for $\mathbb{R}/\mathbb{Q}$, `ring` for polynomials, `positivity` for $>0/\ge 0$, and `gcongr` for sum/integral inequalities?
+- [ ] **Right Tactic Selected**: Is `omega` (Lean 4.7+ Core) used for $\mathbb{N}/\mathbb{Z}$, `linarith` for $\mathbb{R}/\mathbb{Q}$, `ring` for polynomials, `positivity` for $>0/\ge 0$, and `gcongr` for sum/integral inequalities?
 - [ ] **Measure Theory Conventions**: Is integrability proven via bounded+measurable (`Integrable.of_bound`), `ae` properties combined via `filter_upwards`, and measurability discharged via `measurability` / `fun_prop`?
 
 ---
@@ -92,13 +92,13 @@ Before running verification or committing code that uses Mathlib, check against 
 
 For comprehensive technical explanations, domain-by-domain modules, and code patterns, consult the detailed references:
 
-| Topic                               | Key Techniques & Best Practices                                                                                                     | Reference Guide                                                                         |
-| :---------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
-| **Minimal Imports & Shake**         | Eliminating `import Mathlib`, domain submodule catalog, `lake exe cache get`, running `lake shake --fix`                            | [minimal_imports_and_shake.md](references/minimal_imports_and_shake.md)                 |
-| **Typeclasses & Structures**        | Multiple inheritance, invisible dependencies, `autoImplicit false`, plain `have`, avoiding instance pollution, `omit [...] in`      | [typeclasses_and_structures.md](references/typeclasses_and_structures.md)               |
-| **Junk Values & Partial Functions** | Total functions in type theory, junk values table ($x/0$, `deriv`, `tsum`, `sSup`), subscript-`₀` convention, domain preconditions  | [junk_values_and_partial_functions.md](references/junk_values_and_partial_functions.md) |
-| **Classical Logic & Scoping**       | `openClassical` style linter, single-declaration scoping, `classical` tactic, `noncomputable section`, `open scoped` notations      | [classical_logic_and_scoping.md](references/classical_logic_and_scoping.md)             |
-| **Domain-Specific Patterns**        | Analysis, measure theory (`Integrable.of_bound`, `ae_of_all`), geometry betweenness (`Sbtw`), algebra automation (`gcongr`, `ring`) | [domain_specific_patterns.md](references/domain_specific_patterns.md)                   |
+| Topic                               | Key Techniques & Best Practices                                                                                                                          | Reference Guide                                                                         |
+| :---------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
+| **Minimal Imports & Shake**         | Eliminating `import Mathlib`, domain submodule catalog, `lake exe cache get`, running `lake shake --fix`                                                 | [minimal_imports_and_shake.md](references/minimal_imports_and_shake.md)                 |
+| **Typeclasses & Structures**        | Multiple inheritance, invisible dependencies, `autoImplicit false`, plain `have` (Lean 4.14+), avoiding instance pollution, `omit [...] in` (Lean 4.11+) | [typeclasses_and_structures.md](references/typeclasses_and_structures.md)               |
+| **Junk Values & Partial Functions** | Total functions in type theory, junk values table ($x/0$, `deriv`, `tsum`, `sSup`), subscript-`₀` convention, domain preconditions                       | [junk_values_and_partial_functions.md](references/junk_values_and_partial_functions.md) |
+| **Classical Logic & Scoping**       | `openClassical` style linter, single-declaration scoping, `classical` tactic, `noncomputable section`, `open scoped` notations                           | [classical_logic_and_scoping.md](references/classical_logic_and_scoping.md)             |
+| **Domain-Specific Patterns**        | Analysis, measure theory (`Integrable.of_bound`, `ae_of_all`), geometry betweenness (`Sbtw`), algebra automation (`gcongr`, `ring`)                      | [domain_specific_patterns.md](references/domain_specific_patterns.md)                   |
 
 ---
 

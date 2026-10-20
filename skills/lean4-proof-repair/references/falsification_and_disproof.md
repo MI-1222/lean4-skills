@@ -14,7 +14,7 @@ AI agents risk entering infinite search loops when attempting to prove false or 
 - A theorem assuming `[Group G]` asserting $x * y = y * x$ fails unless $G$ is abelian (`[CommGroup G]`).
 - A lemma asserting $a / b * b = a$ fails if $b = 0$.
 
-**The Rule of Three**: If three consecutive proof attempts (e.g. `simp`, `omega`/`linarith`, and library search) fail to make progress, **pause proving and test for counterexamples**.
+**The Rule of Three**: If three consecutive proof attempts (e.g. `simp`, `omega` (Lean 4.7+ Core)/`linarith`, and library search) fail to make progress, **pause proving and test for counterexamples**.
 
 ---
 
@@ -72,7 +72,7 @@ To refute a goal in Lean 4, construct a formal proof of its negation (`¬ Target
   example : ¬ (2 + 2 = 5) := by norm_num
   example : 2 + 2 ≠ 5     := by decide
 
-  -- Inequalities refuted by omega or norm_num:
+  -- Inequalities refuted by omega (Lean 4.7+ Core) or norm_num:
   example : ¬ (10 ≤ 3)    := by omega
   ```
 
@@ -155,11 +155,11 @@ graph TD
     Check -- "No witness found" --> St3["Status: INCONCLUSIVE"]
 ```
 
-| Certification Status      | Definition & Invariants                                                                                                                                                                                                    | Required Agent Action                                                                    |
-| :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
-| **`REFUTED`**             | Lean 4 has typechecked a proof of `¬ Target` (or `∃ w, ¬ P w`) under `lake lean <file>` or `lake env lean <file>` without `sorry` and depending strictly on standard axioms (`propext`, `Classical.choice`, `Quot.sound`). | Report the claim as certified false. Provide the certified refutation lemma to the user. |
-| **`WITNESS_UNCERTIFIED`** | A candidate counterexample witness $w$ was identified (e.g. via boundary probing or Python), but the formal refutation proof is incomplete or contains `sorry`.                                                            | Present as an unverified hypothesis. Do NOT claim the theorem has been refuted.          |
-| **`INCONCLUSIVE`**        | Neither proof nor refutation could be synthesized within search limits.                                                                                                                                                    | Report obstacles encountered; request user guidance on missing mathematical lemmas.      |
+| Certification Status      | Definition & Invariants                                                                                                                                                                                                                | Required Agent Action                                                                    |
+| :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
+| **`REFUTED`**             | Lean 4 has typechecked a proof of `¬ Target` (or `∃ w, ¬ P w`) under `lake lean <file>` (Lean 4.8+) or `lake env lean <file>` without `sorry` and depending strictly on standard axioms (`propext`, `Classical.choice`, `Quot.sound`). | Report the claim as certified false. Provide the certified refutation lemma to the user. |
+| **`WITNESS_UNCERTIFIED`** | A candidate counterexample witness $w$ was identified (e.g. via boundary probing or Python), but the formal refutation proof is incomplete or contains `sorry`.                                                                        | Present as an unverified hypothesis. Do NOT claim the theorem has been refuted.          |
+| **`INCONCLUSIVE`**        | Neither proof nor refutation could be synthesized within search limits.                                                                                                                                                                | Report obstacles encountered; request user guidance on missing mathematical lemmas.      |
 
 ---
 

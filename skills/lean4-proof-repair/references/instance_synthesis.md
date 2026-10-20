@@ -59,15 +59,15 @@ The theorem statement forgot to declare that a type variable satisfies a structu
 
 ---
 
-### Scenario 3: Local Instance in Proof (Anonymous `have` vs `haveI`)
+### Scenario 3: Local Instance in Proof (Anonymous `have` (Lean 4.14+) vs `haveI`)
 
 When an instance is constructed dynamically within a proof rather than globally available.
 
 - **Symptom**: An instance was proven via `have h : Fintype s := ...`, but downstream tactics still complain that `Fintype s` cannot be synthesized.
 - **Why**: In Lean 4, a _named_ hypothesis `have h : Fintype s := ...` is placed into the context as an ordinary hypothesis, not as an active typeclass instance.
 - **Prescription**:
-  - Use an **anonymous** `have` (`have : Fintype s := ...`). Anonymous `have` bindings for typeclasses are automatically registered into the local instance cache.
-  - Avoid legacy `haveI` in Mathlib—it only inlines the value and triggers Mathlib's `haveI`/`letI` linter warning.
+  - Use an **anonymous** `have` (`have : Fintype s := ...`) (Lean 4.14+). Anonymous `have` bindings for typeclasses are automatically registered into the local instance cache.
+  - Avoid legacy `haveI` (deprecated since Lean 4.14) in Mathlib—it only inlines the value and triggers Mathlib's `haveI`/`letI` linter warning.
   - Use `letI : Fintype s := ...` only if definitional equality of the instance data needs to be preserved.
 
 ---
@@ -113,17 +113,17 @@ When multiple instances of the same typeclass exist in the same scope (e.g., sub
 - **Prescription**:
   1. **Name and Pin the Ambient Instance**: Name it in the signature `[m0 : MeasurableSpace Ω]` or capture it on line 1: `let m0 : MeasurableSpace Ω := ‹MeasurableSpace Ω›`.
   2. **Pass Ambient Facts Explicitly with `@`**: Use `@Measurable Ω β m0 _ Z` when invoking ambient properties.
-  3. **Strip Unneeded Section Classes with `omit`**: Use `omit [MeasurableSpace Ω] in` to keep unneeded outer typeclasses from poisoning resolution.
+  3. **Strip Unneeded Section Classes with `omit` (Lean 4.11+)**: Use `omit [MeasurableSpace Ω] in` to keep unneeded outer typeclasses from poisoning resolution.
 
 ---
 
 ## 3. Quick Reference
 
-| Problem                                              | Immediate Action                                                                    |
-| :--------------------------------------------------- | :---------------------------------------------------------------------------------- |
-| Missing `Decidable`                                  | Add `open scoped Classical` or tactic `classical`                                   |
-| Missing structure on parameter `α`                   | Add `[Structure α]` to binder signature                                             |
-| Named `have h : Class α` not picked up               | Change to anonymous `have : Class α := ...` (or `letI` if defeq needed)             |
-| Ambiguous metavariable `?m`                          | Add explicit type ascription `(x : TargetType)`                                     |
-| Synthesis loop / timeout                             | Check conflicting imports; provide explicit instance term with `@`                  |
-| Instance pollution (`synthesized: m, inferred: ...`) | Pin ambient instance (`[m0 : ...]`), use `@` for ambient lemmas, or `omit [...] in` |
+| Problem                                              | Immediate Action                                                                                 |
+| :--------------------------------------------------- | :----------------------------------------------------------------------------------------------- |
+| Missing `Decidable`                                  | Add `open scoped Classical` or tactic `classical`                                                |
+| Missing structure on parameter `α`                   | Add `[Structure α]` to binder signature                                                          |
+| Named `have h : Class α` not picked up               | Change to anonymous `have : Class α := ...` (Lean 4.14+) (or `letI` if defeq needed)             |
+| Ambiguous metavariable `?m`                          | Add explicit type ascription `(x : TargetType)`                                                  |
+| Synthesis loop / timeout                             | Check conflicting imports; provide explicit instance term with `@`                               |
+| Instance pollution (`synthesized: m, inferred: ...`) | Pin ambient instance (`[m0 : ...]`), use `@` for ambient lemmas, or `omit [...] in` (Lean 4.11+) |

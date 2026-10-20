@@ -1,6 +1,6 @@
 ---
 name: lean4-mathlib-search
-description: Search Mathlib for theorems, lemmas, definitions, and tactics in Lean 4. Use whenever searching for mathematical lemmas, looking up theorem names by type signature with Loogle (`search_loogle.py`), finding lemmas using inline search tactics (`exact?`, `apply?`, `rw?`), querying by natural language or semantic meaning (LeanSearch / Moogle), or deriving candidate theorem names from Mathlib naming conventions. Make sure to consult this skill whenever encountering unknown theorem names, unproven proof goals, or missing lemmas.
+description: Search Mathlib for theorems, lemmas, definitions, and tactics in Lean 4. Use whenever searching for mathematical lemmas, looking up theorem names by type signature with Loogle (`search_loogle.py`), finding lemmas using inline search tactics (`exact?`, `apply?`, `rw?` (Lean 4.7+ Core)), querying by natural language or semantic meaning (LeanSearch / Moogle), or deriving candidate theorem names from Mathlib naming conventions. Make sure to consult this skill whenever encountering unknown theorem names, unproven proof goals, or missing lemmas.
 compatibility: Target Lean 4.14.0+ and Mathlib v4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for scripts/search_loogle.py.
 metadata:
   target-lean-version: '>=4.14.0'
@@ -27,7 +27,7 @@ Mathlib is vast (over 100,000 theorems and definitions). Blind guessing or hallu
 
 ### Version-Specific Search Notes
 
-- **Inline Tactics**: `exact?`, `apply?`, and `rw?` rely on active goal elaboration in modern Lean 4/Mathlib.
+- **Inline Tactics**: `exact?`, `apply?`, and `rw?` (Lean 4.7+ Core) rely on active goal elaboration in modern Lean 4/Mathlib.
 - **External Search APIs**: Loogle and LeanSearch API queries search indexed Mathlib snapshots; ensure lemma names match the target project's Mathlib version.
 - **Naming Conventions**: Mathlib camelCase / dot-notation conventions (e.g., `Nat.add_comm`) are stable across 4.x.
 
@@ -40,7 +40,7 @@ Always consult this decision tree to pick the fastest and most precise tool for 
 ```mermaid
 graph TD
     Start["Need a Lemma or Definition"] --> Q1{"Do you have an active proof goal in Lean?"}
-    Q1 -- "Yes, active local goal" --> TryLocal["Strategy 1: Inline Tactics (`exact?`, `apply?`, `rw?`)"]
+    Q1 -- "Yes, active local goal" --> TryLocal["Strategy 1: Inline Tactics (`exact?`, `apply?`, `rw?` (Lean 4.7+ Core))"]
     TryLocal --> LCheck{"Did `Try this:` succeed?"}
     LCheck -- "Yes" --> Replace["Replace tactic with suggested lemma"]
     LCheck -- "No" --> Q2
@@ -59,7 +59,7 @@ graph TD
 
 ---
 
-## 2. Strategy 1: Inline Tactic Search (`exact?`, `apply?`, `rw?`)
+## 2. Strategy 1: Inline Tactic Search (`exact?`, `apply?`, `rw?`) (Lean 4.7+ Core)
 
 When working inside a tactic block (`by ...`), Lean 4 provides built-in metaprogramming tactics that search the environment in-memory. This is the **fastest and most deterministic** search method because it operates directly against your exact local proof context (hypotheses and type universe).
 

@@ -135,10 +135,10 @@ In Lean 4, `sorry` is a macro tactic that artificially discharges the active goa
 Choose the most direct tactic for the active goal:
 
 - **Definitional equality**: `rfl`
-- **Simplification / arithmetic**: `simp`, `ring`, `omega`, `linarith`
+- **Simplification / arithmetic**: `simp`, `ring`, `omega` (Lean 4.7+ Core), `linarith`
 - **Hypothesis introduction**: `intro x h`
 - **Rewriting / Substitution**: `rw [h]`, `subst h`
-- **Splitting cases**: `cases n`, `rcases ...`, `obtain ...`
+- **Splitting cases**: `cases n`, `rcases ...` (Lean 4.7+ Core), `obtain ...`
 - **Exact match**: `exact h`
 
 ### Step 3: Apply Tactic and Immediately Query

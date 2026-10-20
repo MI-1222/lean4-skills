@@ -88,7 +88,7 @@ Using the frozen definition prevents the elaborator from expanding the internals
 
 - **Problem**: Tactics like `aesop` and open `linarith` perform extensive tree searches and collect all hypotheses in the local context.
 - **Remedy**:
-  - For linear integer/natural arithmetic: use `omega` (vastly faster and complete for Presburger arithmetic).
+  - For linear integer/natural arithmetic: use `omega` (Lean 4.7+ Core) (vastly faster and complete for Presburger arithmetic).
   - Scope `linarith`: use `linarith only [h1, h2]` to avoid parsing irrelevant local hypotheses.
   - For `aesop`: configure rule sets strictly or replace with targeted `constructor`, `ext`, and `simp only`.
 

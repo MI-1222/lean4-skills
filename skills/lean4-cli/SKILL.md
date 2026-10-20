@@ -103,20 +103,20 @@ lake exe cache get
 
 To maintain fast turnaround times and guarantee strict mathematical rigor, follow this multi-tier verification ladder (from lightest to full verification):
 
-| Tier                               | Tool / Command                      | Dependency Handling                        | Target `.olean` Written | Speed      | Best For                                                      |
-| :--------------------------------- | :---------------------------------- | :----------------------------------------- | :---------------------- | :--------- | :------------------------------------------------------------ |
-| **Tier 0: Per-Edit**               | `lean_goal.py` / LSP diagnostics    | In-memory LSP server state                 | No                      | Sub-second | Interactive goal inspection after each tactic line            |
-| **Tier 1: Fast File Gate**         | `lake env lean <path/to/File.lean>` | Reads **existing pre-built `.olean`** only | No                      | Seconds    | Fast syntax/type check when upstream imports are unchanged    |
-| **Tier 1b: Dependency-Aware Gate** | `lake lean <path/to/File.lean>`     | **Builds stale imports**, then checks file | No                      | Fast       | File check after editing upstream imports in the same session |
-| **Tier 2: Module Build**           | `lake build <Module>`               | Rebuilds dependencies + target             | **Yes**                 | Moderate   | Writing module `.olean` artifacts for downstream consumers    |
-| **Tier 3: Project Gate**           | `lake build`                        | Full workspace build graph                 | **Yes**                 | Minutes    | Pre-commit checkpoint and whole-project validation            |
-| **Tier 4: Soundness Gate**         | `#print axioms <Theorem>`           | Kernel check on environment                | N/A                     | Sub-second | Mandatory audit: eliminate `sorryAx` and synthetic axioms     |
+| Tier                               | Tool / Command                              | Dependency Handling                        | Target `.olean` Written | Speed      | Best For                                                      |
+| :--------------------------------- | :------------------------------------------ | :----------------------------------------- | :---------------------- | :--------- | :------------------------------------------------------------ |
+| **Tier 0: Per-Edit**               | `lean_goal.py` / LSP diagnostics            | In-memory LSP server state                 | No                      | Sub-second | Interactive goal inspection after each tactic line            |
+| **Tier 1: Fast File Gate**         | `lake env lean <path/to/File.lean>`         | Reads **existing pre-built `.olean`** only | No                      | Seconds    | Fast syntax/type check when upstream imports are unchanged    |
+| **Tier 1b: Dependency-Aware Gate** | `lake lean <path/to/File.lean>` (Lean 4.8+) | **Builds stale imports**, then checks file | No                      | Fast       | File check after editing upstream imports in the same session |
+| **Tier 2: Module Build**           | `lake build <Module>`                       | Rebuilds dependencies + target             | **Yes**                 | Moderate   | Writing module `.olean` artifacts for downstream consumers    |
+| **Tier 3: Project Gate**           | `lake build`                                | Full workspace build graph                 | **Yes**                 | Minutes    | Pre-commit checkpoint and whole-project validation            |
+| **Tier 4: Soundness Gate**         | `#print axioms <Theorem>`                   | Kernel check on environment                | N/A                     | Sub-second | Mandatory audit: eliminate `sorryAx` and synthetic axioms     |
 
 ```mermaid
 graph TD
     A["Edit Lean Source File"] --> B{"Were upstream imported files<br/>modified in this session?"}
     B -- "No" --> C["Level 1: Fast File Gate<br/><code>lake env lean &lt;file&gt;</code>"]
-    B -- "Yes" --> D["Level 1b: Dependency-Aware Gate<br/><code>lake lean &lt;file&gt;</code>"]
+    B -- "Yes" --> D["Level 1b: Dependency-Aware Gate<br/><code>lake lean &lt;file&gt;</code> (Lean 4.8+)"]
     C --> E{"Check passed?"}
     D --> E
     E -- "Errors" --> F["Inspect diagnostics & repair proof"]
@@ -153,11 +153,11 @@ graph TD
 
 When editing across multiple files or modifying upstream dependencies, choose one of these two recovery paths:
 
-1. **Path A (`lake lean <file>`, Recommended)**:
+1. **Path A (`lake lean <file>`, Recommended, Lean 4.8+)**:
    ```bash
    lake lean path/to/File.lean
    ```
-   `lake lean` is dependency-aware: it automatically recompiles any modified upstream imports first, then elaborates the target file. Crucially, it does **not** write the target file's own `.olean`, keeping the check fast and avoiding artifact pollution if the file is later rolled back.
+   `lake lean` is dependency-aware: it automatically recompiles any modified upstream imports first, then elaborates the target file. Crucially, it does **not** write the target file's own `.olean`, keeping the check fast and avoiding artifact pollution if the file is later rolled back. _(Note: On Lean < 4.8, `lake lean` is not available; use Path B instead.)_
 2. **Path B (Explicit Rebuild)**:
    Rebuild the modified dependency first, then run `lake env lean`:
    ```bash

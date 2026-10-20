@@ -9,7 +9,7 @@ The error `(deterministic) timeout at '...', maximum number of heartbeats (20000
 Heartbeat exhaustion is almost always caused by:
 
 1. **Unbounded `simp` searches**: An open `simp` searching hundreds of lemmas, or a cyclic simp rewrite loop.
-2. **Heavy automation tactics without scope**: `aesop`, `linarith`, or `omega` running on large hypotheses sets.
+2. **Heavy automation tactics without scope**: `aesop`, `linarith`, or `omega` (Lean 4.7+ Core) running on large hypotheses sets.
 3. **Deep typeclass synthesis loops**: Conflicting or transitive typeclass instances.
 4. **Monolithic proof blocks**: Long proof scripts with accumulated metavariables and huge contexts.
 
