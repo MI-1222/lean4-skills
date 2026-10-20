@@ -6,7 +6,22 @@ When Lean reports `tactic '<name>' failed`, it means the tactic's heuristic or d
 
 ## 1. Decision Procedure Failures
 
-### 1.1 `linarith` Failed
+### Tactic Origin & Import Reference
+
+Before diagnosing decision procedure failures, verify whether the tactic is built into Core Lean or requires a Mathlib import:
+
+| Tactic           | Origin          | Required Import                    | Domain                                         |
+| :--------------- | :-------------- | :--------------------------------- | :--------------------------------------------- |
+| `omega`          | **Lean 4 Core** | _None (built-in since Lean 4.3)_   | Presburger arithmetic on `Nat` and `Int`       |
+| `linarith`       | **Mathlib**     | `import Mathlib.Tactic.Linarith`   | Linear arithmetic on ordered fields (`ℝ`, `ℚ`) |
+| `nlinarith`      | **Mathlib**     | `import Mathlib.Tactic.Nlinarith`  | Non-linear inequalities via cross products     |
+| `positivity`     | **Mathlib**     | `import Mathlib.Tactic.Positivity` | Proving terms are non-negative or positive     |
+| `ring` / `ring1` | **Mathlib**     | `import Mathlib.Tactic.Ring`       | Equalities in commutative (semi)rings          |
+| `gcongr`         | **Mathlib**     | `import Mathlib.Tactic.GCongr`     | Monotonic function congruences                 |
+
+---
+
+### 1.1 `linarith` Failed _(Mathlib: `import Mathlib.Tactic.Linarith`)_
 
 `linarith` solves linear inequalities over linearly ordered fields/rings (e.g. `ℝ`, `ℚ`).
 
@@ -19,12 +34,14 @@ When Lean reports `tactic '<name>' failed`, it means the tactic's heuristic or d
 
 ---
 
-### 1.2 `omega` Failed
+### 1.2 `omega` Failed _(Lean 4 Core: No Imports Needed)_
 
-`omega` is Lean 4's decision procedure for Presburger arithmetic on `Nat` and `Int`.
+`omega` is Lean 4's built-in decision procedure for Presburger arithmetic on `Nat` and `Int`.
+
+> **Note**: `omega` is standard in Lean 4 Core (since 4.3.0). **Do NOT add `import Mathlib.Tactic.Omega`**; it is fully available in pure Lean files without Mathlib dependencies.
 
 - **Failure Cause 1: Real numbers or Floats**. `omega` only works on integers and naturals.
-  - _Fix_: Use `linarith` for `ℝ` or `ℚ`.
+  - _Fix_: Use `linarith` for `ℝ` or `ℚ` (requires `import Mathlib.Tactic.Linarith`).
 - **Failure Cause 2: Non-linear terms**. Multiplication between two variables (`a * b`).
   - _Fix_: If one term is a constant, `omega` works (`3 * a`). If both are variables, non-linear reasoning is required (`nlinarith`, `ring`, or custom induction).
 - **Failure Cause 3: Division or Modulo**.
@@ -32,7 +49,7 @@ When Lean reports `tactic '<name>' failed`, it means the tactic's heuristic or d
 
 ---
 
-### 1.3 `ring` / `ring1` Failed
+### 1.3 `ring` / `ring1` Failed _(Mathlib: `import Mathlib.Tactic.Ring`)_
 
 `ring` verifies identities in commutative (semi)rings using polynomial normalization.
 
@@ -45,7 +62,7 @@ When Lean reports `tactic '<name>' failed`, it means the tactic's heuristic or d
 
 ---
 
-### 1.4 `gcongr` Failed
+### 1.4 `gcongr` Failed _(Mathlib: `import Mathlib.Tactic.GCongr`)_
 
 `gcongr` (generalized congruence) proves inequalities/equalities by peeling off matching monotonic functions.
 
