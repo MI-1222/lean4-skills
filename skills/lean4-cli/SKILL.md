@@ -6,6 +6,7 @@ metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
   tested-mathlib-version: 'v4.35.0'
+  version: '1.1.0'
 ---
 
 # Lean 4 CLI and Lake Build Management
