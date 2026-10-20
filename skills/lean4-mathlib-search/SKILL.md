@@ -25,6 +25,10 @@ graph TD
 
     Q1 -- "No active goal / exploring library" --> Q2{"Do you know the type signature or equation shape?"}
     Q2 -- "Yes (e.g. `?a + ?b = ?b + ?a` or `List.map`)" --> Loogle["Strategy 2: Loogle (`search_loogle.py`)"]
+    Loogle --> ImpCheck{"Is the lemma's `Module` imported?"}
+    ImpCheck -- "No" --> AddImp["Add `import <Module>` to file header"]
+    ImpCheck -- "Yes" --> Replace
+    AddImp --> Replace
     Q2 -- "No, only informal math concept" --> Q3{"Do you know standard Mathlib terminology?"}
 
     Q3 -- "Yes, standard terms" --> Naming["Strategy 3: Mathlib Naming Convention + Grep"]
@@ -110,6 +114,39 @@ python3 scripts/search_loogle.py '"differ", Real.sin' -n 5
 python3 scripts/search_loogle.py "List ?a -> (?a -> ?b) -> List ?b" --json
 ```
 
+### Module Resolution & Import Workflow
+
+A very common pitfall when using Loogle is the **`unknown identifier` compiler error**. Loogle searches across the **entire Mathlib index**, but declarations will NOT be available in your Lean file unless their enclosing module is imported.
+
+Whenever you find a candidate lemma via Loogle, execute this 3-step workflow before referencing it in your code:
+
+1. **Locate the `Module` attribute in the search result**:
+   - In text mode output:
+     ```text
+     1. Real.sin
+        Type   : (x : ℝ) : ℝ
+        Module : Mathlib.Analysis.Complex.Trigonometric
+     ```
+   - In `--json` output:
+     ```json
+     {
+       "name": "Real.sin",
+       "type": "(x : ℝ) : ℝ",
+       "module": "Mathlib.Analysis.Complex.Trigonometric"
+     }
+     ```
+2. **Add the import to your Lean file header**:
+   Insert the required module path at the top of your Lean file:
+
+   ```lean
+   import Mathlib.Analysis.Complex.Trigonometric
+   ```
+
+   > **Note on Granular Imports**: Prefer importing the specific module (e.g. `import Mathlib.Analysis.Complex.Trigonometric`) rather than the monolithic `import Mathlib`. Granular imports drastically reduce compile times and memory consumption during build and language server elaboration.
+
+3. **Verify declaration resolution**:
+   Confirm the lemma is accessible in your environment (e.g. via `#check Real.sin` or checking diagnostics with `lean_goal.py`) before attempting to close proof goals with it.
+
 ---
 
 ## 4. Strategy 3: Mathlib Naming Conventions
@@ -167,6 +204,7 @@ When you only know high-level mathematical terminology in English (e.g., "Banach
 
 ### Anti-Patterns to Avoid
 
+- **Forgetting to import the lemma's module**: Loogle searches the entire Mathlib corpus across all unimported modules. Finding a lemma like `Real.sin` or `Real.sqrt_le_sqrt` does NOT mean it is currently in scope. Always extract the `Module` attribute from the result and add `import <Module>` to your file header before using it.
 - **Never guess lemma names without checking**: Hallucinating identifiers (e.g., `Mathlib.Theorem.pythagorean`) causes `unknown identifier` compilation errors.
 - **Do not overload Loogle queries**: Writing overly complex signatures with 10 type variables causes Loogle timeouts. Start with key constants or subexpressions (e.g., `_ * (_ ^ _)`), then refine.
 - **Avoid plain text searches in Loogle**: Querying `"Measure.map"` as a type signature yields 0 hits because Loogle searches structural types. For constant presence, omit quotes (`Measure.map`); for name substring, use quotes (`"map"`).
@@ -176,5 +214,6 @@ When you only know high-level mathematical terminology in English (e.g., "Banach
 - [ ] Identified active goal with `lean_goal.py`?
 - [ ] Attempted inline `exact?` / `apply?` / `rw?` first?
 - [ ] Tested type signature pattern with `search_loogle.py`?
-- [ ] Verified that the required module is imported (`import Mathlib...`)?
+- [ ] Checked search result `Module` and added `import <Module>` to the Lean file header?
+- [ ] Verified that the identifier resolves cleanly (`#check <lemma_name>`)?
 - [ ] Checked for clean compilation without `sorry` or warnings?
