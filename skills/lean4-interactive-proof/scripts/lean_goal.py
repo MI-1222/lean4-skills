@@ -350,8 +350,8 @@ def extract_goal_and_diagnostics(
             msg = diag.get("message", "").strip()
             if severity_num == 1:
                 has_errors = True
-            # Lean 4 warns when 'sorry' is used (e.g., "declaration uses 'sorry'")
-            if "declaration uses 'sorry'" in msg.lower() or "uses sorry" in msg.lower():
+            # Lean 4 warns when 'sorry' is used (e.g., "declaration uses `sorry`")
+            if re.search(r"uses\s*[`'\"]?sorry(?:Ax)?[`'\"]?", msg, re.IGNORECASE):
                 has_sorry = True
 
             d_range = diag.get("range", {})
