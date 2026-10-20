@@ -40,7 +40,7 @@ Every high-quality formal proof in Lean 4 rests on six foundational practices:
 3. **Mathlib Naming Fluency**: Leverage predictable naming schemes (`Type.op_property`) and dot notation to deduce existing lemma names without endless searches.
 4. **Performance & Heartbeat Control**: Keep elaboration times small. Never treat `set_option maxHeartbeats` as a permanent fix; resolve instance loops, pin type parameters, and use targeted tactics.
 5. **Human-Readable Documentation & Style**: Formal proofs must be readable by mathematicians. Write informative docstrings, maintain a 100-character line limit, and use structured `calc` proofs for calculational arguments.
-6. **Principled Simplification (Golfing)**: Eliminate redundant tactics and intermediate hypotheses. Prefer domain decision tactics (`omega`, `ring`, `linarith`, `gcongr`) over fragile manual rewrites.
+6. **Principled Simplification (Golfing)**: Eliminate redundant tactics and intermediate hypotheses. Prefer domain decision tactics (`omega`, `ring`, `linarith`, `gcongr`) for single domains and SMT-style `grind` for cross-domain mixed constraints over fragile manual rewrites.
 
 ---
 
@@ -58,6 +58,7 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 - [ ] **No Non-Terminal `simp`**: Does every `simp` either close the goal completely or use an explicit lemma list (`simp only [...]`)?
 - [ ] **Focus Dots (`·`)**: Are all branches in `induction`, `cases`, `constructor`, or `apply` isolated using focus dots?
 - [ ] **Arithmetic Segregation**: Is `omega` used for `ℕ`/`ℤ` Presburger arithmetic, and `linarith` reserved for linear relations over `ℝ`/`ℚ`?
+- [ ] **Cross-Domain Automation**: For mixed goals involving equalities, inequalities, and case analysis, is `grind` tested safely (`grind (splits := 0)` or `grind?`) rather than unconstrained searches?
 - [ ] **Calculation Legibility**: Are multi-step inequalities or equalities laid out with `calc` rather than a sequence of opaque rewrites?
 
 ### Stage C: Documentation & Layout

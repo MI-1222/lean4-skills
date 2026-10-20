@@ -18,6 +18,7 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
 | `positivity`     | **Mathlib**     | `import Mathlib.Tactic.Positivity` | Proving terms are non-negative or positive     |
 | `ring` / `ring1` | **Mathlib**     | `import Mathlib.Tactic.Ring`       | Equalities in commutative (semi)rings          |
 | `gcongr`         | **Mathlib**     | `import Mathlib.Tactic.GCongr`     | Monotonic function congruences                 |
+| `grind`          | **Lean 4 Core** | _None (built-in since Lean 4.14)_  | SMT-style mixed constraints and E-matching     |
 
 ---
 
@@ -73,6 +74,20 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
 
 ---
 
+### 1.5 `grind` Failed _(Lean 4 Core: No Imports Needed)_
+
+`grind` coordinates congruence closure, E-matching, case-splitting, and arithmetic sub-solvers for mixed-constraint goals.
+
+- **Failure Cause 1: Combinatorial search explosion (Heartbeats / Timeout)**. Unbounded case splitting across branches.
+  - _Fix_: Bound or disable splitting with `grind (splits := 0)` to check if simple deduction suffices.
+  - Suppress excessive case splits: `grind -splitIte -splitMatch`.
+- **Failure Cause 2: Pure single-domain reasoning**. When a goal is strictly linear arithmetic or pure polynomial normalization, `grind`'s general heuristics are slower and may miss specialized proofs.
+  - _Fix_: Use `omega` for `ℕ`/`ℤ`, `linarith` for `ℝ`/`ℚ`, or `ring` for commutative rings.
+- **Failure Cause 3: Unsimplified context**.
+  - _Fix_: Run `simp only [...]` or `simp at *` before `grind`. Use `grind?` to inspect and extract suggested parameters.
+
+---
+
 ## 2. Structural & Proof Search Failures
 
 ### 2.1 `exact h` Failed
@@ -108,12 +123,13 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
 
 ## 3. Tactic Selection Cheatsheet
 
-| Target Problem                                      | Primary Tactic | Fallback / Prerequisite    |
-| :-------------------------------------------------- | :------------- | :------------------------- |
-| Polynomial equality (`a * (b + c) = a * b + a * c`) | `ring`         | `field_simp` (if division) |
-| Linear inequality on `ℕ` / `ℤ`                      | `omega`        | `zify` then `linarith`     |
-| Linear inequality on `ℝ` / `ℚ`                      | `linarith`     | `nlinarith` (non-linear)   |
-| Positivity / non-negativity (`0 < x ^ 2 + 1`)       | `positivity`   | `norm_num`                 |
-| Deep structured equality with matching shape        | `gcongr`       | `congr!`                   |
-| Direct numerical calculation (`2 + 2 = 4`)          | `norm_num`     | `decide`                   |
-| General logical search                              | `aesop`        | `tauto`, `clarify`         |
+| Target Problem                                      | Primary Tactic | Fallback / Prerequisite               |
+| :-------------------------------------------------- | :------------- | :------------------------------------ |
+| Polynomial equality (`a * (b + c) = a * b + a * c`) | `ring`         | `field_simp` (if division)            |
+| Linear inequality on `ℕ` / `ℤ`                      | `omega`        | `zify` then `linarith`                |
+| Linear inequality on `ℝ` / `ℚ`                      | `linarith`     | `nlinarith` (non-linear)              |
+| Positivity / non-negativity (`0 < x ^ 2 + 1`)       | `positivity`   | `norm_num`                            |
+| Deep structured equality with matching shape        | `gcongr`       | `congr!`                              |
+| Direct numerical calculation (`2 + 2 = 4`)          | `norm_num`     | `decide`                              |
+| Mixed constraints / cross-domain SMT reasoning      | `grind`        | `grind (splits := 0)` / `simp; grind` |
+| General logical search                              | `aesop`        | `tauto`, `clarify`                    |
