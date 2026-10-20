@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import re
 from pathlib import Path
 from urllib.parse import urljoin
 from urllib.request import pathname2url
@@ -291,6 +292,7 @@ def extract_goal_and_diagnostics(
             "rendered": None,
             "goals": [],
             "is_done": False,
+            "has_sorry": False,
             "diagnostics": [],
         }
 
@@ -302,6 +304,7 @@ def extract_goal_and_diagnostics(
             "rendered": None,
             "goals": [],
             "is_done": False,
+            "has_sorry": False,
             "diagnostics": [],
         }
 
@@ -332,32 +335,45 @@ def extract_goal_and_diagnostics(
         rendered = goal_result.get("rendered") if goal_result else None
         goals = goal_result.get("goals", []) if goal_result else []
 
-        # Compiler diagnostics.
+        # Compiler diagnostics and 'sorry' detection.
         formatted_diags = []
         severity_map = {1: "Error", 2: "Warning", 3: "Info", 4: "Hint"}
         has_errors = False
+        has_sorry = False
+
+        # Check if the target line explicitly contains 'sorry'
+        if re.search(r"\bsorry\b", target_line_content):
+            has_sorry = True
+
         for diag in client.diagnostics:
             severity_num = diag.get("severity", 1)
+            msg = diag.get("message", "").strip()
             if severity_num == 1:
                 has_errors = True
+            # Lean 4 warns when 'sorry' is used (e.g., "declaration uses 'sorry'")
+            if "declaration uses 'sorry'" in msg.lower() or "uses sorry" in msg.lower():
+                has_sorry = True
+
             d_range = diag.get("range", {})
             start_pos = d_range.get("start", {})
-            d_line = start_pos.get("line", 0) + 1  # 1-indexed に変換
+            d_line = start_pos.get("line", 0) + 1  # 1-indexed
             d_col = start_pos.get("character", 0) + 1
             formatted_diags.append(
                 {
                     "line": d_line,
                     "column": d_col,
                     "severity": severity_map.get(severity_num, "Error"),
-                    "message": diag.get("message", "").strip(),
+                    "message": msg,
                 }
             )
 
         # Determine if the proof is complete.
-        # IMPORTANT: If compiler errors (severity: 1) exist, elaboration has failed or been interrupted.
-        # Lean 4's plainGoal returns "no goals" even during type errors, so is_done must never be set to True when errors are present.
+        # CRITICAL RULES:
+        # 1. If compiler errors (severity: 1) exist, elaboration failed. Never mark as done.
+        # 2. If 'sorry' is present (either in diagnostics or on the line), the proof is an incomplete placeholder.
+        #    'sorry' artificially discharges goals, causing plainGoal to return "no goals", which must NOT be marked as is_done.
         is_done = False
-        if not has_errors:
+        if not has_errors and not has_sorry:
             if rendered:
                 clean_rendered = rendered.strip()
                 if "goals accomplished" in clean_rendered or "no goals" in clean_rendered:
@@ -374,6 +390,7 @@ def extract_goal_and_diagnostics(
             "rendered": rendered,
             "goals": goals,
             "is_done": is_done,
+            "has_sorry": has_sorry,
             "diagnostics": formatted_diags,
             "error": None,
         }
@@ -385,6 +402,7 @@ def extract_goal_and_diagnostics(
             "rendered": None,
             "goals": [],
             "is_done": False,
+            "has_sorry": False,
             "diagnostics": [],
         }
     finally:

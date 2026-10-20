@@ -44,6 +44,7 @@ python3 <skill-path>/scripts/lean_goal.py <lean_file> --line <line_number> [--co
   "rendered": "```lean\nx y : Nat\nh : x = y\n⊢ x + 0 = y\n```",
   "goals": ["x y : Nat\nh : x = y\n⊢ x + 0 = y"],
   "is_done": false,
+  "has_sorry": false,
   "diagnostics": [
     {
       "line": 12,
@@ -58,7 +59,8 @@ python3 <skill-path>/scripts/lean_goal.py <lean_file> --line <line_number> [--co
 
 - `rendered`: Markdown-formatted string representing the active proof goals, hypotheses, and target.
 - `goals`: Array of individual subgoal strings. Empty when all goals are discharged.
-- `is_done`: Boolean flag indicating whether all proof goals are completed (`true` when `goals accomplished` or `no goals` and no compiler errors exist; always `false` if compilation errors are present).
+- `is_done`: Boolean flag indicating whether all proof goals are completed (`true` only when goals are solved, no compiler errors exist, and no `sorry` remains).
+- `has_sorry`: Boolean flag indicating whether `sorry` is present on the line or in compiler diagnostics (`true` if `sorry` is active).
 - `diagnostics`: List of compiler errors, warnings, and informational diagnostics for the file/position.
 - `success`: Boolean indicating whether the LSP query completed successfully.
 
@@ -92,6 +94,19 @@ Analyze the returned `rendered` text:
 
 - What are the current hypotheses (above `⊢`)?
 - What is the exact target type (after `⊢`)?
+
+#### Critical Pitfall: Querying Lines Containing `sorry`
+
+In Lean 4, `sorry` is a macro tactic that artificially discharges the active goal. Consequently:
+
+- If you query the end of a line that already contains `sorry` (e.g. `have h : P := by sorry`), `plainGoal` reports **`rendered: "no goals"`** because `sorry` already closed the goal at that exact position.
+- `lean_goal.py` detects `sorry` (in diagnostics or target line content) and sets **`is_done: false`** and **`has_sorry: true`**, preventing false positives.
+
+**How to Inspect the True Unsolved Goal**:
+
+1. **Remove `sorry`**: Temporarily delete or comment out `sorry`, leaving a blank line with proper indentation, then query that line.
+2. **Query before `sorry`**: Query the column directly preceding `sorry` (`--col <N>`).
+3. **Query an empty indented line**: Place the query on a fresh, indented line immediately following `by`.
 
 ### Step 2: Formulate Candidate Tactic
 
