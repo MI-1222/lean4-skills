@@ -43,7 +43,7 @@ Before running verification or committing code that uses Mathlib, check against 
 
 - [ ] **No Monolithic Imports**: Is the file free of `import Mathlib`? Are imports restricted to minimal submodules (e.g., `Mathlib.Basic.Real.Basic`, `Mathlib.Tactic.Linarith`)?
 - [ ] **Binary Cache Synchronized**: Has `lake exe cache get` been executed to avoid rebuilding dependencies from source?
-- [ ] **Pruned Dependencies**: Has `lake exe shake` (or `lake exe shake --fix`) been run to eliminate unused transitive modules?
+- [ ] **Pruned Dependencies**: Has `lake shake` (or `lake shake --fix`) been run to eliminate unused transitive modules?
 
 ### Stage B: Elaboration & Typeclass Settings
 

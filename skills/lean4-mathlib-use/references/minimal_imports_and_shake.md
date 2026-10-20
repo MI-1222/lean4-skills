@@ -63,14 +63,14 @@ Mathlib provides a dedicated static analysis tool called `shake` to detect and r
 1. **Audit Unused Imports**:
 
    ```bash
-   lake exe shake
+   lake shake
    ```
 
    This command inspects all files in the project and reports unnecessary `import` statements.
 
 2. **Automatically Fix and Prune**:
    ```bash
-   lake exe shake --fix
+   lake shake --fix
    ```
    This automatically rewrites the import headers of affected files, pruning redundant dependencies while preserving required modules.
 
