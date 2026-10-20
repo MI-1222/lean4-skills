@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "When compiling the following Lean 4 code, I get `tactic 'rewrite' failed, motive is not type correct`:\n```lean\ntheorem fin_eq_subst (n m : Nat) (h : n = m) (v : Fin n) : Fin m := by\n  rw [h] at v\n  exact v\n```\nExplain why Lean fails with this motive error and provide the corrected proof using the appropriate repair strategy.",
+      "prompt": "When compiling the following Lean 4 code, I get `tactic 'rewrite' failed, motive is not type correct`:\n```lean\ndef fin_eq_subst (n m : Nat) (h : n = m) (v : Fin n) : Fin m := by\n  rw [h] at v\n  exact v\n```\nExplain why Lean fails with this motive error and provide the corrected proof using the appropriate repair strategy.",
       "expected_output": "The response should diagnose that `rw` fails because `v`'s type depends on `n`, making simple `Eq.rec` motive synthesis invalid. It should repair the proof by using `subst h` (or `subst n`), or alternatively reverting `v` before rewriting.",
       "files": []
     },
@@ -15,14 +15,14 @@
     },
     {
       "id": 3,
-      "prompt": "My proof below fails with `tactic 'linarith' failed`:\n```lean\ntheorem nat_ineq (n : Nat) (h : n > 0) : n ≥ 1 := by\n  linarith\n```\nWhy does `linarith` fail on this obvious inequality, and how should it be repaired in Lean 4?",
-      "expected_output": "The response should explain that `linarith` is designed for linear real/rational arithmetic and does not know discrete properties of natural numbers like `n > 0 → n ≥ 1`. It should repair the proof by switching to `omega`.",
+      "prompt": "My proof below fails with `linarith failed to find a contradiction`:\n```lean\nimport Mathlib.Tactic.Linarith\n\ntheorem nat_sub_cancel (a b : Nat) (h : a ≤ b) : b - a + a = b := by\n  linarith\n```\nWhy does `linarith` fail on this natural number equality, and how should it be repaired in Lean 4?",
+      "expected_output": "The response should explain that `linarith` operates over linearly ordered fields (like ℝ or ℚ) and cannot handle truncating subtraction on `Nat` where `b - a` is floored at 0. It should repair the proof by replacing `linarith` with `omega`, which handles Presburger arithmetic with truncated operations.",
       "files": []
     },
     {
       "id": 4,
-      "prompt": "Compiling this proof causes `(deterministic) timeout, maximum number of heartbeats (200000) has been reached`:\n```lean\nimport Mathlib\n\ntheorem simp_loop_fix (a b : Nat) (h : a + b = b + a) : a + b + 0 = b + a := by\n  simp [add_comm]\n```\nExplain what caused the timeout and provide a stable repair.",
-      "expected_output": "The response should explain that `add_comm` is a symmetric commutativity rule that causes an infinite rewriting loop inside open `simp`. It should repair the proof by replacing `simp` with `rw [add_comm, add_zero]` or `simp only [add_zero]` after rewriting.",
+      "prompt": "Compiling this proof causes `Tactic 'simp' failed with a nested error: maximum recursion depth has been reached`:\n```lean\ntheorem simp_loop_fix (a b : Nat) (h1 : a = b) (h2 : b = a) : a = b := by\n  simp [h1, h2]\n```\nExplain why `simp` loops indefinitely on these hypotheses and provide a correct repair.",
+      "expected_output": "The response should diagnose that `h1 : a = b` and `h2 : b = a` form a cyclic rewrite rule pair, causing `simp` to rewrite infinitely back and forth until the recursion limit is hit. It should repair the proof by using a single unidirectional rewrite (e.g., `exact h1` or `rw [h1]`), or restricting simplifications with `simp only [h1]`.",
       "files": []
     }
   ]

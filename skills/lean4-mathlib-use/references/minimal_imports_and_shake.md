@@ -33,7 +33,7 @@ Mathlib modules follow a hierarchical structure:
 | :----------------------------------------- | :--------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------- |
 | **Elementary Algebra (Groups, Rings)**     | `Mathlib.Algebra.Group.Defs`<br>`Mathlib.Algebra.Group.Basic`<br>`Mathlib.Algebra.Ring.Basic`        | Semigroups, monoids, groups, rings, basic algebraic operations   |
 | **Order & Lattice Theory**                 | `Mathlib.Order.Bounds`<br>`Mathlib.Order.Monotone.Basic`<br>`Mathlib.Order.Lattice`                  | Partial orders, bounds (`sSup`, `sInf`), monotone maps, lattices |
-| **Real & Complex Numbers**                 | `Mathlib.Data.Real.Basic`<br>`Mathlib.Data.Complex.Basic`                                            | Complete ordered field structure of `ℝ`, complex arithmetic      |
+| **Real & Complex Numbers**                 | `Mathlib.Basic.Real.Basic`<br>`Mathlib.Data.Complex.Basic`                                           | Complete ordered field structure of `ℝ`, complex arithmetic      |
 | **Elementary Calculus / Analysis**         | `Mathlib.Analysis.Calculus.Deriv.Basic`<br>`Mathlib.Analysis.SpecialFunctions.Pow.Real`              | Single-variable derivatives (`deriv`), real powers, exp, log     |
 | **Topology**                               | `Mathlib.Topology.Basic`<br>`Mathlib.Topology.Constructions`<br>`Mathlib.Topology.MetricSpace.Basic` | Open sets, neighborhoods, continuity, metric spaces              |
 | **Linear Arithmetic & Inequality Tactics** | `Mathlib.Tactic.Linarith`<br>`Mathlib.Tactic.Ring`<br>`Mathlib.Tactic.Positivity`                    | `linarith`, `nlinarith`, `ring`, `positivity` tactics            |
@@ -63,16 +63,32 @@ Mathlib provides a dedicated static analysis tool called `shake` to detect and r
 1. **Audit Unused Imports**:
 
    ```bash
-   lake exe shake
+   lake shake
    ```
 
    This command inspects all files in the project and reports unnecessary `import` statements.
 
 2. **Automatically Fix and Prune**:
    ```bash
-   lake exe shake --fix
+   lake shake --fix
    ```
    This automatically rewrites the import headers of affected files, pruning redundant dependencies while preserving required modules.
+
+### Limitations & Constraints of `lake shake`
+
+Keep these constraints in mind when using `lake shake`:
+
+1. **Strict Standard Module Requirement**:
+   - `lake shake` currently only operates on standard Lean module identifiers (`MyProject.Algebra.Basic`).
+   - If your project contains directories or filenames with hyphens (e.g., `«my-subproject»` requiring French quote escaping or permitted via `allowNonModules = true`), `lake shake` will abort with:
+     ```text
+     error: `lake shake` only works with `module`s currently
+     ```
+   - **Workaround**: In projects containing escaped or non-module paths, avoid running whole-project `lake shake`. Either restrict targets, normalize directory names to standard Lean module identifiers (PascalCase or snake_case without hyphens), or inspect and prune imports manually.
+
+2. **Tactic and Typeclass Instance Dependencies**:
+   - `shake` relies on AST syntax inspection. If an imported module solely provides a behind-the-scenes tactic, macro, or typeclass instance that is not explicitly named in the file, `shake` may mistakenly consider it unused.
+   - **Rule**: Always run `lake build` immediately after `lake shake --fix` to confirm that all tactics and typeclass instances remain functional.
 
 ---
 
@@ -92,7 +108,7 @@ theorem square_nonneg_real (x : ℝ) : 0 ≤ x^2 := by
 
 ```lean
 -- Good: Loads only the real numbers, basic ring order axioms, and necessary tactics
-import Mathlib.Data.Real.Basic
+import Mathlib.Basic.Real.Basic
 import Mathlib.Algebra.Order.Ring.Defs
 import Mathlib.Tactic.Linarith
 

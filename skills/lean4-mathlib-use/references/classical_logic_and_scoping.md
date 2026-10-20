@@ -85,8 +85,8 @@ Opening the entire namespace (e.g., `open Finset` or `open Set`) imports hundred
 The `open scoped` command activates custom notation macros without bringing symbol names into the unqualified namespace:
 
 ```lean
-import Mathlib.Algebra.BigOperators.Group.Finset
-import Mathlib.Algebra.Pointwise.Set.Basic
+import Mathlib.Algebra.BigOperators.Group.Finset.Basic
+import Mathlib.Algebra.Group.Pointwise.Set.Basic
 
 -- Activates ∑ and ∏ notations as well as set-arithmetic operators (s + t, a • s)
 open scoped BigOperators Pointwise

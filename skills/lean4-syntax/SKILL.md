@@ -13,16 +13,42 @@ In Lean 4, syntax parsing and type elaboration are tightly coupled. Formatting e
 
 ## 1. Quick Syntax Checklist
 
-| Context               | DO (Lean 4 Standard)               | DON'T (Common Failure)   | Rationale                                                                     |
-| :-------------------- | :--------------------------------- | :----------------------- | :---------------------------------------------------------------------------- |
-| **Proof Mode**        | `by`                               | `begin ... end`          | `begin` is not a keyword in Lean 4; it causes an immediate elaboration error. |
-| **Line Ending**       | Newline or `;`                     | Trailing comma `,`       | Tactics are separated by newlines, never commas.                              |
-| **Rewrite Direction** | `rw [← h]` (`\l`)                  | `rw [<- h]`              | ASCII `<-` conflicts with monad bind syntax and is rejected by the parser.    |
-| **Equational Chains** | `calc a = b := proof`              | `calc a = b : proof`     | Lean 4 uses assignment `:=` rather than typing `:` for `calc` steps.          |
-| **Conjunction Goals** | `constructor` or `refine ⟨?_, ?_⟩` | `split`                  | In Lean 4, `split` only decomposes `if` and `match` constructs.               |
-| **Subgoals**          | `· tactic` (`\.`) with +2 spaces   | `{ tactic }`             | Focus dots `·` enforce strict goal isolation and completion.                  |
-| **Local Proofs**      | `have h : P := by` (+2 spaces)     | `have h : P, from proof` | `from` is retired. In nested `by`, indent tactics deeper than `have`.         |
-| **Trivial Proofs**    | Term mode (`fun h => h`)           | `:= by exact fun h => h` | Term mode avoids unnecessary tactic state and metavariable overhead.          |
+| Context                | DO (Lean 4 Standard)                  | DON'T (Common Failure)             | Rationale                                                                                                                                                                         |
+| :--------------------- | :------------------------------------ | :--------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **File Header Order**  | `import ...` before `/-! ... -/`      | `/-! docstring -/` before `import` | `import` statements must strictly precede module docstrings. Placing `/-! ... -/` before imports causes `invalid 'import' command, it must be used at the beginning of the file`. |
+| **Proof Mode**         | `by`                                  | `begin ... end`                    | `begin` is not a keyword in Lean 4; it causes an immediate elaboration error.                                                                                                     |
+| **Line Ending**        | Newline or `;`                        | Trailing comma `,`                 | Tactics are separated by newlines, never commas.                                                                                                                                  |
+| **Rewrite Direction**  | `rw [← h]` (`\l`)                     | `rw [<- h]`                        | ASCII `<-` conflicts with monad bind syntax and is rejected by the parser.                                                                                                        |
+| **Equational Chains**  | `calc a = b := proof`                 | `calc a = b : proof`               | Lean 4 uses assignment `:=` rather than typing `:` for `calc` steps.                                                                                                              |
+| **Conjunction Goals**  | `constructor` or `refine ⟨?_, ?_⟩`    | `split`                            | In Lean 4, `split` only decomposes `if` and `match` constructs.                                                                                                                   |
+| **Subgoals**           | `· tactic` (`\.`) with +2 spaces      | `{ tactic }`                       | Focus dots `·` enforce strict goal isolation and completion.                                                                                                                      |
+| **Local Proofs**       | `have h : P := by` (+2 spaces)        | `have h : P, from proof`           | `from` is retired. In nested `by`, indent tactics deeper than `have`.                                                                                                             |
+| **Trivial Proofs**     | Term mode (`fun h => h`)              | `:= by exact fun h => h`           | Term mode avoids unnecessary tactic state and metavariable overhead.                                                                                                              |
+| **Identifier Escapes** | `«my-submodule»`, `«def»` (`\<< \>>`) | `my-submodule`                     | Hyphens `-` are parsed as subtraction operators. Enclose non-standard names or keywords in guillemets `«...»`.                                                                    |
+
+### 1.1. File Header & Import Ordering Rule
+
+In Lean 4, `import` commands must appear at the **very beginning of the file's command stream** (only plain copyright/license comments like `--` or `/- ... -/` may precede them).
+
+```lean
+-- ✅ CORRECT FILE HEADER ORDER:
+-- 1. Plain copyright/license notice (optional)
+import Mathlib.Data.Nat.Basic
+import Mathlib.Tactic.Ring
+
+-- 2. Module docstring `/-! ... -/` MUST strictly follow all imports
+/-!
+# Module Title
+Module documentation explaining theorems and structures.
+-/
+
+-- 3. Open scoped notations, namespaces, and declarations
+open scoped BigOperators
+```
+
+> **Common Failure Trap**: Placing `/-! ... -/` at line 1 before `import Mathlib` will trigger:
+> `error: invalid 'import' command, it must be used at the beginning of the file`
+> Always place `import` statements first!
 
 ---
 
@@ -37,13 +63,13 @@ A standalone CLI tool is bundled in `scripts/check_syntax.py` to validate Lean 4
 
 ```bash
 # 1. Check an inline code snippet (with static linter & compiler check)
-python3 skills/lean4-syntax/scripts/check_syntax.py -s "theorem imp_self (P : Prop) : P → P := fun h => h"
+python3 skills/lean4-syntax/scripts/check_syntax.py -s "theorem my_imp_self (P : Prop) : P → P := fun h => h"
 
 # 2. Check an existing Lean file
 python3 skills/lean4-syntax/scripts/check_syntax.py path/to/Proof.lean
 
 # 3. Read snippet from standard input
-echo "theorem test (p : Prop) (h : p) : p := by exact h" | python3 skills/lean4-syntax/scripts/check_syntax.py --stdin
+echo "theorem my_test (p : Prop) (h : p) : p := by exact h" | python3 skills/lean4-syntax/scripts/check_syntax.py --stdin
 
 # 4. Run static Lean 3 linter only (instant, does not invoke Lean compiler)
 python3 skills/lean4-syntax/scripts/check_syntax.py --lint-only -s "theorem bad : P := begin sorry end"
@@ -85,7 +111,7 @@ When run with `--json`, the tool returns:
 
 ```lean
 -- Recommended: Pure Term Mode
-theorem imp_self (P : Prop) : P → P :=
+theorem my_imp_self (P : Prop) : P → P :=
   fun h => h
 
 -- Recommended: Hybrid Tactic & Term Mode
@@ -130,6 +156,25 @@ Avoid multi-step primitive `cases` that create messy variable names (`h_1`, `h_2
     · left; exact hp
     · right; exact hr
   ```
+
+### 3.4. Identifier Escaping with Guillemets (`«...»`)
+
+In Lean 4, identifiers normally consist of alphanumeric characters and underscores, and cannot start with digits, contain hyphens (`-`), or collide with language keywords. Any arbitrary character sequence can be treated as a valid atomic identifier by enclosing it in French quotation marks (guillemets: `«` and `»`):
+
+- **Hyphenated Module Paths and Imports**:
+  When a file system directory or module name contains hyphens (e.g. `my-submodule`), you must escape that component in Lean source files:
+  ```lean
+  import MathProof.Data.«my-submodule».Basic
+  ```
+  Without `«...»`, the parser interprets `skills - test` as subtraction, triggering an `unexpected token '-'` or `expected identifier` error.
+- **Escaping Reserved Keywords**:
+  To use reserved keywords or operator-like strings as names of definitions, variables, or structure fields:
+  ```lean
+  def «def» : Nat := 42
+  def «type» (α : Type) : Type := α
+  ```
+- **Typing Guillemets in Editors**:
+  In VS Code or editors with the Lean 4 extension, type `\<<` for `«` and `\>>` for `»`.
 
 ---
 

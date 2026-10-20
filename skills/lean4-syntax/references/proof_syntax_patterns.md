@@ -15,11 +15,11 @@ A common anti-pattern among LLMs is writing `:= by exact <term>` or `:= by apply
 
 ```lean
 -- Clean Term Mode (No metavariable overhead)
-theorem imp_self (P : Prop) : P → P :=
+theorem my_imp_self (P : Prop) : P → P :=
   fun h => h
 
 -- Redundant Tactic Mode (Avoid if term is trivial)
-theorem imp_self_redundant (P : Prop) : P → P := by
+theorem my_imp_self_redundant (P : Prop) : P → P := by
   exact fun h => h
 
 -- Appropriate Hybrid: Tactic mode for state transitions, Term mode for local components

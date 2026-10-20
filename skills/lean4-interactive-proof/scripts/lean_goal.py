@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import re
 from pathlib import Path
 from urllib.parse import urljoin
 from urllib.request import pathname2url
@@ -50,6 +51,7 @@ class LeanLSPClient:
         self.diagnostics = []
         self.file_progress = {}
         self.elaboration_done_event = threading.Event()
+        self._has_started_processing = False
 
     def _determine_launch_command(self) -> list:
         """Select the appropriate server launch command based on project configuration."""
@@ -118,14 +120,21 @@ class LeanLSPClient:
             method = message.get("method")
             if method == "textDocument/publishDiagnostics":
                 params = message.get("params", {})
-                self.diagnostics.extend(params.get("diagnostics", []))
-                self.elaboration_done_event.set()
+                new_diags = params.get("diagnostics", [])
+                self.diagnostics = new_diags
+                # Don't set the event for empty diagnostics (initial empty notification at file open).
+                # Set the event if there are any compiler errors (severity == 1), as this indicates elaboration has failed.
+                if new_diags and any(d.get("severity", 1) == 1 for d in new_diags):
+                    self.elaboration_done_event.set()
             elif method == "$/lean/fileProgress":
                 params = message.get("params", {})
                 processing = params.get("processing", [])
                 uri = params.get("textDocument", {}).get("uri")
                 self.file_progress[uri] = processing
-                if not processing:
+                if processing:
+                    self._has_started_processing = True
+                else:
+                    # The processing range has become empty, which means elaboration has completed.
                     self.elaboration_done_event.set()
 
     def _transmit(self, msg: dict):
@@ -192,6 +201,9 @@ class LeanLSPClient:
 
     def open_document(self, file_path: Path, content: str):
         """Open document in server memory to trigger elaboration."""
+        self.elaboration_done_event.clear()
+        self.diagnostics = []
+        self._has_started_processing = False
         uri = urljoin("file:", pathname2url(str(file_path.resolve())))
         params = {
             "textDocument": {
@@ -204,8 +216,10 @@ class LeanLSPClient:
         self.send_notification("textDocument/didOpen", params)
 
     def wait_for_elaboration(self, timeout: float = 3.0):
-        """Wait for elaboration progress notification or diagnostics to arrive."""
+        """Wait for elaboration progress notification (fileProgress: empty) or error diagnostics to arrive."""
         self.elaboration_done_event.wait(timeout=timeout)
+        # Stabilization wait to absorb slight delays in diagnostic message delivery.
+        time.sleep(0.08)
 
     def fetch_plain_goal(
         self, file_path: Path, line_0indexed: int, col_utf16: int, timeout: float = 8.0
@@ -278,6 +292,7 @@ def extract_goal_and_diagnostics(
             "rendered": None,
             "goals": [],
             "is_done": False,
+            "has_sorry": False,
             "diagnostics": [],
         }
 
@@ -289,6 +304,7 @@ def extract_goal_and_diagnostics(
             "rendered": None,
             "goals": [],
             "is_done": False,
+            "has_sorry": False,
             "diagnostics": [],
         }
 
@@ -308,45 +324,64 @@ def extract_goal_and_diagnostics(
         content = "".join(lines)
         client.open_document(file_path, content)
 
+        # Wait for elaboration to complete and diagnostics to arrive
+        client.wait_for_elaboration(timeout=min(timeout, 3.0))
+
         # Retrieve plainGoal
         goal_result = client.fetch_plain_goal(
             file_path, line_0indexed, col_utf16, timeout=timeout
         )
 
-        # Ensure diagnostics have arrived
-        client.wait_for_elaboration(timeout=1.5)
-
         rendered = goal_result.get("rendered") if goal_result else None
         goals = goal_result.get("goals", []) if goal_result else []
 
-        # Check if goals are completed
-        is_done = False
-        if rendered:
-            clean_rendered = rendered.strip()
-            if "goals accomplished" in clean_rendered or "no goals" in clean_rendered:
-                is_done = True
-            elif len(goals) == 0 and not any(d.get("severity", 1) == 1 for d in client.diagnostics):
-                is_done = True
-        elif goal_result is not None and len(goals) == 0:
-            is_done = True
-
-        # Process compiler diagnostics (severity: 1=Error, 2=Warning, 3=Info, 4=Hint)
+        # Compiler diagnostics and 'sorry' detection.
         formatted_diags = []
         severity_map = {1: "Error", 2: "Warning", 3: "Info", 4: "Hint"}
+        has_errors = False
+        has_sorry = False
+
+        # Check if the target line explicitly contains 'sorry'
+        if re.search(r"\bsorry\b", target_line_content):
+            has_sorry = True
+
         for diag in client.diagnostics:
+            severity_num = diag.get("severity", 1)
+            msg = diag.get("message", "").strip()
+            if severity_num == 1:
+                has_errors = True
+            # Lean 4 warns when 'sorry' is used (e.g., "declaration uses 'sorry'")
+            if "declaration uses 'sorry'" in msg.lower() or "uses sorry" in msg.lower():
+                has_sorry = True
+
             d_range = diag.get("range", {})
             start_pos = d_range.get("start", {})
-            d_line = start_pos.get("line", 0) + 1  # convert to 1-indexed
+            d_line = start_pos.get("line", 0) + 1  # 1-indexed
             d_col = start_pos.get("character", 0) + 1
-            severity_num = diag.get("severity", 1)
             formatted_diags.append(
                 {
                     "line": d_line,
                     "column": d_col,
                     "severity": severity_map.get(severity_num, "Error"),
-                    "message": diag.get("message", "").strip(),
+                    "message": msg,
                 }
             )
+
+        # Determine if the proof is complete.
+        # CRITICAL RULES:
+        # 1. If compiler errors (severity: 1) exist, elaboration failed. Never mark as done.
+        # 2. If 'sorry' is present (either in diagnostics or on the line), the proof is an incomplete placeholder.
+        #    'sorry' artificially discharges goals, causing plainGoal to return "no goals", which must NOT be marked as is_done.
+        is_done = False
+        if not has_errors and not has_sorry:
+            if rendered:
+                clean_rendered = rendered.strip()
+                if "goals accomplished" in clean_rendered or "no goals" in clean_rendered:
+                    is_done = True
+                elif len(goals) == 0:
+                    is_done = True
+            elif goal_result is not None and len(goals) == 0:
+                is_done = True
 
         return {
             "success": True,
@@ -355,6 +390,7 @@ def extract_goal_and_diagnostics(
             "rendered": rendered,
             "goals": goals,
             "is_done": is_done,
+            "has_sorry": has_sorry,
             "diagnostics": formatted_diags,
             "error": None,
         }
@@ -366,6 +402,7 @@ def extract_goal_and_diagnostics(
             "rendered": None,
             "goals": [],
             "is_done": False,
+            "has_sorry": False,
             "diagnostics": [],
         }
     finally:

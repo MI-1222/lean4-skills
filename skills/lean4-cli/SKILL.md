@@ -106,6 +106,23 @@ graph TD
 - **Characteristics**: Compiles the target module and updates its `.olean` file.
 - **Use case**: When another file in the project depends on changes made in the current file.
 
+#### Module Path Conversion & Escaping Rules (`«...»`)
+
+When targeting a specific module with `lake build`, file paths are converted to dot-separated Lean hierarchical identifiers (`/` → `.`, omitting `.lean`):
+`MathProof/Algebra/Basic.lean` → `MathProof.Algebra.Basic`
+
+**Critical: Handling Hyphens and Non-Standard Directory/File Names**:
+Lean 4 identifiers follow standard language grammar: hyphens (`-`) are parsed as minus/subtraction operators, and identifiers cannot start with digits or contain special punctuation. If a directory or file in the path contains a hyphen (e.g. `my-submodule`), running `lake build` with a plain string will fail with an `unknown target` error:
+
+- ❌ **Fails**: `lake build MathProof.Data.my-submodule.Basic` (Lake parses `-` as an operator)
+- ✅ **Correct (Escaped with French Quotes `«...»`)**:
+  ```bash
+  lake build "MathProof.Data.«my-submodule».Basic" -q --log-level=info
+  ```
+
+> [!TIP]
+> In Lean 4, enclosing any string within guillemets (`«` and `»`, French quotation marks) escapes it as a valid atomic identifier (e.g., `«my-submodule»`, `«123-custom»`). In shell environments (bash/zsh), always wrap the full target string in double quotes (`"..."`) or single quotes to prevent the shell from misinterpreting special characters.
+
 ### Level 3: Project Gate (`lake build`)
 
 - **Command**: `lake build` (or `lake build -q --log-level=info` to reduce output tokens)

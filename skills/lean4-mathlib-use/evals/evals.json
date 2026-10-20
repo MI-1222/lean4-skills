@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "I have a Lean 4 file that starts with `import Mathlib`. It only proves a basic theorem about real numbers: `theorem real_pos (x : ℝ) : 0 < x^2 + 1`. Refactor the file according to Mathlib usage best practices: replace the monolithic import with minimal targeted submodules, add the mandatory autoImplicit setting, explain how `lake shake` would be used, and provide the clean refactored Lean code.",
-      "expected_output": "A refactored Lean 4 file replacing `import Mathlib` with targeted submodules (e.g., `Mathlib.Data.Real.Basic`, `Mathlib.Algebra.Order.Ring.Defs`, `Mathlib.Tactic.Linarith`), setting `set_option autoImplicit false`, explaining the role of `lake shake --fix` in eliminating redundant imports, and presenting a clean proof.",
+      "expected_output": "A refactored Lean 4 file replacing `import Mathlib` with targeted submodules (e.g., `Mathlib.Basic.Real.Basic`, `Mathlib.Algebra.Order.Ring.Defs`, `Mathlib.Tactic.Linarith`), setting `set_option autoImplicit false`, explaining the role of `lake shake --fix` in eliminating redundant imports, and presenting a clean proof.",
       "files": []
     },
     {
@@ -15,7 +15,7 @@
     },
     {
       "id": 3,
-      "prompt": "The following Lean 4 proof fails to compile because the agent tried to apply a cancellation lemma on real numbers without handling division by zero:\n\n```lean\nimport Mathlib.Data.Real.Basic\n\ntheorem field_div_cancel (x y : ℝ) : (x * y) / y = x := by\n  rw [mul_div_cancel]\n```\n\nExplain how Mathlib's total function design and junk values cause this failure, what hypothesis is missing, which lemma name with a subscript convention must be used, and provide the corrected theorem and proof.",
+      "prompt": "The following Lean 4 proof fails to compile because the agent tried to apply a cancellation lemma on real numbers without handling division by zero:\n\n```lean\nimport Mathlib.Basic.Real.Basic\n\ntheorem field_div_cancel (x y : ℝ) : (x * y) / y = x := by\n  rw [mul_div_cancel]\n```\n\nExplain how Mathlib's total function design and junk values cause this failure, what hypothesis is missing, which lemma name with a subscript convention must be used, and provide the corrected theorem and proof.",
       "expected_output": "An explanation of Mathlib's total function design (where `x / 0 = 0` as a junk value), noting that cancellation requires `hy : y ≠ 0` and the subscript-0 lemma `mul_div_cancel_right₀` (or `mul_div_cancel₀`), followed by the correct theorem statement and proof with `(hy : y ≠ 0)`.",
       "files": []
     }
