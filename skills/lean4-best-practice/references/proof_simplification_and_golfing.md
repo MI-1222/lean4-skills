@@ -62,11 +62,46 @@ omega
 
 #### Decision Tactic Cheat Sheet
 
-- **`omega`**: Presburger arithmetic on `ℕ`, `ℤ` (inequalities, addition, multiplication by constants, modulo).
-- **`linarith`**: Linear arithmetic on `ℚ`, `ℝ` (ordered rings/fields).
-- **`ring`**: Ring equalities (polynomial identities like $(a+b)^2 = a^2 + 2ab + b^2$ over any commutative ring).
-- **`gcongr`**: Generalized congruence for relations (e.g. proving $f(a) \le f(b)$ from $a \le b$ using monotonicity).
-- **`tauto`**: Propositional tautologies (conjunctions, disjunctions, negations).
+| Tactic           | Target Domain & Problem Class                        | Strengths                                                                       | Limitations                                                                              |
+| :--------------- | :--------------------------------------------------- | :------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------------- |
+| **`omega`**      | Presburger arithmetic on `ℕ`, `ℤ`                    | Linear inequalities, addition, constant multiplication, integer division/modulo | Fails on variable-by-variable products ($a \cdot b$), powers, roots, or opaque functions |
+| **`linarith`**   | Linear arithmetic on `ℚ`, `ℝ` (ordered rings/fields) | Linear combinations of inequalities, contradictions                             | Purely linear; cannot reason about nonlinear terms directly                              |
+| **`ring`**       | Commutative rings/semirings                          | Polynomial identities, algebraic simplification ($(a+b)^2 = a^2 + 2ab + b^2$)   | Equalities only; ignores inequalities and order relations                                |
+| **`nlinarith`**  | Nonlinear inequalities on `ℚ`, `ℝ`                   | Heuristic nonlinear reasoning (e.g., squares are non-negative $x^2 \ge 0$)      | Heuristic and slower; incomplete for arbitrary polynomials                               |
+| **`positivity`** | Non-negativity, positivity, non-zero tests           | Automatically proves `0 ≤ x`, `0 < x`, `x ≠ 0` from types and structures        | Verifies sign properties only; does not solve arbitrary inequalities                     |
+| **`gcongr`**     | Generalized congruence                               | Solves relations like $f(a) \le f(b)$ via monotonicity                          | Requires registered monotonicity lemmas (`@[gcongr]`)                                    |
+| **`tauto`**      | Propositional logic                                  | Tautologies involving `∧`, `∨`, `¬`, `→`, `↔`                                   | Propositional level only; does not unfold domain definitions                             |
+
+---
+
+#### Critical Boundaries & Pitfalls of `omega`
+
+While `omega` is the premier decision procedure for natural and integer arithmetic, be aware of its strict theoretical boundaries:
+
+1. **Nonlinear Terms Are Opaque**:
+   - `omega` cannot solve variable multiplication ($a \cdot b$), exponentials ($2^n$), or square roots.
+   - _Failure Example_: `theorem foo (n : ℕ) : n ≤ n * n` fails under `omega` alone because $n \cdot n$ is treated as an uninterpreted black box.
+   - _Fix_: Establish algebraic properties using lemmas or `nlinarith` / `positivity`, or perform case analysis (`cases n`).
+
+2. **Truncated Subtraction (Monus on `ℕ`)**:
+   - In `ℕ`, subtraction truncates at zero: $3 - 5 = 0$.
+   - Identities like $(a - b) + b = a$ require an explicit side-condition $b \le a$ (`Nat.sub_add_cancel`).
+   - When `omega` struggles with expressions containing `a - b`, supply the necessary boundary condition `have h : b ≤ a := ...` or rewrite with `Nat.sub_add_cancel` before calling `omega`.
+
+3. **Effective Multi-Tactic Combination Patterns**:
+   - **Polynomial expansion + Linear bound**: Use `ring` to expand or normalize equations, then feed the result into `linarith` or `omega`:
+     ```lean
+     have h_id : (x + 1)^2 = x^2 + 2 * x + 1 := by ring
+     ```
+   - **Positivity + Nonlinear inequalities**: Use `positivity` to discharge non-negativity side conditions when taking square roots or clearing denominators:
+     ```lean
+     have h_pos : 0 ≤ a * b := by positivity
+     ```
+   - **Monotonicity + Arithmetic**: Use `gcongr` to strip away monotone function applications, leaving clean arithmetic goals for `omega`:
+     ```lean
+     -- Target: a + c ≤ b + d
+     -- After gcongr: reduces to a ≤ b and c ≤ d, which omega solves
+     ```
 
 ### Pattern 4: Switching from Tactic Mode to Clean Term Mode
 
