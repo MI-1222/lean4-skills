@@ -138,5 +138,47 @@ Add hypothesis `(h : 2 ≤ n)` or `(h : 1 < n)` to the theorem signature:
 ```lean
 theorem corrected_theorem (n : ℕ) (hn : 2 ≤ n) : n < n * n
 ```
-
 ````
+
+---
+
+## 5. Epistemological Strictness: The Certification Ladder
+
+In mathematical theorem proving, an informal counterexample or an intuition that a statement is false is merely a **hypothesis** until certified by the Lean 4 type checker. Agents must classify the refutation status according to three strict tiers:
+
+```mermaid
+graph TD
+    Cand["Discovered Counterexample Witness"] --> Check["Formalize negation in Lean:<br/><code>theorem refutation : ¬ Target := by ...</code>"]
+    Check --> Elab{"Typechecks without sorry<br/>and standard axioms only?"}
+    Elab -- "Yes" --> St1["Status: REFUTED<br/>(Certified Mathematical Proof)"]
+    Elab -- "No (sorry remains or fails)" --> St2["Status: WITNESS_UNCERTIFIED<br/>(Hypothesis only)"]
+    Check -- "No witness found" --> St3["Status: INCONCLUSIVE"]
+```
+
+| Certification Status      | Definition & Invariants                                                                                                                                                                                                    | Required Agent Action                                                                    |
+| :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
+| **`REFUTED`**             | Lean 4 has typechecked a proof of `¬ Target` (or `∃ w, ¬ P w`) under `lake lean <file>` or `lake env lean <file>` without `sorry` and depending strictly on standard axioms (`propext`, `Classical.choice`, `Quot.sound`). | Report the claim as certified false. Provide the certified refutation lemma to the user. |
+| **`WITNESS_UNCERTIFIED`** | A candidate counterexample witness $w$ was identified (e.g. via boundary probing or Python), but the formal refutation proof is incomplete or contains `sorry`.                                                            | Present as an unverified hypothesis. Do NOT claim the theorem has been refuted.          |
+| **`INCONCLUSIVE`**        | Neither proof nor refutation could be synthesized within search limits.                                                                                                                                                    | Report obstacles encountered; request user guidance on missing mathematical lemmas.      |
+
+---
+
+## 6. The Append-Only Refutation Rule
+
+When refuting a target declaration in a shared codebase, agents must strictly follow the **Append-Only Rule**:
+
+1. **Never Erase or Overwrite the Target**: Do NOT delete the original declaration or overwrite its header. The original target represents the user's formalization task.
+2. **Append the Refutation Declaration**: Place the certified counterexample theorem immediately following the original target, appended with a clear suffix (e.g. `_counterexample` or `_refuted`):
+
+   ```lean
+   -- Keep original target declaration intact:
+   theorem my_target (n : ℕ) : n < n * n := by
+     sorry
+
+   -- Append certified refutation alongside it:
+   theorem my_target_counterexample : ∃ n : ℕ, ¬ (n < n * n) := by
+     use 0
+     decide
+   ```
+
+3. **Escalate to User**: Present the two declarations and the diagnosed hypothesis fix, waiting for explicit user approval before adjusting the original statement.

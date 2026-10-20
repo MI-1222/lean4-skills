@@ -106,3 +106,5 @@ graph TD
    Mixing up their domains is the #1 cause of arithmetic decision tactic failures.
 4. **Prefer `refine` over `exact` when debugging**:
    `refine` creates helpful subgoals for any missing conditions, whereas `exact` immediately throws a fatal type mismatch.
+5. **Epistemological Strictness in Refutation (Append-Only Rule)**:
+   When disproving a target, report `REFUTED` strictly after Lean certifies the negation under standard axioms. Treat informal witnesses as `WITNESS_UNCERTIFIED`. Never overwrite the original theorem declaration—always append the certified counterexample theorem alongside it.

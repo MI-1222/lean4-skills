@@ -225,6 +225,10 @@ import MyProject.MyModule
 EOF
 ```
 
+For full details on handling private declarations, namespace scope stacks, eliminating synthetic axioms, and `native_decide` / `Lean.ofReduceBool` caveats, consult the comprehensive guide:
+
+- [Soundness and Axiom Audit Guide](references/soundness_and_axiom_audit.md)
+
 ---
 
 ## 6. Structured Diagnostics Parsing (`parse_diagnostics.py`)
