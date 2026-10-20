@@ -84,30 +84,14 @@ Load only the specialized guide matching the diagnosed error category:
 
 `lean4-proof-repair` works directly alongside adjacent skills:
 
-```text
-                  +---------------------------+
-                  |    Compiler / Lake Error  |
-                  +-------------+-------------+
-                                |
-                                v
-               [lean4-cli / parse_diagnostics.py]
-                                |
-                                v
-          +---------------------+---------------------+
-          |                                           |
-          v                                           v
-[lean4-interactive-proof]                   [lean4-proof-repair]
-  Query live goal state                      Match Triage Matrix &
-  at failing line (LSP)                      consult specialized guide
-          |                                           |
-          +---------------------+---------------------+
-                                |
-                                v
-                    [Apply Prescribed Patch]
-                                |
-                                v
-               [lean4-syntax / check_syntax.py]
-                  Fast elaboration validation
+```mermaid
+graph TD
+    A["Compiler / Lake Error"] --> B["lean4-cli / parse_diagnostics.py"]
+    B --> C["lean4-interactive-proof<br/>Query live goal state at failing line （LSP）"]
+    B --> D["lean4-proof-repair<br/>Match Triage Matrix & consult specialized guide"]
+    C --> E["Apply Prescribed Patch"]
+    D --> E
+    E --> F["lean4-syntax / check_syntax.py<br/>Fast elaboration validation"]
 ```
 
 ---

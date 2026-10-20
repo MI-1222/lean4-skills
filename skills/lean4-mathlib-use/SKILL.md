@@ -14,18 +14,13 @@ This skill provides an authoritative guide for AI agents and human practitioners
 
 Adhering to these four foundational practices ensures maintainable, performant, and linter-compliant formalizations across Mathlib:
 
-```text
-                  +-----------------------------------------------+
-                  |        Lean 4 Mathlib Usage Principles        |
-                  +-----------------------+-----------------------+
-                                          |
-        +-------------------+-------------+-------------+--------------------+
-        |                   |                           |                    |
-        v                   v                           v                    v
- [1. Minimal Imports] [2. Typeclass Guiding]    [3. Junk Value Hygiene] [4. Classical Scoping]
-  No `import Mathlib`  `autoImplicit false`      Total function design   `open scoped Classical in`
-  Domain submodules    Explicit type anchors     Side conditions early   `classical` tactic
-  `lake shake --fix`   Plain `have` / `omit`     `₀` subscript lemmas    `open scoped` notations
+```mermaid
+graph TD
+    Root["Lean 4 Mathlib Usage Principles"]
+    Root --> P1["1. Minimal Imports<br/>No `import Mathlib` / Domain submodules / `lake shake`"]
+    Root --> P2["2. Typeclass Guiding<br/>`autoImplicit false` / Explicit type anchors / Plain `have` & `omit`"]
+    Root --> P3["3. Junk Value Hygiene<br/>Total function design / Side conditions early / `₀` subscript lemmas"]
+    Root --> P4["4. Classical Scoping<br/>`open scoped Classical in` / `classical` tactic / `open scoped` notations"]
 ```
 
 1. **Minimal & Targeted Imports**: Never rely on monolithic `import Mathlib`. Select domain-specific modules (`.Defs`, `.Basic`) to minimize elaboration footprint and cache invalidation. Prune redundant imports using `lake shake`.
@@ -82,33 +77,14 @@ For comprehensive technical explanations, domain-by-domain modules, and code pat
 
 `lean4-mathlib-use` coordinates with the full suite of specialized Lean 4 skills:
 
-```text
-                     [lean4-mathlib-use]
-              (Imports, Typeclasses, Classical)
-                             |
-         +-------------------+-------------------+
-         |                                       |
-         v                                       v
-[lean4-mathlib-search]                 [lean4-best-practice]
-  Find exact lemma names                 Proof structure & tactics
-  via Loogle & signatures                (`simp` rules, `calc` chains)
-         |                                       |
-         +-------------------+-------------------+
-                             |
-                             v
-                 [lean4-interactive-proof]
-                   Goal exploration with
-                   `scripts/lean_goal.py`
-                             |
-                             v
-                    [lean4-proof-repair]
-                 Diagnose type mismatches &
-                 failed rewrites / timeouts
-                             |
-                             v
-                        [lean4-cli]
-                 Fast module checks via
-                 `lake env lean` & diagnostics
+```mermaid
+graph TD
+    A["lean4-mathlib-use<br/>Imports, Typeclasses, Classical"] --> B["lean4-mathlib-search<br/>Find exact lemma names via Loogle & signatures"]
+    A --> C["lean4-best-practice<br/>Proof structure & tactics （`simp` rules, `calc` chains）"]
+    B --> D["lean4-interactive-proof<br/>Goal exploration with `scripts/lean_goal.py`"]
+    C --> D
+    D --> E["lean4-proof-repair<br/>Diagnose type mismatches & failed rewrites / timeouts"]
+    E --> F["lean4-cli<br/>Fast module checks via `lake env lean` & diagnostics"]
 ```
 
 - **Before Searching**: Configure minimal imports with `skills/lean4-mathlib-use` so search tools like `skills/lean4-mathlib-search` operate on focused namespaces.
