@@ -62,15 +62,16 @@ omega
 
 #### Decision Tactic Cheat Sheet
 
-| Tactic           | Target Domain & Problem Class                        | Strengths                                                                       | Limitations                                                                              |
-| :--------------- | :--------------------------------------------------- | :------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------------- |
-| **`omega`**      | Presburger arithmetic on `ℕ`, `ℤ`                    | Linear inequalities, addition, constant multiplication, integer division/modulo | Fails on variable-by-variable products ($a \cdot b$), powers, roots, or opaque functions |
-| **`linarith`**   | Linear arithmetic on `ℚ`, `ℝ` (ordered rings/fields) | Linear combinations of inequalities, contradictions                             | Purely linear; cannot reason about nonlinear terms directly                              |
-| **`ring`**       | Commutative rings/semirings                          | Polynomial identities, algebraic simplification ($(a+b)^2 = a^2 + 2ab + b^2$)   | Equalities only; ignores inequalities and order relations                                |
-| **`nlinarith`**  | Nonlinear inequalities on `ℚ`, `ℝ`                   | Heuristic nonlinear reasoning (e.g., squares are non-negative $x^2 \ge 0$)      | Heuristic and slower; incomplete for arbitrary polynomials                               |
-| **`positivity`** | Non-negativity, positivity, non-zero tests           | Automatically proves `0 ≤ x`, `0 < x`, `x ≠ 0` from types and structures        | Verifies sign properties only; does not solve arbitrary inequalities                     |
-| **`gcongr`**     | Generalized congruence                               | Solves relations like $f(a) \le f(b)$ via monotonicity                          | Requires registered monotonicity lemmas (`@[gcongr]`)                                    |
-| **`tauto`**      | Propositional logic                                  | Tautologies involving `∧`, `∨`, `¬`, `→`, `↔`                                   | Propositional level only; does not unfold domain definitions                             |
+| Tactic           | Target Domain & Problem Class                        | Strengths                                                                       | Limitations                                                                                |
+| :--------------- | :--------------------------------------------------- | :------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------- |
+| **`omega`**      | Presburger arithmetic on `ℕ`, `ℤ`                    | Linear inequalities, addition, constant multiplication, integer division/modulo | Fails on variable-by-variable products ($a \cdot b$), powers, roots, or opaque functions   |
+| **`linarith`**   | Linear arithmetic on `ℚ`, `ℝ` (ordered rings/fields) | Linear combinations of inequalities, contradictions                             | Purely linear; cannot reason about nonlinear terms directly                                |
+| **`ring`**       | Commutative rings/semirings                          | Polynomial identities, algebraic simplification ($(a+b)^2 = a^2 + 2ab + b^2$)   | Equalities only; ignores inequalities and order relations                                  |
+| **`nlinarith`**  | Nonlinear inequalities on `ℚ`, `ℝ`                   | Heuristic nonlinear reasoning (e.g., squares are non-negative $x^2 \ge 0$)      | Heuristic and slower; incomplete for arbitrary polynomials                                 |
+| **`positivity`** | Non-negativity, positivity, non-zero tests           | Automatically proves `0 ≤ x`, `0 < x`, `x ≠ 0` from types and structures        | Verifies sign properties only; does not solve arbitrary inequalities                       |
+| **`gcongr`**     | Generalized congruence                               | Solves relations like $f(a) \le f(b)$ via monotonicity                          | Requires registered monotonicity lemmas (`@[gcongr]`)                                      |
+| **`grind`**      | SMT-style mixed constraints (Lean 4 Core)            | Congruence closure, E-matching, case-splitting, cross-domain equality/algebra   | Search space can explode on unconstrained case-splitting; use `(splits := 0)` as safe test |
+| **`tauto`**      | Propositional logic                                  | Tautologies involving `∧`, `∨`, `¬`, `→`, `↔`                                   | Propositional level only; does not unfold domain definitions                               |
 
 ---
 
@@ -87,6 +88,48 @@ While `omega` is the premier decision procedure for natural and integer arithmet
    - In `ℕ`, subtraction truncates at zero: $3 - 5 = 0$.
    - Identities like $(a - b) + b = a$ require an explicit side-condition $b \le a$ (`Nat.sub_add_cancel`).
    - When `omega` struggles with expressions containing `a - b`, supply the necessary boundary condition `have h : b ≤ a := ...` or rewrite with `Nat.sub_add_cancel` before calling `omega`.
+
+---
+
+#### Using the `grind` SMT-Style Automation Tactic
+
+`grind` (built into Lean 4 Core since `v4.14.0`, enhanced with `grind?` in `v4.17.0+`) brings SMT-style solving into Lean proofs by coordinating congruence closure, E-matching, case-splitting, and algebraic sub-solvers.
+
+##### Decision Flow: When to Reach for `grind`
+
+```text
+Can simp close it?
+├─ Yes -> use simp / simp only
+└─ No
+   ├─ Integer-linear only? -> omega
+   ├─ Real/rational-linear only? -> linarith
+   ├─ Nonlinear arithmetic? -> nlinarith / positivity
+   ├─ Pure algebraic ring identity? -> ring
+   └─ Mixed constraints (equalities + inequalities + finite cases)? -> grind
+```
+
+##### Practical Usage & Search Control
+
+1. **Ask for Suggestions**:
+   ```lean
+   -- Query grind for the minimal lemma and parameter set:
+   grind?
+   ```
+2. **Safe Test with Bounded Splitting**:
+   To prevent combinatorial explosions during case-splitting, test with zero splits first:
+   ```lean
+   -- Closes the goal if solvable without branching:
+   grind (splits := 0)
+   ```
+3. **Restrict Lemma Pool**:
+   ```lean
+   -- Use only specified lemmas:
+   grind only [h1, h2]
+   -- Exclude problematic unfolding:
+   grind -splitIte -splitMatch
+   ```
+
+---
 
 3. **Effective Multi-Tactic Combination Patterns**:
    - **Polynomial expansion + Linear bound**: Use `ring` to expand or normalize equations, then feed the result into `linarith` or `omega`:

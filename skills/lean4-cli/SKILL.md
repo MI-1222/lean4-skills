@@ -1,24 +1,25 @@
 ---
 name: lean4-cli
-description: Manage Lean 4 and Lake CLI workflows, build targets, fetch pre-built Mathlib caches, execute fast file-level verification, and parse compiler diagnostic logs into structured JSON. Use whenever running `lake build`, `lake env lean`, or `lake exe cache get`, diagnosing compilation errors, checking Lean/Elan toolchain health, or automating project build pipelines.
+description: Manage Lean 4 and Lake CLI workflows, build targets, fetch pre-built Mathlib caches, execute fast file-level verification, audit proof soundness and axioms via `#print axioms`, and parse compiler diagnostic logs into structured JSON. Use whenever running `lake build`, `lake env lean`, or `lake exe cache get`, verifying proof soundness without `sorryAx`, diagnosing compilation errors, checking Lean/Elan toolchain health, or automating project build pipelines.
 ---
 
 # Lean 4 CLI and Lake Build Management
 
-This skill provides operational workflows and automated tools for managing Lean 4 projects using Lake (the Lean build tool) and Elan (the Lean version manager). It guides agents in fetching pre-compiled Mathlib caches, executing fast file-level type checks, running incremental or full project builds, and parsing compiler diagnostics into structured JSON.
+This skill provides operational workflows and automated tools for managing Lean 4 projects using Lake (the Lean build tool) and Elan (the Lean version manager). It guides agents in fetching pre-compiled Mathlib caches, executing fast file-level type checks, running incremental or full project builds, auditing proof soundness via `#print axioms`, and parsing compiler diagnostics into structured JSON.
 
 ---
 
 ## 1. Quick Reference: Common Commands
 
-| Command                | Purpose                                    | When to Use                                                          |
-| :--------------------- | :----------------------------------------- | :------------------------------------------------------------------- |
-| `lake exe cache get`   | Fetch Mathlib pre-compiled `.olean` cache  | **Mandatory** on fresh workspace setup or after modifying `lakefile` |
-| `lake exe cache get!`  | Force re-download of Mathlib cache         | When `.olean` files are corrupted or type errors occur in Mathlib    |
-| `lake env lean <file>` | Fast single-file type checking             | **Primary verification loop** while actively editing Lean code       |
-| `lake build <Module>`  | Build specific library module or target    | After cross-file modifications or adding new imports                 |
-| `lake build`           | Full project verification                  | Checkpoint gate or before completing the proof task                  |
-| `elan show`            | Show current active toolchain and override | When inspecting Lean version consistency or environment issues       |
+| Command                   | Purpose                                    | When to Use                                                          |
+| :------------------------ | :----------------------------------------- | :------------------------------------------------------------------- |
+| `lake exe cache get`      | Fetch Mathlib pre-compiled `.olean` cache  | **Mandatory** on fresh workspace setup or after modifying `lakefile` |
+| `lake exe cache get!`     | Force re-download of Mathlib cache         | When `.olean` files are corrupted or type errors occur in Mathlib    |
+| `lake env lean <file>`    | Fast single-file type checking             | **Primary verification loop** while actively editing Lean code       |
+| `lake build <Module>`     | Build specific library module or target    | After cross-file modifications or adding new imports                 |
+| `lake build`              | Full project verification                  | Checkpoint gate or before completing the proof task                  |
+| `#print axioms <theorem>` | Audit proof soundness and axioms           | **Final gate** to ensure no `sorryAx` or custom axioms exist         |
+| `elan show`               | Show current active toolchain and override | When inspecting Lean version consistency or environment issues       |
 
 ---
 
@@ -76,34 +77,76 @@ lake exe cache get
 
 ---
 
-## 4. Verification Ladder: Fast File Gate vs. Project Gate
+## 4. Verification Ladder: Fast File Gate to Soundness Gate
 
-To maintain fast turnaround times and avoid burning tokens and computational resources, follow this verification ladder:
+To maintain fast turnaround times and guarantee strict mathematical rigor, follow this multi-tier verification ladder (from lightest to full verification):
+
+| Tier                               | Tool / Command                      | Dependency Handling                        | Target `.olean` Written | Speed      | Best For                                                      |
+| :--------------------------------- | :---------------------------------- | :----------------------------------------- | :---------------------- | :--------- | :------------------------------------------------------------ |
+| **Tier 0: Per-Edit**               | `lean_goal.py` / LSP diagnostics    | In-memory LSP server state                 | No                      | Sub-second | Interactive goal inspection after each tactic line            |
+| **Tier 1: Fast File Gate**         | `lake env lean <path/to/File.lean>` | Reads **existing pre-built `.olean`** only | No                      | Seconds    | Fast syntax/type check when upstream imports are unchanged    |
+| **Tier 1b: Dependency-Aware Gate** | `lake lean <path/to/File.lean>`     | **Builds stale imports**, then checks file | No                      | Fast       | File check after editing upstream imports in the same session |
+| **Tier 2: Module Build**           | `lake build <Module>`               | Rebuilds dependencies + target             | **Yes**                 | Moderate   | Writing module `.olean` artifacts for downstream consumers    |
+| **Tier 3: Project Gate**           | `lake build`                        | Full workspace build graph                 | **Yes**                 | Minutes    | Pre-commit checkpoint and whole-project validation            |
+| **Tier 4: Soundness Gate**         | `#print axioms <Theorem>`           | Kernel check on environment                | N/A                     | Sub-second | Mandatory audit: eliminate `sorryAx` and synthetic axioms     |
 
 ```mermaid
 graph TD
-    A["Edit Lean Source File"] --> B["File Gate: Fast Check<br/><code>lake env lean &lt;file&gt;</code>"]
-    B --> C{"File check passed?"}
-    C -- "Errors" --> D["Inspect diagnostics and fix tactic/proof"]
-    D --> B
-    C -- "Passed" --> E{"Cross-file edits or imports modified?"}
-    E -- "Yes" --> F["Module Gate: Incremental Build<br/><code>lake build &lt;Target&gt; -q --log-level=info</code>"]
-    E -- "No" --> G["Continue editing or Final Verification"]
-    F --> G
-    G --> H["Project Gate: Complete Verification<br/><code>lake build</code>"]
+    A["Edit Lean Source File"] --> B{"Were upstream imported files<br/>modified in this session?"}
+    B -- "No" --> C["Level 1: Fast File Gate<br/><code>lake env lean &lt;file&gt;</code>"]
+    B -- "Yes" --> D["Level 1b: Dependency-Aware Gate<br/><code>lake lean &lt;file&gt;</code>"]
+    C --> E{"Check passed?"}
+    D --> E
+    E -- "Errors" --> F["Inspect diagnostics & repair proof"]
+    F --> A
+    E -- "Passed" --> G{"Other files depend on this module?"}
+    G -- "Yes" --> H["Level 2: Module Build<br/><code>lake build &lt;Target&gt;</code>"]
+    G -- "No" --> I["Level 3: Project Gate<br/><code>lake build</code>"]
+    H --> I
+    I --> J{"Full build succeeds?"}
+    J -- "No" --> F
+    J -- "Yes" --> K["Level 4: Soundness Gate<br/><code>#print axioms &lt;Theorem&gt;</code>"]
+    K --> L{"Only standard axioms?<br/>(propext, choice, quot)"}
+    L -- "No (sorryAx or axiom)" --> F
+    L -- "Yes" --> M["Proof Verified & Sound"]
 ```
 
 ### Level 1: Fast File Gate (`lake env lean <file>`)
 
 - **Command**: `lake env lean <path/to/File.lean>`
-- **Characteristics**: Evaluates the specified file in the environment configured by Lake. It uses existing `.olean` binaries of imported modules and **does not** trigger recompilation of dependencies.
+- **Characteristics**: Elaborates the single source file against the currently built import environment. It reads existing `.olean` binaries and **does not rebuild** imported modules.
 - **Speed**: Seconds (vs. minutes for `lake build`).
-- **Use case**: Run this immediately after editing a theorem or proof step.
+- **Use case**: Run immediately after editing a local theorem or proof step when upstream imported files have not changed.
+
+### The Stale `.olean` Cache Trap (File Gate Scope)
+
+> [!WARNING]
+> `lake env lean <File.lean>` elaborates against the **compiled `.olean` binaries** of imported modules, NOT their raw source code.
+> If an imported module was edited in the same session without being recompiled, the file gate can produce:
+>
+> 1. **False Pass**: The file gate succeeds because it reads the old `.olean` where a modified or removed upstream definition still exists. The failure only surfaces later during full `lake build`.
+> 2. **False Failure**: The file gate fails because it cannot see a new lemma or signature change made in the upstream `.lean` source file, leading to confusion and unnecessary debugging.
+
+#### Recovery Protocols for Cross-File Edits
+
+When editing across multiple files or modifying upstream dependencies, choose one of these two recovery paths:
+
+1. **Path A (`lake lean <file>`, Recommended)**:
+   ```bash
+   lake lean path/to/File.lean
+   ```
+   `lake lean` is dependency-aware: it automatically recompiles any modified upstream imports first, then elaborates the target file. Crucially, it does **not** write the target file's own `.olean`, keeping the check fast and avoiding artifact pollution if the file is later rolled back.
+2. **Path B (Explicit Rebuild)**:
+   Rebuild the modified dependency first, then run `lake env lean`:
+   ```bash
+   lake build "MathProof.Data.UpstreamModule" -q --log-level=info
+   lake env lean path/to/DownstreamFile.lean
+   ```
 
 ### Level 2: Incremental Module Build (`lake build <Module>`)
 
 - **Command**: `lake build MathProof.MyModule -q --log-level=info`
-- **Characteristics**: Compiles the target module and updates its `.olean` file.
+- **Characteristics**: Compiles the target module and writes its `.olean` file to disk so downstream modules can consume it.
 - **Use case**: When another file in the project depends on changes made in the current file.
 
 #### Module Path Conversion & Escaping Rules (`«...»`)
@@ -126,12 +169,69 @@ Lean 4 identifiers follow standard language grammar: hyphens (`-`) are parsed as
 ### Level 3: Project Gate (`lake build`)
 
 - **Command**: `lake build` (or `lake build -q --log-level=info` to reduce output tokens)
-- **Characteristics**: Compiles all targets, verifies consistency, and executes linters if configured.
-- **Use case**: Final verification gate before committing or finishing a task.
+- **Characteristics**: Compiles all targets across the workspace, verifies inter-module consistency, and executes linters if configured.
+- **Use case**: Checkpoint gate before considering work finished or handing off a completed proof.
+
+> [!NOTE]
+> **Beware of the `[N/M]` Progress Counter**:
+> Lake dynamically discovers dependencies during compilation, causing the denominator $M$ to increase mid-build (e.g., jumping from `[120/150]` to `[120/7800]`). The fraction is not a linear percentage estimate; gauge timeouts and progress by wall-clock time and active compiler output rather than the step count.
+
+### Level 4: Soundness Gate (`#print axioms <Theorem>`)
+
+- **Command**: `#print axioms <TheoremName>` (evaluated at the bottom of the file or via stdin)
+- **Characteristics**: Verifies that the completed proof depends strictly on Lean 4 / Mathlib's legitimate foundation and contains no illicit shortcuts or unproven premises.
+- **Use case**: **Mandatory** before concluding any formalization task.
 
 ---
 
-## 5. Structured Diagnostics Parsing (`parse_diagnostics.py`)
+## 5. Soundness & Axiom Verification (`#print axioms`)
+
+A proof that compiles cleanly can still be mathematically unsound if it inadvertently depends on unresolved `sorry` statements or synthetic axioms introduced during experimentation.
+
+### Standard vs. Illicit Axioms
+
+| Axiom Class                | Specific Axioms                                                                         | Assessment                                                        |
+| :------------------------- | :-------------------------------------------------------------------------------------- | :---------------------------------------------------------------- |
+| **Standard Mathlib Found** | `propext`<br/>`Classical.choice`<br/>`Quot.sound` / `quot.sound`                        | **ACCEPTABLE**: Foundation of classical mathematics in Lean 4.    |
+| **Residual Sorry**         | `sorryAx`                                                                               | **STRICTLY FORBIDDEN**: An unproven `sorry` remains in the proof. |
+| **Custom / Synthetic**     | Any identifier declared via `axiom ...` (e.g. `my_axiom`, `unproved_helper_hypothesis`) | **STRICTLY FORBIDDEN**: Proof cheats by postulating claims.       |
+
+### How to Run Axiom Audits
+
+#### Method 1: Inline Verification (Recommended for Quick Checks)
+
+Temporarily append `#print axioms <TheoremName>` to the bottom of the `.lean` file and run:
+
+```bash
+lake env lean path/to/File.lean
+```
+
+**Example Output (Sound Proof):**
+
+```text
+'my_theorem' depends on axioms: [propext, Classical.choice, Quot.sound]
+```
+
+If you see `sorryAx` or any custom identifier, the proof is **not complete**. Immediately remove the temporary `#print axioms` line after inspection.
+
+#### Method 2: Stdin One-Liner (No File Modification)
+
+Run without editing the source file:
+
+```bash
+lake env lean --run - <<EOF
+import MyProject.MyModule
+#print axioms MyProject.MyModule.my_theorem
+EOF
+```
+
+For full details on handling private declarations, namespace scope stacks, eliminating synthetic axioms, and `native_decide` / `Lean.ofReduceBool` caveats, consult the comprehensive guide:
+
+- [Soundness and Axiom Audit Guide](references/soundness_and_axiom_audit.md)
+
+---
+
+## 6. Structured Diagnostics Parsing (`parse_diagnostics.py`)
 
 The skill bundles `scripts/parse_diagnostics.py`, a zero-dependency script using only the Python standard library. It parses console outputs from `lake` and `lean` (including multi-line errors and ANSI color sequences) and returns a structured JSON payload.
 

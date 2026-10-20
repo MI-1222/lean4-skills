@@ -1,6 +1,6 @@
 ---
 name: lean4-proof-repair
-description: Comprehensive diagnosis and repair guide for compiler errors, elaboration failures, and tactic breakdowns in Lean 4 mathematical proofs. Use whenever encountering or fixing Lean 4 errors, including `type mismatch`, `motive is not type correct`, `failed to synthesize instance`, `maximum number of heartbeats exceeded`, `tactic '...' failed` (`linarith`, `omega`, `ring`, `aesop`, `exact`, etc.), `unsolved goals`, or `unknown identifier`. Provides instant triage rules, progressive reference paths, and systematic correction protocols.
+description: Comprehensive diagnosis and repair guide for compiler errors, elaboration failures, tactic breakdowns, and unprovable goals in Lean 4 mathematical proofs. Use whenever encountering or fixing Lean 4 errors, including `type mismatch`, `synthesized: ..., inferred: ...` (instance pollution), `motive is not type correct`, `failed to synthesize instance`, `maximum number of heartbeats exceeded`, `tactic '...' failed` (`linarith`, `omega`, `ring`, `grind`, `aesop`, `exact`, etc.), `unsolved goals`, `unknown identifier`, or persistent proof failures requiring falsification and counterexample search. Provides instant triage rules, progressive reference paths, and systematic correction protocols.
 ---
 
 # Lean 4 Proof Repair Guide
@@ -15,18 +15,21 @@ When formalizing mathematical proofs, compiler failures are inevitable. Rather t
 
 Find your error message below to identify the root cause and immediate remedy:
 
-| Error Signature                         | Core Mechanism                                               | Immediate Remedy                                                                | Reference Guide                                                   |
-| :-------------------------------------- | :----------------------------------------------------------- | :------------------------------------------------------------------------------ | :---------------------------------------------------------------- |
-| `type mismatch`                         | Incompatible types or missing coercions                      | Add coercion `↑x`, type hint `(x : T)`, or unfold via `change`/`dsimp`          | [type_mismatch.md](references/type_mismatch.md)                   |
-| `motive is not type correct`            | Dependent type blocked in `rw`                               | Use `subst`, `revert ...; rw; intro`, or switch to `simp_rw` / `congr!`         | [dependent_rewriting.md](references/dependent_rewriting.md)       |
-| `failed to synthesize instance`         | Missing typeclass in context or classical reasoning required | Add `[Class α]` to binders, `open scoped Classical`, or use `haveI`             | [instance_synthesis.md](references/instance_synthesis.md)         |
-| `maximum number of heartbeats (200000)` | Non-terminating `simp` loop or unbounded search              | Replace open `simp` with `simp only`, scope `linarith only [...]`, or sublemmas | [timeout_and_heartbeats.md](references/timeout_and_heartbeats.md) |
-| `tactic 'linarith' failed`              | Non-linear terms or discrete `ℕ`/`ℤ` variables               | Use `omega` for `ℕ`/`ℤ`; use `nlinarith` or `positivity` for non-linear `ℝ`     | [tactic_failures.md](references/tactic_failures.md)               |
-| `tactic 'omega' failed`                 | Real numbers or non-linear products                          | Use `linarith` for `ℝ`/`ℚ`; decompose non-linear terms                          | [tactic_failures.md](references/tactic_failures.md)               |
-| `tactic 'ring' failed`                  | Inequality goal or unexpanded hypothesis                     | Use `linarith`/`gcongr` for inequalities; `rw [h]` before `ring`                | [tactic_failures.md](references/tactic_failures.md)               |
-| `tactic 'exact' failed`                 | Incomplete arguments or small mismatch                       | Change `exact` to `refine ?_` to expose missing subgoals                        | [tactic_failures.md](references/tactic_failures.md)               |
-| `unsolved goals`                        | Missing case handling or stray goals                         | Insert `done` to expose remaining goals; isolate branches with `·`              | [unsolved_goals.md](references/unsolved_goals.md)                 |
-| `unknown identifier`                    | Unqualified name or missing Mathlib import                   | Add namespace prefix (e.g. `Nat.add_comm`) or `import Mathlib`                  | [unknown_identifier.md](references/unknown_identifier.md)         |
+| Error Signature                         | Core Mechanism                                               | Immediate Remedy                                                                  | Reference Guide                                                           |
+| :-------------------------------------- | :----------------------------------------------------------- | :-------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
+| `type mismatch`                         | Incompatible types or missing coercions                      | Add coercion `↑x`, type hint `(x : T)`, or unfold via `change`/`dsimp`            | [type_mismatch.md](references/type_mismatch.md)                           |
+| `synthesized: m, inferred: inst✝`       | Instance pollution (local binding shadows ambient instance)  | Pin ambient instance `[m0 : ...]`, pass ambient facts via `@`, or `omit [...]`    | [instance_synthesis.md](references/instance_synthesis.md)                 |
+| `motive is not type correct`            | Dependent type blocked in `rw`                               | Use `subst`, `revert ...; rw; intro`, or switch to `simp_rw` / `congr!`           | [dependent_rewriting.md](references/dependent_rewriting.md)               |
+| `failed to synthesize instance`         | Missing typeclass in context or classical reasoning required | Add `[Class α]` to binders, `open scoped Classical`, or anonymous `have : C`      | [instance_synthesis.md](references/instance_synthesis.md)                 |
+| `maximum number of heartbeats (200000)` | Non-terminating `simp` loop or unbounded search              | Replace open `simp` with `simp only`, scope `linarith only [...]`, or sublemmas   | [timeout_and_heartbeats.md](references/timeout_and_heartbeats.md)         |
+| `tactic 'linarith' failed`              | Non-linear terms or discrete `ℕ`/`ℤ` variables               | Use `omega` for `ℕ`/`ℤ`; use `nlinarith` or `positivity` for non-linear `ℝ`       | [tactic_failures.md](references/tactic_failures.md)                       |
+| `tactic 'omega' failed`                 | Real numbers or non-linear products                          | Use `linarith` for `ℝ`/`ℚ`; decompose non-linear terms                            | [tactic_failures.md](references/tactic_failures.md)                       |
+| `tactic 'ring' failed`                  | Inequality goal or unexpanded hypothesis                     | Use `linarith`/`gcongr` for inequalities; `rw [h]` before `ring`                  | [tactic_failures.md](references/tactic_failures.md)                       |
+| `tactic 'grind' failed`                 | Search space explosion or dominant single-domain problem     | Use `grind (splits := 0)`, query `grind?`, or switch to `omega`/`linarith`/`ring` | [tactic_failures.md](references/tactic_failures.md)                       |
+| `tactic 'exact' failed`                 | Incomplete arguments or small mismatch                       | Change `exact` to `refine ?_` to expose missing subgoals                          | [tactic_failures.md](references/tactic_failures.md)                       |
+| `unsolved goals`                        | Missing case handling or stray goals                         | Insert `done` to expose remaining goals; isolate branches with `·`                | [unsolved_goals.md](references/unsolved_goals.md)                         |
+| `unknown identifier`                    | Unqualified name or missing Mathlib import                   | Add namespace prefix (e.g. `Nat.add_comm`) or `import Mathlib`                    | [unknown_identifier.md](references/unknown_identifier.md)                 |
+| **Persistent failure (3+ attempts)**    | Underlying claim is mathematically false or lacks premise    | Probe boundary values ($0, 1, \emptyset$); test negation `¬ Target`               | [falsification_and_disproof.md](references/falsification_and_disproof.md) |
 
 ---
 
@@ -50,6 +53,7 @@ Determine which category the error belongs to:
 - **Type/Elaboration error**: Occurs before tactics execute (syntax, unknown identifier, type mismatch, instance synthesis).
 - **Tactic progress error**: The tactic cannot advance the goal (motive failure, decision procedure failure, timeout).
 - **Tactic termination error**: Tactics ran out of steps or left hanging goals (`unsolved goals`, unsolved metavariables).
+- **Semantic / Falsity suspicion**: Tactics repeatedly fail with no progress; proposition may be false or missing hypotheses (switch to counterexample search).
 
 ### Stage 3: Consult Detailed Reference
 
@@ -59,9 +63,10 @@ Load only the specialized guide matching the diagnosed error category:
 - For `rw` failing with dependent types: see [dependent_rewriting.md](references/dependent_rewriting.md).
 - For missing `Decidable`, `Fintype`, or algebraic instances: see [instance_synthesis.md](references/instance_synthesis.md).
 - For `simp` loops and 200,000 heartbeats limits: see [timeout_and_heartbeats.md](references/timeout_and_heartbeats.md).
-- For `omega`, `linarith`, `ring`, `aesop`, `gcongr` failures: see [tactic_failures.md](references/tactic_failures.md).
+- For `omega`, `linarith`, `ring`, `grind`, `aesop`, `gcongr` failures: see [tactic_failures.md](references/tactic_failures.md).
 - For unclosed goals and branching errors: see [unsolved_goals.md](references/unsolved_goals.md).
 - For naming and import lookup: see [unknown_identifier.md](references/unknown_identifier.md).
+- For persistent failures and counterexample refutation: see [falsification_and_disproof.md](references/falsification_and_disproof.md).
 
 ### Stage 4: Apply & Verify the Patch
 
@@ -79,30 +84,14 @@ Load only the specialized guide matching the diagnosed error category:
 
 `lean4-proof-repair` works directly alongside adjacent skills:
 
-```text
-                  +---------------------------+
-                  |    Compiler / Lake Error  |
-                  +-------------+-------------+
-                                |
-                                v
-               [lean4-cli / parse_diagnostics.py]
-                                |
-                                v
-          +---------------------+---------------------+
-          |                                           |
-          v                                           v
-[lean4-interactive-proof]                   [lean4-proof-repair]
-  Query live goal state                      Match Triage Matrix &
-  at failing line (LSP)                      consult specialized guide
-          |                                           |
-          +---------------------+---------------------+
-                                |
-                                v
-                    [Apply Prescribed Patch]
-                                |
-                                v
-               [lean4-syntax / check_syntax.py]
-                  Fast elaboration validation
+```mermaid
+graph TD
+    A["Compiler / Lake Error"] --> B["lean4-cli / parse_diagnostics.py"]
+    B --> C["lean4-interactive-proof<br/>Query live goal state at failing line （LSP）"]
+    B --> D["lean4-proof-repair<br/>Match Triage Matrix & consult specialized guide"]
+    C --> E["Apply Prescribed Patch"]
+    D --> E
+    E --> F["lean4-syntax / check_syntax.py<br/>Fast elaboration validation"]
 ```
 
 ---
@@ -117,3 +106,5 @@ Load only the specialized guide matching the diagnosed error category:
    Mixing up their domains is the #1 cause of arithmetic decision tactic failures.
 4. **Prefer `refine` over `exact` when debugging**:
    `refine` creates helpful subgoals for any missing conditions, whereas `exact` immediately throws a fatal type mismatch.
+5. **Epistemological Strictness in Refutation (Append-Only Rule)**:
+   When disproving a target, report `REFUTED` strictly after Lean certifies the negation under standard axioms. Treat informal witnesses as `WITNESS_UNCERTIFIED`. Never overwrite the original theorem declaration—always append the certified counterexample theorem alongside it.

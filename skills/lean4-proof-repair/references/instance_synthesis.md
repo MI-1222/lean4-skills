@@ -59,19 +59,16 @@ The theorem statement forgot to declare that a type variable satisfies a structu
 
 ---
 
-### Scenario 3: Local Temporary Instance (`haveI` / `letI`)
+### Scenario 3: Local Instance in Proof (Anonymous `have` vs `haveI`)
 
 When an instance is constructed dynamically within a proof rather than globally available.
 
 - **Symptom**: An instance was proven via `have h : Fintype s := ...`, but downstream tactics still complain that `Fintype s` cannot be synthesized.
-- **Why**: Standard `have` puts the hypothesis into the local context as an ordinary variable, not into the typeclass cache.
+- **Why**: In Lean 4, a _named_ hypothesis `have h : Fintype s := ...` is placed into the context as an ordinary hypothesis, not as an active typeclass instance.
 - **Prescription**:
-  - Use `haveI` (have instance) or `letI` (let instance) to register it into typeclass resolution:
-    ```diff
-    - have h : Fintype s := by ...
-    + haveI : Fintype s := by ...
-    ```
-  - Alternatively, use `have := ...; exact ...` with explicit parameter passing.
+  - Use an **anonymous** `have` (`have : Fintype s := ...`). Anonymous `have` bindings for typeclasses are automatically registered into the local instance cache.
+  - Avoid legacy `haveI` in Mathlib—it only inlines the value and triggers Mathlib's `haveI`/`letI` linter warning.
+  - Use `letI : Fintype s := ...` only if definitional equality of the instance data needs to be preserved.
 
 ---
 
@@ -79,7 +76,7 @@ When an instance is constructed dynamically within a proof rather than globally 
 
 Lean knows an instance exists for a canonical type, but type inference hasn't determined the carrier type yet.
 
-- **Symptom**: `failed to synthesize instance Add ?m.1234`.
+- **Symptom**: `failed to synthesize instance Add ?m.1234` or `typeclass instance problem is stuck`.
 - **Prescription**:
   - Give an explicit type annotation to the expression: `(0 : ℝ)` instead of `0`.
   - Type-ascribe parameters: `fun (x : ℕ) => ...`.
@@ -102,12 +99,31 @@ Lean knows an instance exists for a canonical type, but type inference hasn't de
 
 ---
 
+### Scenario 6: Instance Pollution & Shadowing (`synthesized: ..., inferred: ...`)
+
+When multiple instances of the same typeclass exist in the same scope (e.g., sub-σ-algebras `MeasurableSpace Ω`, distinct topologies on $X$, or alternative orderings).
+
+- **Symptom**:
+  ```text
+  type mismatch
+    synthesized: mSub, inferred: inst✝
+  ```
+  or sudden 500k+ heartbeat explosions when applying standard lemmas.
+- **Why**: Lean's elaborator prioritizes the most recently bound local constant (`let mSub : MeasurableSpace Ω := ...`), shadowing the ambient instance.
+- **Prescription**:
+  1. **Name and Pin the Ambient Instance**: Name it in the signature `[m0 : MeasurableSpace Ω]` or capture it on line 1: `let m0 : MeasurableSpace Ω := ‹MeasurableSpace Ω›`.
+  2. **Pass Ambient Facts Explicitly with `@`**: Use `@Measurable Ω β m0 _ Z` when invoking ambient properties.
+  3. **Strip Unneeded Section Classes with `omit`**: Use `omit [MeasurableSpace Ω] in` to keep unneeded outer typeclasses from poisoning resolution.
+
+---
+
 ## 3. Quick Reference
 
-| Problem                            | Immediate Action                                          |
-| :--------------------------------- | :-------------------------------------------------------- |
-| Missing `Decidable`                | Add `open scoped Classical` or tactic `classical`         |
-| Missing structure on parameter `α` | Add `[Structure α]` to binder signature                   |
-| Instance exists in proof as `have` | Replace `have` with `haveI` or `letI`                     |
-| Ambiguous metavariable `?m`        | Add explicit type ascription `(x : TargetType)`           |
-| Synthesis loop                     | Check conflicting imports; provide explicit instance term |
+| Problem                                              | Immediate Action                                                                    |
+| :--------------------------------------------------- | :---------------------------------------------------------------------------------- |
+| Missing `Decidable`                                  | Add `open scoped Classical` or tactic `classical`                                   |
+| Missing structure on parameter `α`                   | Add `[Structure α]` to binder signature                                             |
+| Named `have h : Class α` not picked up               | Change to anonymous `have : Class α := ...` (or `letI` if defeq needed)             |
+| Ambiguous metavariable `?m`                          | Add explicit type ascription `(x : TargetType)`                                     |
+| Synthesis loop / timeout                             | Check conflicting imports; provide explicit instance term with `@`                  |
+| Instance pollution (`synthesized: m, inferred: ...`) | Pin ambient instance (`[m0 : ...]`), use `@` for ambient lemmas, or `omit [...] in` |

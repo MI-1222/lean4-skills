@@ -1,6 +1,6 @@
 ---
 name: lean4-syntax
-description: Comprehensive syntax guide and fast syntax/elaboration checker for Lean 4 mathematical proofs. Use whenever generating, checking, or repairing Lean 4 proof code, validating snippets or files with `check_syntax.py`, preventing Lean 3 syntax contamination (such as `begin ... end`, trailing commas, `<-`, or invalid `split`), formatting `calc` blocks, managing tactic indentation and focus dots (`·`), or debugging compilation errors.
+description: Comprehensive syntax guide and fast syntax/elaboration checker for Lean 4 mathematical proofs. Use whenever generating, checking, or repairing Lean 4 proof code, validating snippets or files with `check_syntax.py`, preventing Lean 3 syntax contamination (such as `begin ... end`, trailing commas, `<-`, or invalid `split`), enforcing Mathlib style conventions (100-character line width, `fun x ↦ ...`, `show P by tac`, anonymous `have` for typeclasses), formatting `calc` blocks, managing tactic indentation and focus dots (`·`), or debugging compilation errors.
 ---
 
 # Lean 4 Syntax & Proof Conventions
@@ -16,13 +16,17 @@ In Lean 4, syntax parsing and type elaboration are tightly coupled. Formatting e
 | Context                | DO (Lean 4 Standard)                  | DON'T (Common Failure)             | Rationale                                                                                                                                                                         |
 | :--------------------- | :------------------------------------ | :--------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **File Header Order**  | `import ...` before `/-! ... -/`      | `/-! docstring -/` before `import` | `import` statements must strictly precede module docstrings. Placing `/-! ... -/` before imports causes `invalid 'import' command, it must be used at the beginning of the file`. |
+| **Line Width**         | Lines ≤ 100 characters                | Wrapping lines at 80 characters    | Lean and Mathlib standard convention is 100 characters. If a line fits within 100 characters, keep it on one line.                                                                |
+| **Math Lambdas**       | `fun x ↦ ...` (`\mapsto` or `\map`)   | `fun x => ...`                     | In Mathlib style, ordinary mathematical functions use `↦`. Reserve `=>` for `match`/`do` branches or metaprogramming.                                                             |
 | **Proof Mode**         | `by`                                  | `begin ... end`                    | `begin` is not a keyword in Lean 4; it causes an immediate elaboration error.                                                                                                     |
 | **Line Ending**        | Newline or `;`                        | Trailing comma `,`                 | Tactics are separated by newlines, never commas.                                                                                                                                  |
 | **Rewrite Direction**  | `rw [← h]` (`\l`)                     | `rw [<- h]`                        | ASCII `<-` conflicts with monad bind syntax and is rejected by the parser.                                                                                                        |
 | **Equational Chains**  | `calc a = b := proof`                 | `calc a = b : proof`               | Lean 4 uses assignment `:=` rather than typing `:` for `calc` steps.                                                                                                              |
+| **`show` Syntax**      | `show P by tac` / `show P from term`  | `show P from by tac`               | Using `from by` is redundant and an anti-pattern. Use `by` for tactic blocks, `from` only for proof terms.                                                                        |
 | **Conjunction Goals**  | `constructor` or `refine ⟨?_, ?_⟩`    | `split`                            | In Lean 4, `split` only decomposes `if` and `match` constructs.                                                                                                                   |
 | **Subgoals**           | `· tactic` (`\.`) with +2 spaces      | `{ tactic }`                       | Focus dots `·` enforce strict goal isolation and completion.                                                                                                                      |
 | **Local Proofs**       | `have h : P := by` (+2 spaces)        | `have h : P, from proof`           | `from` is retired. In nested `by`, indent tactics deeper than `have`.                                                                                                             |
+| **Local Typeclasses**  | Anonymous `have : Class α := pf`      | `haveI : Class α := pf`            | In modern Lean 4, anonymous `have` automatically registers in instance search. `haveI` triggers Mathlib linter warnings.                                                          |
 | **Trivial Proofs**     | Term mode (`fun h => h`)              | `:= by exact fun h => h`           | Term mode avoids unnecessary tactic state and metavariable overhead.                                                                                                              |
 | **Identifier Escapes** | `«my-submodule»`, `«def»` (`\<< \>>`) | `my-submodule`                     | Hyphens `-` are parsed as subtraction operators. Enclose non-standard names or keywords in guillemets `«...»`.                                                                    |
 
@@ -127,6 +131,7 @@ theorem and_comm_proof (P Q : Prop) : P ∧ Q → Q ∧ P := by
 - First step: `<lhs> <rel> <intermediate> := <proof>`
 - Continuation steps: `_ <rel> <next> := <proof>`
 - Always use `:=` (not `:`). The relation `<rel>` must have a `Trans` instance (e.g. `=`, `≤`, `<`, `⊆`, `↔`).
+- **Align with Actual Goal after `simp`**: When opening `calc` after `simp` (or `filter_upwards with ω; simp`), start the chain from the **actual goal state produced by `simp`**, never the pre-simplification formula. Respect Mathlib canonical normal forms (e.g. `(m:ℝ)⁻¹` instead of `1/(m:ℝ)`). See [Proof Syntax Patterns](./references/proof_syntax_patterns.md) for details.
 
 ```lean
 import Mathlib.Algebra.Ring.Basic
@@ -175,6 +180,55 @@ In Lean 4, identifiers normally consist of alphanumeric characters and underscor
   ```
 - **Typing Guillemets in Editors**:
   In VS Code or editors with the Lean 4 extension, type `\<<` for `«` and `\>>` for `»`.
+
+### 3.5. Modern Mathlib Style Conventions
+
+When writing proofs intended for Mathlib or adhering to idiomatic Lean 4 community standards:
+
+#### 1. 100-Character Line Width (Not 80)
+
+Lean and Mathlib standardize on a **100-character line width**.
+
+- If a statement or tactic fits within 100 characters, **keep it on one line**—do not artificially break at 80 characters.
+- When breaking lines that exceed 100 characters:
+  - Break before `:` in theorem binders:
+    ```lean
+    theorem long_signature (x : ℝ) [m0 : MeasurableSpace Ω] [StandardBorelSpace α] :
+        TargetStatement := by
+    ```
+  - Break after `:=` in long definitions:
+    ```lean
+    def long_definition :=
+        complex_rhs_expression
+    ```
+  - Break in `calc` chains after relation symbols (`=`, `≤`).
+
+#### 2. Mathematical Lambdas (`↦` vs `=>`)
+
+For ordinary mathematical functions and mappings, use the maps-to symbol `↦` (`\mapsto` or `\map`):
+
+```lean
+-- ✅ CORRECT Mathlib Style:
+def shift_op (n : ℕ) (f : ℕ → ℝ) : ℕ → ℝ :=
+  fun x ↦ f (x + n)
+
+-- ❌ AVOID for mathematical mappings:
+def shift_op_bad (n : ℕ) (f : ℕ → ℝ) : ℕ → ℝ :=
+  fun x => f (x + n)
+```
+
+_Note_: Reserve `=>` strictly for `match` / `do` branch targets or metaprogramming callbacks.
+
+#### 3. `show` Syntax Discipline (`by` vs `from`)
+
+- **For tactic proofs**: write `show P by <tactics>`.
+- **For term proofs**: write `show P from <term>`.
+- ❌ **Anti-pattern**: `show P from by <tactics>` (redundant `from`).
+
+#### 4. Typeclass Registration (Plain `have` vs `haveI`)
+
+- Always use anonymous `have : Class α := ⟨proof⟩` to register instances into typeclass search.
+- Do NOT use legacy `haveI`—it only inlines values and triggers Mathlib linter warnings.
 
 ---
 
