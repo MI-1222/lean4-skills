@@ -13,17 +13,42 @@ In Lean 4, syntax parsing and type elaboration are tightly coupled. Formatting e
 
 ## 1. Quick Syntax Checklist
 
-| Context                | DO (Lean 4 Standard)                  | DON'T (Common Failure)   | Rationale                                                                                                      |
-| :--------------------- | :------------------------------------ | :----------------------- | :------------------------------------------------------------------------------------------------------------- |
-| **Proof Mode**         | `by`                                  | `begin ... end`          | `begin` is not a keyword in Lean 4; it causes an immediate elaboration error.                                  |
-| **Line Ending**        | Newline or `;`                        | Trailing comma `,`       | Tactics are separated by newlines, never commas.                                                               |
-| **Rewrite Direction**  | `rw [← h]` (`\l`)                     | `rw [<- h]`              | ASCII `<-` conflicts with monad bind syntax and is rejected by the parser.                                     |
-| **Equational Chains**  | `calc a = b := proof`                 | `calc a = b : proof`     | Lean 4 uses assignment `:=` rather than typing `:` for `calc` steps.                                           |
-| **Conjunction Goals**  | `constructor` or `refine ⟨?_, ?_⟩`    | `split`                  | In Lean 4, `split` only decomposes `if` and `match` constructs.                                                |
-| **Subgoals**           | `· tactic` (`\.`) with +2 spaces      | `{ tactic }`             | Focus dots `·` enforce strict goal isolation and completion.                                                   |
-| **Local Proofs**       | `have h : P := by` (+2 spaces)        | `have h : P, from proof` | `from` is retired. In nested `by`, indent tactics deeper than `have`.                                          |
-| **Trivial Proofs**     | Term mode (`fun h => h`)              | `:= by exact fun h => h` | Term mode avoids unnecessary tactic state and metavariable overhead.                                           |
-| **Identifier Escapes** | `«my-submodule»`, `«def»` (`\<< \>>`) | `my-submodule`           | Hyphens `-` are parsed as subtraction operators. Enclose non-standard names or keywords in guillemets `«...»`. |
+| Context                | DO (Lean 4 Standard)                  | DON'T (Common Failure)             | Rationale                                                                                                                                                                         |
+| :--------------------- | :------------------------------------ | :--------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **File Header Order**  | `import ...` before `/-! ... -/`      | `/-! docstring -/` before `import` | `import` statements must strictly precede module docstrings. Placing `/-! ... -/` before imports causes `invalid 'import' command, it must be used at the beginning of the file`. |
+| **Proof Mode**         | `by`                                  | `begin ... end`                    | `begin` is not a keyword in Lean 4; it causes an immediate elaboration error.                                                                                                     |
+| **Line Ending**        | Newline or `;`                        | Trailing comma `,`                 | Tactics are separated by newlines, never commas.                                                                                                                                  |
+| **Rewrite Direction**  | `rw [← h]` (`\l`)                     | `rw [<- h]`                        | ASCII `<-` conflicts with monad bind syntax and is rejected by the parser.                                                                                                        |
+| **Equational Chains**  | `calc a = b := proof`                 | `calc a = b : proof`               | Lean 4 uses assignment `:=` rather than typing `:` for `calc` steps.                                                                                                              |
+| **Conjunction Goals**  | `constructor` or `refine ⟨?_, ?_⟩`    | `split`                            | In Lean 4, `split` only decomposes `if` and `match` constructs.                                                                                                                   |
+| **Subgoals**           | `· tactic` (`\.`) with +2 spaces      | `{ tactic }`                       | Focus dots `·` enforce strict goal isolation and completion.                                                                                                                      |
+| **Local Proofs**       | `have h : P := by` (+2 spaces)        | `have h : P, from proof`           | `from` is retired. In nested `by`, indent tactics deeper than `have`.                                                                                                             |
+| **Trivial Proofs**     | Term mode (`fun h => h`)              | `:= by exact fun h => h`           | Term mode avoids unnecessary tactic state and metavariable overhead.                                                                                                              |
+| **Identifier Escapes** | `«my-submodule»`, `«def»` (`\<< \>>`) | `my-submodule`                     | Hyphens `-` are parsed as subtraction operators. Enclose non-standard names or keywords in guillemets `«...»`.                                                                    |
+
+### 1.1. File Header & Import Ordering Rule
+
+In Lean 4, `import` commands must appear at the **very beginning of the file's command stream** (only plain copyright/license comments like `--` or `/- ... -/` may precede them).
+
+```lean
+-- ✅ CORRECT FILE HEADER ORDER:
+-- 1. Plain copyright/license notice (optional)
+import Mathlib.Data.Nat.Basic
+import Mathlib.Tactic.Ring
+
+-- 2. Module docstring `/-! ... -/` MUST strictly follow all imports
+/-!
+# Module Title
+Module documentation explaining theorems and structures.
+-/
+
+-- 3. Open scoped notations, namespaces, and declarations
+open scoped BigOperators
+```
+
+> **Common Failure Trap**: Placing `/-! ... -/` at line 1 before `import Mathlib` will trigger:
+> `error: invalid 'import' command, it must be used at the beginning of the file`
+> Always place `import` statements first!
 
 ---
 
