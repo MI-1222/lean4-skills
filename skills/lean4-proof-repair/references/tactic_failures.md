@@ -12,8 +12,8 @@ When Lean reports `tactic '<name>' failed`, it means the tactic's heuristic or d
 
 - **Failure Cause 1: Non-linear terms**. Expressions like `x * y` or `x ^ 2`.
   - _Fix_: Use `nlinarith` which takes non-linear cross products, or prove positivity of factors with `positivity`.
-- **Failure Cause 2: Discrete variables (`ℕ` or `ℤ`)**. `linarith` does not know `n > 0 → n ≥ 1` for natural numbers.
-  - _Fix_: Use `omega` for natural numbers and integers!
+- **Failure Cause 2: Discrete or truncating operations on `ℕ`**. `linarith` treats terms over linearly ordered fields (where subtraction can be negative), failing on natural number identities with truncating subtraction like `a ≤ b → b - a + a = b` or modulo `%`.
+  - _Fix_: Use `omega` for natural numbers and integers involving Presburger arithmetic and truncated operations!
 - **Failure Cause 3: Missing inequality hypothesis**.
   - _Fix_: If an inequality is hidden in a structure (e.g. `x ∈ Set.Ioo 0 1`), extract it first via `have := x.2`.
 
