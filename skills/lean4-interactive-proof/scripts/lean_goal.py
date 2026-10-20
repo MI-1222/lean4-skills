@@ -50,6 +50,7 @@ class LeanLSPClient:
         self.diagnostics = []
         self.file_progress = {}
         self.elaboration_done_event = threading.Event()
+        self._has_started_processing = False
 
     def _determine_launch_command(self) -> list:
         """Select the appropriate server launch command based on project configuration."""
@@ -118,14 +119,21 @@ class LeanLSPClient:
             method = message.get("method")
             if method == "textDocument/publishDiagnostics":
                 params = message.get("params", {})
-                self.diagnostics.extend(params.get("diagnostics", []))
-                self.elaboration_done_event.set()
+                new_diags = params.get("diagnostics", [])
+                self.diagnostics = new_diags
+                # Don't set the event for empty diagnostics (initial empty notification at file open).
+                # Set the event if there are any compiler errors (severity == 1), as this indicates elaboration has failed.
+                if new_diags and any(d.get("severity", 1) == 1 for d in new_diags):
+                    self.elaboration_done_event.set()
             elif method == "$/lean/fileProgress":
                 params = message.get("params", {})
                 processing = params.get("processing", [])
                 uri = params.get("textDocument", {}).get("uri")
                 self.file_progress[uri] = processing
-                if not processing:
+                if processing:
+                    self._has_started_processing = True
+                else:
+                    # The processing range has become empty, which means elaboration has completed.
                     self.elaboration_done_event.set()
 
     def _transmit(self, msg: dict):
@@ -192,6 +200,9 @@ class LeanLSPClient:
 
     def open_document(self, file_path: Path, content: str):
         """Open document in server memory to trigger elaboration."""
+        self.elaboration_done_event.clear()
+        self.diagnostics = []
+        self._has_started_processing = False
         uri = urljoin("file:", pathname2url(str(file_path.resolve())))
         params = {
             "textDocument": {
@@ -204,8 +215,10 @@ class LeanLSPClient:
         self.send_notification("textDocument/didOpen", params)
 
     def wait_for_elaboration(self, timeout: float = 3.0):
-        """Wait for elaboration progress notification or diagnostics to arrive."""
+        """Wait for elaboration progress notification (fileProgress: empty) or error diagnostics to arrive."""
         self.elaboration_done_event.wait(timeout=timeout)
+        # Stabilization wait to absorb slight delays in diagnostic message delivery.
+        time.sleep(0.08)
 
     def fetch_plain_goal(
         self, file_path: Path, line_0indexed: int, col_utf16: int, timeout: float = 8.0
@@ -308,13 +321,13 @@ def extract_goal_and_diagnostics(
         content = "".join(lines)
         client.open_document(file_path, content)
 
+        # Wait for elaboration to complete and diagnostics to arrive
+        client.wait_for_elaboration(timeout=min(timeout, 3.0))
+
         # Retrieve plainGoal
         goal_result = client.fetch_plain_goal(
             file_path, line_0indexed, col_utf16, timeout=timeout
         )
-
-        # Ensure diagnostics have arrived
-        client.wait_for_elaboration(timeout=1.5)
 
         rendered = goal_result.get("rendered") if goal_result else None
         goals = goal_result.get("goals", []) if goal_result else []
