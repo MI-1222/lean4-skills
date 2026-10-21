@@ -109,6 +109,9 @@ python3 <skill-path>/scripts/check_syntax.py --lint-only -s "theorem bad : P := 
 
 # 5. Output structured JSON for automated agent pipelines
 python3 <skill-path>/scripts/check_syntax.py --json -s "theorem bad (p : Prop) : p := by intro h,"
+
+# 6. Auto-prepend 'import Mathlib' for snippets using Mathlib tactics/types
+python3 <skill-path>/scripts/check_syntax.py --mathlib -s "example (n : ℕ) : n + 0 = n := by ring"
 ```
 
 ### JSON Output Specification

@@ -332,7 +332,12 @@ class Lean4SyntaxChecker:
 
         return cwd
 
-    def check_file(self, file_path: Path, run_lint: bool = True) -> CheckResult:
+    def check_file(
+        self,
+        file_path: Path,
+        run_lint: bool = True,
+        auto_import_mathlib: bool = False,
+    ) -> CheckResult:
         """Checks an existing Lean file."""
         if not file_path.exists():
             return CheckResult(
@@ -369,6 +374,11 @@ class Lean4SyntaxChecker:
                 raw_output="",
                 checked_path=str(file_path),
             )
+
+        if auto_import_mathlib:
+            res = self.check_snippet(content, run_lint=run_lint, auto_import_mathlib=True)
+            res.checked_path = str(file_path)
+            return res
 
         lint_diags = Lean3Linter.lint(content) if run_lint else []
         compiler_result = self._run_lean_compiler(file_path)
@@ -419,9 +429,24 @@ class Lean4SyntaxChecker:
 
         return filtered_lint + compiler_diags
 
-    def check_snippet(self, code_snippet: str, run_lint: bool = True) -> CheckResult:
+    def check_snippet(
+        self,
+        code_snippet: str,
+        run_lint: bool = True,
+        auto_import_mathlib: bool = False,
+    ) -> CheckResult:
         """Writes a snippet to a temporary file in `.lake/temp_check/` and validates it."""
         lint_diags = Lean3Linter.lint(code_snippet) if run_lint else []
+
+        line_offset = 0
+        snippet_to_compile = code_snippet
+        if auto_import_mathlib:
+            has_mathlib_import = bool(
+                re.search(r"^\s*import\s+Mathlib\b", code_snippet, re.MULTILINE)
+            )
+            if not has_mathlib_import:
+                snippet_to_compile = f"import Mathlib\n{code_snippet}"
+                line_offset = 1
 
         temp_dir = self.project_root / ".lake" / "temp_check"
         try:
@@ -439,7 +464,7 @@ class Lean4SyntaxChecker:
         temp_file_path = Path(temp_file.name)
 
         try:
-            temp_file.write(code_snippet)
+            temp_file.write(snippet_to_compile)
             temp_file.flush()
             temp_file.close()
 
@@ -451,7 +476,29 @@ class Lean4SyntaxChecker:
                 except OSError:
                     pass
 
-        all_diags = self._reconcile_diagnostics(lint_diags, compiler_result.diagnostics)
+        # Adjust compiler diagnostic line numbers to match original snippet
+        adjusted_compiler_diags: List[Diagnostic] = []
+        for d in compiler_result.diagnostics:
+            if line_offset > 0:
+                if d.line > line_offset:
+                    d = Diagnostic(
+                        severity=d.severity,
+                        line=d.line - line_offset,
+                        column=d.column,
+                        message=d.message,
+                        source=d.source,
+                    )
+                elif d.line == 1 and line_offset == 1:
+                    d = Diagnostic(
+                        severity=d.severity,
+                        line=0,
+                        column=d.column,
+                        message=f"(auto-import) {d.message}",
+                        source=d.source,
+                    )
+            adjusted_compiler_diags.append(d)
+
+        all_diags = self._reconcile_diagnostics(lint_diags, adjusted_compiler_diags)
         has_error = any(d.severity == "error" for d in all_diags)
         has_warning = any(d.severity == "warning" for d in all_diags)
 
@@ -650,6 +697,13 @@ def main() -> int:
         help="Run only the static Lean 3 linter without calling Lean compiler",
     )
     parser.add_argument(
+        "--mathlib",
+        "--auto-import",
+        action="store_true",
+        dest="mathlib",
+        help="Automatically prepend 'import Mathlib' to snippets if not already present",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Output results in JSON format",
@@ -675,7 +729,7 @@ def main() -> int:
                 checked_path="<stdin>",
             )
         else:
-            res = checker.check_snippet(code, run_lint=run_lint)
+            res = checker.check_snippet(code, run_lint=run_lint, auto_import_mathlib=args.mathlib)
     elif args.snippet:
         code = args.snippet
         if args.lint_only:
@@ -689,7 +743,7 @@ def main() -> int:
                 checked_path="<snippet>",
             )
         else:
-            res = checker.check_snippet(code, run_lint=run_lint)
+            res = checker.check_snippet(code, run_lint=run_lint, auto_import_mathlib=args.mathlib)
     elif args.file:
         file_path = Path(args.file)
         if args.lint_only:
@@ -720,7 +774,7 @@ def main() -> int:
                     checked_path=str(file_path),
                 )
         else:
-            res = checker.check_file(file_path, run_lint=run_lint)
+            res = checker.check_file(file_path, run_lint=run_lint, auto_import_mathlib=args.mathlib)
     else:
         parser.print_help()
         return 1
