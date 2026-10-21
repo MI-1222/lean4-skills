@@ -100,5 +100,5 @@ variable {α : Type*} (f g : α → ℝ)
 theorem tsum_add_example (hf : Summable f) (hg : Summable g) :
     (∑' i, (f i + g i)) = (∑' i, f i) + (∑' i, g i) := by
   -- If either series diverges, tsum defaults to 0, which would break equality
-  exact tsum_add hf hg
+  exact hf.tsum_add hg -- or: exact Summable.tsum_add hf hg
 ```
