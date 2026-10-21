@@ -38,6 +38,21 @@ If the equality is of the form `x = e` or `e = x` where `x` is a variable in the
     exact v
 ```
 
+> [!NOTE]
+> **Declaration Keyword: `def` vs. `theorem` for Dependent Transports**
+> In the example above, the target is `Fin m`, which is a data type in `Type`, not a proposition in `Prop`.
+> If you extract this transport into a named declaration, using `theorem` or `lemma` will fail with:
+>
+> ```text
+> error: type of theorem 'castFin' is not a proposition
+> ```
+>
+> **Rule of thumb**:
+>
+> - Always use `def` for functions transporting terms across dependent equalities (such as `def castFin (h : n = m) (v : Fin n) : Fin m`).
+> - `def` preserves computational content and allows Lean to unfold the transport definitionally downstream.
+> - Reserve `theorem` strictly for mathematical propositions (types in `Prop`, e.g., equality between terms).
+
 ---
 
 ### Strategy 2: Revert Dependent Hypotheses Before Rewriting

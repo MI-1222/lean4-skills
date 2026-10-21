@@ -122,6 +122,40 @@ When applying polymorphic lemmas or lemmas with typeclass parameters, Lean might
 
 ---
 
+### 2.6 Proposition vs. Type Sort Confusion (`theorem` vs. `def`)
+
+Lean enforces a strict separation between the universe of propositions (`Prop` = `Sort 0`) and computational types (`Type u` = `Sort (u+1)`).
+
+- **Symptom**:
+  - `error: type of theorem '...' is not a proposition`
+  - `type mismatch: has type Type u but is expected to have type Prop`
+- **Cause**:
+  The keywords `theorem` and `lemma` strictly require the return type to be a proposition (`Prop`). If a declaration produces data (e.g., `Fin n`, `List α`, or computational type transports) or a typeclass witness (e.g., `Decidable p`), its type lives in `Type`, not `Prop`.
+- **Prescription**:
+  - Use `def` when declaring functions, computational constructors, or type transports (e.g., `Fin n → Fin m`).
+  - Use `instance` when providing typeclass instances (e.g., `Decidable p`, `Inhabited α`).
+  - Use `theorem` or `lemma` **exclusively** for mathematical statements whose types are propositions (e.g., equalities, inequalities, implications).
+  - Note: `Decidable p` is in `Type` (holding an algorithm / computational certificate), whereas `p ∨ ¬p` or `p` is in `Prop`.
+
+#### Example Fix (Dependent Cast)
+
+```diff
+- theorem castFin (n m : ℕ) (h : n = m) (v : Fin n) : Fin m := by
++ def castFin (n m : ℕ) (h : n = m) (v : Fin n) : Fin m := by
+    subst h
+    exact v
+```
+
+#### Example Fix (Decidability Instance)
+
+```diff
+- theorem decEqNat (x y : ℕ) : Decidable (x = y) := by
++ instance (x y : ℕ) : Decidable (x = y) := by
+    infer_instance
+```
+
+---
+
 ## 3. Systematic Diagnostic Workflow
 
 When encountering a `type mismatch`:
