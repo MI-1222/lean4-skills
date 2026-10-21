@@ -126,7 +126,11 @@ def search_via_local_cli(
             "query": query,
             "count": 0,
             "hits": [],
-            "error": f"Local loogle search timed out after {timeout} seconds.",
+            "error": (
+                f"Local loogle search timed out after {timeout} seconds.\n"
+                "Hint: If loogle is being compiled for the first time, pre-build it using "
+                "'lake build loogle' or run with '--timeout 180'."
+            ),
         }
     except Exception as exc:
         return {
@@ -179,6 +183,13 @@ def search_via_local_cli(
             }
 
         err_msg = proc.stderr.strip() or raw_output or f"loogle exited with code {proc.returncode}"
+        if "unknown executable loogle" in err_msg.lower() or "unknown executable `loogle`" in err_msg.lower():
+            err_msg += (
+                "\nHint: Even if '.lake/packages/loogle' exists, Lake requires 'loogle' to be "
+                "explicitly declared as a direct dependency in the root package configuration.\n"
+                "Add '[[require]] name = \"loogle\"' to lakefile.toml (or 'require loogle from ...' in lakefile.lean), "
+                "then run 'lake update loogle && lake build loogle'."
+            )
         return {
             "success": False,
             "source": "local",
@@ -373,7 +384,14 @@ def format_text_output(result: Dict[str, Any]) -> str:
     if not result.get("success"):
         lines.append(f"Loogle Search Failed ({source}):")
         lines.append(f"  Query: {query}")
-        lines.append(f"  Error: {result.get('error')}")
+        err_str = str(result.get("error", ""))
+        err_lines = err_str.splitlines()
+        if len(err_lines) <= 1:
+            lines.append(f"  Error: {err_str}")
+        else:
+            lines.append("  Error:")
+            for err_l in err_lines:
+                lines.append(f"    {err_l}")
         suggestions = result.get("suggestions")
         if suggestions:
             lines.append(f"  Suggestions: {suggestions}")

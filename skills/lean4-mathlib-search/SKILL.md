@@ -122,6 +122,37 @@ python3 <skill-path>/scripts/search_loogle.py "<query>" [-n <limit>] [--json] [-
 - `--lake-dir`: Path to a Lake project directory containing `loogle` (optional; auto-detected if omitted).
 - `--timeout`: Timeout in seconds (default: `25.0`).
 
+### Local Loogle Prerequisites & Setup
+
+When running Loogle locally via `--local` or `--prefer-local`, note the following environment requirements and build behaviors:
+
+1. **Root Package Dependency Declaration**:
+   - `lake exe loogle` requires `loogle` to be registered as an executable target in your **root project's Lake configuration**.
+   - **Crucial**: Even if `.lake/packages/loogle` exists on disk (e.g., from transitive dependencies or previous clones), Lake will fail with `error: ... unknown executable loogle` unless explicitly declared in your root project configuration:
+     - In `lakefile.toml`:
+       ```toml
+       [[require]]
+       name = "loogle"
+       git = "https://github.com/leanprover-community/loogle.git"
+       ```
+     - In `lakefile.lean`:
+       ```lean
+       require loogle from git "https://github.com/leanprover-community/loogle.git"
+       ```
+
+2. **Pre-building Executable & Timeout Considerations**:
+   - On the first invocation, `lake exe loogle` initiates compilation of the `loogle` executable and its Lean dependencies. This compilation frequently takes 60–120+ seconds, exceeding the default CLI timeout (`25.0` seconds) and causing an abort.
+   - **Recommended Workflow**: Pre-build the executable explicitly before running search queries:
+     ```bash
+     lake update loogle
+     lake build loogle
+     ```
+   - **On-the-fly Build Timeout**: If invoking `search_loogle.py --local` without a prior build, supply a higher `--timeout` on the first invocation:
+     ```bash
+     python3 <skill-path>/scripts/search_loogle.py "<query>" --local --timeout 180
+     ```
+   - Once compiled, subsequent local queries execute within sub-second to a few seconds.
+
 ### Loogle Query Syntax Guide
 
 Loogle provides expressive query patterns:
@@ -248,12 +279,14 @@ When you only know high-level mathematical terminology in English (e.g., "Banach
 - **Never guess lemma names without checking**: Hallucinating identifiers (e.g., `Mathlib.Theorem.pythagorean`) causes `unknown identifier` compilation errors.
 - **Do not overload Loogle queries**: Writing overly complex signatures with 10 type variables causes Loogle timeouts. Start with key constants or subexpressions (e.g., `_ * (_ ^ _)`), then refine.
 - **Avoid plain text searches in Loogle**: Querying `"Measure.map"` as a type signature yields 0 hits because Loogle searches structural types. For constant presence, omit quotes (`Measure.map`); for name substring, use quotes (`"map"`).
+- **Relying on `--local` Loogle without root requirement or pre-building**: Running `search_loogle.py --local` in a project where `.lake/packages/loogle` exists but `loogle` is not declared as a direct dependency in `lakefile.toml` / `lakefile.lean` will fail with `unknown executable loogle`. Furthermore, invoking local Loogle for the first time without pre-building (`lake build loogle`) can trigger a long build exceeding the default 25-second timeout. Always declare `loogle` in the root lakefile and pre-build it.
 
 ### Verification Checklist
 
 - [ ] Identified active goal with `lean_goal.py`?
 - [ ] Attempted inline `exact?` / `apply?` / `rw?` first on active goals?
 - [ ] If inline tactics failed or timed out, transitioned to Loogle search (`search_loogle.py`)?
+- [ ] If using `--local` Loogle, confirmed `loogle` is declared in root `lakefile.toml`/`lakefile.lean` and pre-built (`lake build loogle`)?
 - [ ] Checked search result `Module` and added `import <Module>` to the Lean file header?
 - [ ] Verified that the identifier resolves cleanly (`#check <lemma_name>`)?
 - [ ] Checked for clean compilation without `sorry` or warnings?
