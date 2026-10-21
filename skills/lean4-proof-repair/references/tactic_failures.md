@@ -46,8 +46,18 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
   - _Fix_: Use `linarith` for `ℝ` or `ℚ` (requires `import Mathlib.Tactic.Linarith`).
 - **Failure Cause 2: Non-linear terms**. Multiplication between two variables (`a * b`).
   - _Fix_: If one term is a constant, `omega` works (`3 * a`). If both are variables, non-linear reasoning is required (`nlinarith`, `ring`, or custom induction).
-- **Failure Cause 3: Division or Modulo**.
-  - _Fix_: Pre-simplify with `Nat.div_eq`, `omega` or prove bounds before invoking.
+- **Failure Cause 3: Division (`/`) or Modulo (`%`) with Variable Divisors or Non-linear Bounds**.
+  `omega` supports division and modulo by **constant integers** (e.g., `x / 2`, `x % 5`), but fails when:
+  1. The divisor is an arbitrary variable (e.g., `x / y` or `x % y`), or
+  2. The proof requires non-linear relationships between quotient, remainder, and divisor.
+  - _Fix_:
+    - If the divisor is a variable `y` with `hy : 0 < y`, provide the fundamental division identity and remainder bound to the local context before invoking `omega`:
+      ```lean
+      have h_div := Nat.div_add_mod x y  -- y * (x / y) + x % y = x
+      have h_mod := Nat.mod_lt x hy      -- x % y < y
+      ```
+    - Alternatively, eliminate division by clearing denominators or rewriting relations into multiplication before calling `omega`.
+    - If the divisor is a constant `k` and `omega` fails to complete the remainder bound, introduce `have := Nat.mod_lt x (by decide : 0 < k)`.
 
 ---
 
