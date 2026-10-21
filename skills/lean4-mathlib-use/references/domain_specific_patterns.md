@@ -36,7 +36,7 @@ Before writing manual step-by-step rewrites, check if your goal falls into one o
 Use `Integrable.of_bound` combined with `ae_of_all` to avoid expanding definitions:
 
 ```lean
-import Mathlib.MeasureTheory.Integral.Bochner
+import Mathlib.MeasureTheory.Integral.IntegrableOn
 
 open MeasureTheory
 
