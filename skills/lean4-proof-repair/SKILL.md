@@ -126,7 +126,6 @@ graph TD
    Do not allow multiple goals to be processed sequentially without `·`. It hides bugs and misplaces error markers.
 3. **Use `omega` (Lean 4.7+ Core) for integers/naturals, `linarith` for rationals/reals**:
    Mixing up their domains is the #1 cause of arithmetic decision tactic failures.
-   Mixing up their domains is the #1 cause of arithmetic decision tactic failures.
 4. **Prefer `refine` over `exact` when debugging**:
    `refine` creates helpful subgoals for any missing conditions, whereas `exact` immediately throws a fatal type mismatch.
 5. **Epistemological Strictness in Refutation (Append-Only Rule)**:
