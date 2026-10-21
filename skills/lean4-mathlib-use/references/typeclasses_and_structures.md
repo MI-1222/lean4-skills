@@ -57,35 +57,94 @@ example (n : ℕ) : 0 ≤ (n : ℝ) := by
 
 ---
 
-## 4. Local Instance Injection: Plain `have` (Lean 4.14+) vs `haveI` / `letI`
+## 4. Local Instance Injection: Defeq Transparency (`have` vs `let` / `letI`)
 
-When working with quotient structures, field extensions, localized rings, or conditional metric spaces, the global typeclass synthesizer might fail to discover an instance that holds conditionally in the local context.
+When working with conditional structures, sub-structures, or localized hypotheses, the global typeclass synthesizer might fail to automatically discover an instance that only holds conditionally in the local proof context.
 
-### Modern Lean 4 & Mathlib Rule: Prefer Plain `have` (Lean 4.14+)
+### The Definitional Transparency Distinction
 
-In modern Lean 4 (4.14+), a plain `have : InstanceType := proof` **automatically registers** the instance in the local typeclass cache!
-The legacy `haveI` tactic (deprecated since Lean 4.14) only inlines the value and is flagged by Mathlib's `haveI`/`letI` style linter.
+In Lean 4, local instance registration behaves fundamentally differently depending on whether the instance carries **computational data** (e.g. algebraic operations, metrics, topologies) or is a **proposition** (`Prop`-valued typeclass such as `Fact p`, `Decidable p`):
 
-| Tactic / Pattern             | Usage & Characteristics                                                                                      |
-| :--------------------------- | :----------------------------------------------------------------------------------------------------------- |
-| `have : InstanceType := pf`  | **Standard in Lean 4.14+/Mathlib.** Registers the instance into the local typeclass cache cleanly.           |
-| `letI : InstanceType := pf`  | Injects a definitionally transparent instance into the context when definitional equality must be preserved. |
-| `haveI : InstanceType := pf` | _Legacy._ Avoid in Mathlib code (deprecated since Lean 4.14); flagged by linter.                             |
+| Tactic / Pattern                                      | Transparency    | Primary Use Cases                                                                                     | Defeq Behavior                                                                                 |
+| :---------------------------------------------------- | :-------------- | :---------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
+| `have : PropClass := pf`                              | **Opaque**      | `Prop` typeclasses (`Fact p`, `Decidable p`), or proof-internal finiteness (`Fintype s`)              | **Safe for Prop**: Proof irrelevance ensures opacity cannot cause defeq mismatches.            |
+| `letI : DataClass := pf` (or `let : DataClass := pf`) | **Transparent** | Data typeclasses (`Group`, `Ring`, `Topology`, `MetricSpace`) when operators appear in goal/signature | **Preserves defeq**: Operators resolve to the exact definition, preventing instance pollution. |
+| `haveI : Instance := pf`                              | _Legacy_        | Deprecated in modern Mathlib; flagged by linter.                                                      | Inlines value; avoid in new code.                                                              |
 
-### Example: Supplying a Local Group Instance
+---
+
+### Safe Pattern 1: Supplying a `Fact` Instance for Conditional Theorems
+
+Many Mathlib theorems require hypotheses wrapped in the `Fact` typeclass (e.g., primality `[Fact (Nat.Prime p)]` or field characteristics):
 
 ```lean
-import Mathlib.Algebra.Group.Basic
+import Mathlib.Data.Nat.Prime.Basic
 
-variable {G : Type*}
-
--- When a subgroup or custom structure provides an instance conditionally:
-theorem subgroup_element_mul_inv (H : Subgroup G) (x : H) :
-    x * x⁻¹ = 1 := by
-  -- In modern Lean 4, plain have registers the instance into typeclass search:
-  have : Group H := Subgroup.toGroup H
-  exact mul_inv_cancel x
+-- A theorem requires [Fact (Nat.Prime p)] to invoke downstream field or prime properties:
+theorem prime_has_property (p : ℕ) (hp : Nat.Prime p) :
+    p > 1 := by
+  -- Inject the Prop typeclass into the local instance cache via anonymous have:
+  have : Fact (Nat.Prime p) := ⟨hp⟩
+  -- Any lemma requiring [Fact (Nat.Prime p)] synthesizes cleanly:
+  exact Nat.Prime.one_lt (Fact.out : Nat.Prime p)
 ```
+
+Because `Fact` is in `Prop`, the opacity of `have` causes no definitional issues.
+
+---
+
+### Safe Pattern 2: Supplying Proof-Internal Finiteness (`Fintype`)
+
+When invoking combinatorial lemmas within a proof where the goal signature does not conflict with the instance:
+
+```lean
+import Mathlib.Data.Fintype.Basic
+
+theorem bounded_set_card {α : Type*} (s : Set α) (h_fin : s.Finite) :
+    True := by
+  -- Provide a local Fintype instance for the subtype without conflicting with ambient signature:
+  have : Fintype s := h_fin.fintype
+  trivial
+```
+
+---
+
+### Anti-Pattern & Pitfall: Opaque `have` on Data Typeclasses (Self-Inflicted Instance Pollution)
+
+> [!CAUTION]
+> **Never inject data-carrying typeclasses (`Group`, `Ring`, `Inv`, `Mul`) using opaque `have` when the operators already appear in the theorem signature or goal.**
+
+#### The Failure Mechanism:
+
+```lean
+-- BROKEN ANTI-PATTERN:
+theorem subgroup_element_mul_inv {G : Type*} [Group G] (H : Subgroup G) (x : H) :
+    x * x⁻¹ = 1 := by
+  -- WRONG: have is opaque! It shadows the ambient instance and creates an un-unifiable `this`:
+  have : Group H := Subgroup.toGroup H
+  exact mul_inv_cancel x  -- FAILS: Type mismatch!
+```
+
+**Why this fails**:
+
+1. **Redundant Injection**: Mathlib already registers a global instance for `Subgroup.toGroup H`. Re-declaring it locally is unnecessary.
+2. **Defeq Breakage**: The theorem signature (`x * x⁻¹ = 1`) was elaborated against the ambient `Subgroup.toGroup H` instance. Running `have : Group H := ...` binds an **opaque** local constant `this`. When `mul_inv_cancel x` is invoked, it uses `this.toInv`, which cannot definitionally unify with the ambient `H.inv` in the goal.
+
+#### Correct Approaches:
+
+1. **Rely on Ambient Instances (Best)**: Do not inject instances locally if Mathlib's global instance synthesis already covers the type:
+
+   ```lean
+   theorem subgroup_element_mul_inv {G : Type*} [Group G] (H : Subgroup G) (x : H) :
+       x * x⁻¹ = 1 := by
+     exact mul_inv_cancel x  -- Synthesizes automatically via global instance
+   ```
+
+2. **Use Transparent `letI` or `let` when Defeq Preservation is Required**: If a local data instance must be provided dynamically, use transparent binding so that Lean can unfold its definition during unification:
+   ```lean
+   -- Use letI (or transparent let) when downstream tactics require definitional equality:
+   letI : Group CustomType := customGroupConstruction
+   ```
 
 ---
 
