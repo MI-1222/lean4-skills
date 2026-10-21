@@ -80,6 +80,26 @@ When drafting new helper lemmas, extracting lemmas from a large proof, or creati
 - For new files, write a standard module header docstring (`/-! ... -/`) immediately following the `import` statements explaining the mathematical scope, main definitions, and theorems.
 - Once created and committed, subsequent edits to those declarations immediately fall under **Rule A**.
 
+### 2.4. Placement Rule: Scoped Command Prefixes and Docstrings
+
+When attaching scoped command modifiers (`omit [...] in`, `open ... in`, or `set_option ... in`) to a declaration that has a docstring:
+
+- **Always place the command prefix BEFORE the docstring**:
+  ```lean
+  -- ⭕ CORRECT: Scoped command modifier wraps the docstring and declaration
+  omit [IsGalois F E] in
+  /-- Intermediate field fixed by the fixing subgroup coincides with original field. -/
+  theorem fixingSubgroup_fixedField_eq (H : Subgroup (E ≃ₐ[F] E)) : ...
+  ```
+- **Never place the command prefix between the docstring and the declaration keyword**:
+  ```lean
+  -- ❌ INCORRECT: Causes "unexpected token 'omit'; expected 'lemma'" parser error
+  /-- Intermediate field fixed by the fixing subgroup coincides with original field. -/
+  omit [IsGalois F E] in
+  theorem fixingSubgroup_fixedField_eq (H : Subgroup (E ≃ₐ[F] E)) : ...
+  ```
+- **Grammar Rationale**: In Lean 4's syntax, `/-- ... -/` is part of `declModifiers`, which must immediately precede the declaration keyword (`theorem`, `lemma`, `def`, `instance`). Modifiers like `omit ... in` operate at the command level and expect a whole command declaration (including its leading docstring) to follow `in`.
+
 ---
 
 ## 3. Checklist for Contract & Docstring Integrity
@@ -90,3 +110,4 @@ Before completing any task that modifies Lean 4 source files, verify:
 - [ ] **No Unsanctioned Preconditions**: Did you refrain from adding new premises `(h : ...)` to the theorem statement?
 - [ ] **No Axiom Infiltration**: Did you verify that no new `axiom` statements were introduced?
 - [ ] **Docstring Preservation**: Are all original `/-- ... -/` docstrings completely unchanged?
+- [ ] **Docstring & Modifier Order**: If using scoped command modifiers (`omit [...] in`, `open ... in`, `set_option ... in`), are they placed _before_ the `/-- ... -/` docstring rather than between the docstring and theorem keyword?

@@ -7,7 +7,7 @@ metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
   tested-mathlib-version: 'v4.35.0'
-  version: '1.2.0'
+  version: '1.3.0'
 ---
 
 # Lean 4 Mathlib Usage Guide
@@ -116,8 +116,8 @@ graph TD
     E --> F["lean4-cli<br/>Fast module checks via `lake env lean` & diagnostics"]
 ```
 
-- **Before Searching**: Configure minimal imports with `skills/lean4-mathlib-use` so search tools like `skills/lean4-mathlib-search` operate on focused namespaces.
-- **During Proving**: Use `skills/lean4-interactive-proof` to test local state transitions and verify side conditions for partial functions.
-- **Applying Best Practices**: Structure proofs according to `skills/lean4-best-practice` (`calc` mode, `have` decomposition) while adhering to `lean4-mathlib-use` import and scoping rules.
-- **Handling Errors**: If typeclass synthesis or rewrites fail, diagnose and fix them using `skills/lean4-proof-repair`.
-- **Validation**: Run fast checks and full builds using `skills/lean4-cli`.
+- **Before Searching**: Configure minimal imports with `lean4-mathlib-use` so search tools like `lean4-mathlib-search` operate on focused namespaces.
+- **During Proving**: Use `lean4-interactive-proof` to test local state transitions and verify side conditions for partial functions.
+- **Applying Best Practices**: Structure proofs according to `lean4-best-practice` (`calc` mode, `have` decomposition) while adhering to `lean4-mathlib-use` import and scoping rules.
+- **Handling Errors**: If typeclass synthesis or rewrites fail, diagnose and fix them using `lean4-proof-repair`.
+- **Validation**: Run fast checks and full builds using `lean4-cli`.

@@ -105,8 +105,18 @@ Can simp close it?
    ├─ Real/rational-linear only? -> linarith
    ├─ Nonlinear arithmetic? -> nlinarith / positivity
    ├─ Pure algebraic ring identity? -> ring
-   └─ Mixed constraints (equalities + inequalities + finite cases)? -> grind
+   ├─ Relations preserved by monotonicity? -> gcongr
+   └─ Mixed constraints (equalities + inequalities + finite cases)?
+      ├─ Elementary algebra, congruence closure, or finite cases -> grind
+      └─ Abstract Mathlib structures (Analysis, Measure Theory, Topology, etc.)
+         -> Domain-specific lemmas + omega / linarith / ring / gcongr (see warning below)
 ```
+
+> [!WARNING]
+> **Limitations of `grind` in Advanced Mathlib Domains**:
+> While `grind` is extremely effective for elementary algebra, congruence closure, and mixed constraints over finite branching cases, it is **not a universal replacement for domain-specific tactics**.
+> In advanced Mathlib domains (e.g., real/complex analysis, measure theory, topology, category theory), higher-level mathematical structures often lack custom E-matching attribute registration (`@[grind]`). In these contexts, unguided `grind` searches frequently miss the goal or exceed heartbeat limits.
+> **Standard Practice**: For abstract Mathlib domains, continue to rely on domain-specific decision procedures (`omega`, `linarith`, `ring`, `gcongr`) and targeted domain lemmas (found via `loogle` or `exact?`).
 
 ##### Practical Usage & Search Control
 

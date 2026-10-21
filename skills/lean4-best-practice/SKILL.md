@@ -6,7 +6,7 @@ metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
   tested-mathlib-version: 'v4.35.0'
-  version: '1.2.0'
+  version: '1.3.0'
 ---
 
 # Lean 4 Best Practice Guide
@@ -118,7 +118,8 @@ graph TD
     D --> E["lean4-cli<br/>Fast verification via `lake env lean` & diagnostics"]
 ```
 
-- When constructing a top-down proof, use `skills/lean4-interactive-proof` to inspect goals between `sorry` placeholders.
-- When searching for lemmas conforming to Mathlib naming, use `skills/lean4-mathlib-search`.
-- If a proof refactoring produces compiler errors, triage them with `skills/lean4-proof-repair`.
-- Validate overall project health and compilation times using `skills/lean4-cli`.
+- When constructing a top-down proof, use `lean4-interactive-proof` to inspect goals between `sorry` placeholders.
+- When searching for lemmas conforming to Mathlib naming, use `lean4-mathlib-search`.
+- When converting fragile open `simp` to deterministic `simp only`, use the **Automated `simp?` Extraction Pipeline**: inject `simp?`, harvest the `Try this: simp only [...]` suggestion from compiler diagnostics via `lean4-syntax` (`check_syntax.py`) or `lean4-interactive-proof` (`lean_goal.py`), and substitute it automatically.
+- If a proof refactoring produces compiler errors, triage them with `lean4-proof-repair`.
+- Validate overall project health and compilation times using `lean4-cli`.

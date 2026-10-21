@@ -1,12 +1,12 @@
 ---
 name: lean4-syntax
-description: Comprehensive syntax guide and fast syntax/elaboration checker for Lean 4 mathematical proofs. Use whenever generating, checking, or repairing Lean 4 proof code, validating snippets or files with `check_syntax.py`, preventing Lean 3 syntax contamination (such as `begin ... end`, trailing commas, `<-`, or invalid `split`), enforcing Mathlib style conventions (100-character line width, `fun x ↦ ...`, `show P by tac`, anonymous `have` for typeclasses (Lean 4.14+)), formatting `calc` blocks (Lean 4.0.0+), managing tactic indentation and focus dots (`·`), or debugging compilation errors.
+description: Comprehensive syntax guide and fast syntax/elaboration checker for Lean 4 mathematical proofs. Use whenever generating, checking, or repairing Lean 4 proof code, validating snippets or files with `check_syntax.py`, preventing Lean 3 syntax contamination (such as `begin ... end`, trailing commas, `<-`, or invalid `split`), enforcing Mathlib style conventions (100-character line width, `fun x ↦ ...`, `show P` (term mode vs. tactic mode), anonymous `have` for typeclasses (Lean 4.14+)), formatting `calc` blocks (Lean 4.0.0+), managing tactic indentation and focus dots (`·`), or debugging compilation errors.
 compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for check_syntax.py.
 metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
   tested-mathlib-version: 'v4.35.0'
-  version: '1.2.0'
+  version: '1.3.0'
 ---
 
 # Lean 4 Syntax & Proof Conventions
@@ -38,26 +38,26 @@ In Lean 4, syntax parsing and type elaboration are tightly coupled. Formatting e
 
 ## 1. Quick Syntax Checklist
 
-| Context                | DO (Lean 4 Standard)                          | DON'T (Common Failure)                               | Rationale                                                                                                                                                                         |
-| :--------------------- | :-------------------------------------------- | :--------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **File Header Order**  | `import ...` before `/-! ... -/`              | `/-! docstring -/` before `import`                   | `import` statements must strictly precede module docstrings. Placing `/-! ... -/` before imports causes `invalid 'import' command, it must be used at the beginning of the file`. |
-| **Line Width**         | Lines ≤ 100 characters                        | Wrapping lines at 80 characters                      | Lean and Mathlib standard convention is 100 characters. If a line fits within 100 characters, keep it on one line.                                                                |
-| **Math Lambdas**       | `fun x ↦ ...` (`\mapsto` or `\map`)           | `fun x => ...`                                       | In Mathlib style, ordinary mathematical functions use `↦`. Reserve `=>` for `match`/`do` branches or metaprogramming.                                                             |
-| **Type Declarations**  | `inductive Foo where` (Lean 4.14+)            | `inductive Foo :=`                                   | `... :=` declaration syntax for `inductive`, `structure`, and `class` is deprecated since Lean 4.14; use `where`.                                                                 |
-| **Proof Mode**         | `by`                                          | `begin ... end`                                      | `begin` is not a keyword in Lean 4; it causes an immediate elaboration error.                                                                                                     |
-| **Line Ending**        | Newline or `;`                                | Trailing comma `,`                                   | Tactics are separated by newlines, never commas.                                                                                                                                  |
-| **Rewrite Direction**  | `rw [← h]` (`\l`)                             | `rw [<- h]`                                          | ASCII `<-` conflicts with monad bind syntax and is rejected by the parser.                                                                                                        |
-| **Equational Chains**  | `calc a = b := proof` (Lean 4.0.0+)           | `calc a = b : proof`                                 | Lean 4 uses assignment `:=` rather than typing `:` for `calc` steps.                                                                                                              |
-| **`show` Syntax**      | `show P by tac` / `show P from term`          | `show P from by tac`                                 | Using `from by` is redundant and an anti-pattern. Use `by` for tactic blocks, `from` only for proof terms.                                                                        |
-| **Conjunction Goals**  | `constructor` or `refine ⟨?_, ?_⟩`            | `split`                                              | In Lean 4, `split` only decomposes `if` and `match` constructs. In Lean 4.35+, `constructor` warns when multiple constructors match.                                              |
-| **Rewrite & Close**    | `rwa [h]` / `rw [h] at * <;> assumption`      | `rwa [h] at *` (deprecated Lean 4.35+)               | Multi-target `rwa at *` is deprecated in Lean 4.35+. Use explicit `<;> assumption`.                                                                                               |
-| **Kernel Decision**    | `decide +kernel` (Lean 4.15+)                 | `decide!` (removed in Lean 4.15)                     | `decide!` was removed in Lean 4.15 in favor of the uniform configuration syntax `decide +kernel`.                                                                                 |
-| **Subgoals**           | `· tactic` (`\.`) with +2 spaces              | `{ tactic }`                                         | Focus dots `·` enforce strict goal isolation and completion.                                                                                                                      |
-| **Local Proofs**       | `have h : P := by` (+2 spaces)                | `have h : P, from proof`                             | `from` is retired. In nested `by`, indent tactics deeper than `have`.                                                                                                             |
-| **Local Typeclasses**  | Anonymous `have : Class α := pf` (Lean 4.14+) | `haveI : Class α := pf` (deprecated since Lean 4.14) | In modern Lean 4, anonymous `have` automatically registers in instance search. `haveI` triggers Mathlib linter warnings.                                                          |
-| **Termination Hints**  | `termination_by m n => (m, n)` (Lean 4.6+)    | `termination_by foo m n => ...`                      | In modern Lean 4 (4.6+), omit the function name from `termination_by`. For structural recursion, use `termination_by structural x` (Lean 4.11+).                                  |
-| **Trivial Proofs**     | Term mode (`fun h => h`)                      | `:= by exact fun h => h`                             | Term mode avoids unnecessary tactic state and metavariable overhead.                                                                                                              |
-| **Identifier Escapes** | `«my-submodule»`, `«def»` (`\<< \>>`)         | `my-submodule`                                       | Hyphens `-` are parsed as subtraction operators. Enclose non-standard names or keywords in guillemets `«...»`.                                                                    |
+| Context                | DO (Lean 4 Standard)                                                     | DON'T (Common Failure)                                                | Rationale                                                                                                                                                                                                  |
+| :--------------------- | :----------------------------------------------------------------------- | :-------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **File Header Order**  | `import ...` before `/-! ... -/`                                         | `/-! docstring -/` before `import`                                    | `import` statements must strictly precede module docstrings. Placing `/-! ... -/` before imports causes `invalid 'import' command, it must be used at the beginning of the file`.                          |
+| **Line Width**         | Lines ≤ 100 characters                                                   | Wrapping lines at 80 characters                                       | Lean and Mathlib standard convention is 100 characters. If a line fits within 100 characters, keep it on one line.                                                                                         |
+| **Math Lambdas**       | `fun x ↦ ...` (`\mapsto` or `\map`)                                      | `fun x => ...`                                                        | In Mathlib style, ordinary mathematical functions use `↦`. Reserve `=>` for `match`/`do` branches or metaprogramming.                                                                                      |
+| **Type Declarations**  | `inductive Foo where` (Lean 4.14+)                                       | `inductive Foo :=`                                                    | `... :=` declaration syntax for `inductive`, `structure`, and `class` is deprecated since Lean 4.14; use `where`.                                                                                          |
+| **Proof Mode**         | `by`                                                                     | `begin ... end`                                                       | `begin` is not a keyword in Lean 4; it causes an immediate elaboration error.                                                                                                                              |
+| **Line Ending**        | Newline or `;`                                                           | Trailing comma `,`                                                    | Tactics are separated by newlines, never commas.                                                                                                                                                           |
+| **Rewrite Direction**  | `rw [← h]` (`\l`)                                                        | `rw [<- h]`                                                           | ASCII `<-` conflicts with monad bind syntax and is rejected by the parser.                                                                                                                                 |
+| **Equational Chains**  | `calc a = b := proof` (Lean 4.0.0+)                                      | `calc a = b : proof`                                                  | Lean 4 uses assignment `:=` rather than typing `:` for `calc` steps.                                                                                                                                       |
+| **`show` Syntax**      | Term mode: `show P by tac` / `show P from term`<br>Tactic mode: `show P` | `show P from by tac` (term mode)<br>`show P by tac` (in tactic block) | In term mode, use `by` for tactics or `from` for proof terms (never `from by`). Inside tactic blocks (`by`), write bare `show P` (writing `by` inside `by` triggers syntax error `unexpected token 'by'`). |
+| **Conjunction Goals**  | `constructor` or `refine ⟨?_, ?_⟩`                                       | `split`                                                               | In Lean 4, `split` only decomposes `if` and `match` constructs. In Lean 4.35+, `constructor` warns when multiple constructors match.                                                                       |
+| **Rewrite & Close**    | `rwa [h]` / `rw [h] at * <;> assumption`                                 | `rwa [h] at *` (deprecated Lean 4.35+)                                | Multi-target `rwa at *` is deprecated in Lean 4.35+. Use explicit `<;> assumption`.                                                                                                                        |
+| **Kernel Decision**    | `decide +kernel` (Lean 4.15+)                                            | `decide!` (removed in Lean 4.15)                                      | `decide!` was removed in Lean 4.15 in favor of the uniform configuration syntax `decide +kernel`.                                                                                                          |
+| **Subgoals**           | `· tactic` (`\.`) with +2 spaces                                         | `{ tactic }`                                                          | Focus dots `·` enforce strict goal isolation and completion.                                                                                                                                               |
+| **Local Proofs**       | `have h : P := by` (+2 spaces)                                           | `have h : P, from proof`                                              | `from` is retired. In nested `by`, indent tactics deeper than `have`.                                                                                                                                      |
+| **Local Typeclasses**  | Anonymous `have : Class α := pf` (Lean 4.14+)                            | `haveI : Class α := pf` (deprecated since Lean 4.14)                  | In modern Lean 4, anonymous `have` automatically registers in instance search. `haveI` triggers Mathlib linter warnings.                                                                                   |
+| **Termination Hints**  | `termination_by m n => (m, n)` (Lean 4.6+)                               | `termination_by foo m n => ...`                                       | In modern Lean 4 (4.6+), omit the function name from `termination_by`. For structural recursion, use `termination_by structural x` (Lean 4.11+).                                                           |
+| **Trivial Proofs**     | Term mode (`fun h => h`)                                                 | `:= by exact fun h => h`                                              | Term mode avoids unnecessary tactic state and metavariable overhead.                                                                                                                                       |
+| **Identifier Escapes** | `«my-submodule»`, `«def»` (`\<< \>>`)                                    | `my-submodule`                                                        | Hyphens `-` are parsed as subtraction operators. Enclose non-standard names or keywords in guillemets `«...»`.                                                                                             |
 
 ### 1.1. File Header & Import Ordering Rule
 
@@ -96,19 +96,22 @@ A standalone CLI tool is bundled in `scripts/check_syntax.py` to validate Lean 4
 
 ```bash
 # 1. Check an inline code snippet (with static linter & compiler check)
-python3 skills/lean4-syntax/scripts/check_syntax.py -s "theorem my_imp_self (P : Prop) : P → P := fun h => h"
+python3 <skill-path>/scripts/check_syntax.py -s "theorem my_imp_self (P : Prop) : P → P := fun h => h"
 
 # 2. Check an existing Lean file
-python3 skills/lean4-syntax/scripts/check_syntax.py path/to/Proof.lean
+python3 <skill-path>/scripts/check_syntax.py path/to/Proof.lean
 
 # 3. Read snippet from standard input
-echo "theorem my_test (p : Prop) (h : p) : p := by exact h" | python3 skills/lean4-syntax/scripts/check_syntax.py --stdin
+echo "theorem my_test (p : Prop) (h : p) : p := by exact h" | python3 <skill-path>/scripts/check_syntax.py --stdin
 
 # 4. Run static Lean 3 linter only (instant, does not invoke Lean compiler)
-python3 skills/lean4-syntax/scripts/check_syntax.py --lint-only -s "theorem bad : P := begin sorry end"
+python3 <skill-path>/scripts/check_syntax.py --lint-only -s "theorem bad : P := begin sorry end"
 
 # 5. Output structured JSON for automated agent pipelines
-python3 skills/lean4-syntax/scripts/check_syntax.py --json -s "theorem bad (p : Prop) : p := by intro h,"
+python3 <skill-path>/scripts/check_syntax.py --json -s "theorem bad (p : Prop) : p := by intro h,"
+
+# 6. Auto-prepend 'import Mathlib' for snippets using Mathlib tactics/types
+python3 <skill-path>/scripts/check_syntax.py --mathlib -s "example (n : ℕ) : n + 0 = n := by ring"
 ```
 
 ### JSON Output Specification
@@ -248,11 +251,15 @@ def shift_op_bad (n : ℕ) (f : ℕ → ℝ) : ℕ → ℝ :=
 
 _Note_: Reserve `=>` strictly for `match` / `do` branch targets or metaprogramming callbacks.
 
-#### 3. `show` Syntax Discipline (`by` vs `from`)
+#### 3. `show` Syntax Discipline (Term Mode vs. Tactic Mode)
 
-- **For tactic proofs**: write `show P by <tactics>`.
-- **For term proofs**: write `show P from <term>`.
-- ❌ **Anti-pattern**: `show P from by <tactics>` (redundant `from`).
+- **In Term Mode** (`:= show ...`):
+  - With tactics: write `show P by <tactics>`.
+  - With direct proof term: write `show P from <term>`.
+  - ❌ **Anti-pattern**: `show P from by <tactics>` (redundant `from`).
+- **In Tactic Mode** (inside a `by` block):
+  - Write bare `show P` as a tactic to restate/focus the goal to definitionally equal `P`, followed by tactics on subsequent lines.
+  - ❌ **Anti-pattern**: `show P by <tactics>` inside `by` (triggers `unexpected token 'by'; expected command`).
 
 #### 4. Typeclass Registration (Plain `have` (Lean 4.14+) vs `haveI`)
 

@@ -23,6 +23,9 @@ Before writing manual step-by-step rewrites, check if your goal falls into one o
 | **Bit-Vector & Boolean Arithmetic** (`BitVec`, `Bool`, bitwise ops)               | `bv_decide` (Lean 4.12+ Core)           | `decide`                            | Manual bitwise induction                        |
 | **Mixed Cross-Domain Constraints** (Equalities + inequalities + cases)            | `grind` / `grind?` (Lean 4.16+ / 4.20+) | `aesop`                             | Unbounded `simp`                                |
 
+> [!NOTE]
+> `grind` is designed for finite case-splitting, congruence closure, and mixed elementary constraints. In advanced Mathlib structures (measure theory, manifolds, topology, etc.), dedicated decision procedures (`omega`, `linarith`, `ring`, `gcongr`) and domain lemmas remain the primary tools due to lack of E-matching annotations.
+
 ---
 
 ## 2. Measure Theory & Probability Patterns
@@ -33,7 +36,7 @@ Before writing manual step-by-step rewrites, check if your goal falls into one o
 Use `Integrable.of_bound` combined with `ae_of_all` to avoid expanding definitions:
 
 ```lean
-import Mathlib.MeasureTheory.Integral.Bochner
+import Mathlib.MeasureTheory.Integral.IntegrableOn
 
 open MeasureTheory
 

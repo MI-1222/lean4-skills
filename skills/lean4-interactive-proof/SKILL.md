@@ -6,7 +6,7 @@ metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
   tested-mathlib-version: 'v4.35.0'
-  version: '1.2.0'
+  version: '1.3.0'
 ---
 
 # Lean 4 Interactive Proof
@@ -81,9 +81,15 @@ python3 <skill-path>/scripts/lean_goal.py <lean_file> --line <line_number> [--co
 
 - `rendered`: Markdown-formatted string representing the active proof goals, hypotheses, and target.
 - `goals`: Array of individual subgoal strings. Empty when all goals are discharged.
-- `is_done`: Boolean flag indicating whether all proof goals are completed (`true` only when goals are solved, no compiler errors exist, and no `sorry` remains).
-- `has_sorry`: Boolean flag indicating whether `sorry` is present on the line or in compiler diagnostics (`true` if `sorry` is active).
-- `diagnostics`: List of compiler errors, warnings, and informational diagnostics for the file/position.
+- `is_done`: Boolean flag indicating whether the proof of the _target declaration_ is complete (`true` only when goals are solved, no local compiler errors exist, and no local `sorry` remains).
+- `scope`: Target declaration range `{"start_line": int, "end_line": int}` used to isolate diagnostics.
+- `has_local_errors`: Boolean flag indicating whether compiler errors exist inside the target declaration.
+- `has_local_sorry`: Boolean flag indicating whether `sorry` is active inside the target declaration.
+- `has_file_errors`: Boolean flag indicating whether any compiler errors exist in the whole file.
+- `has_file_sorry`: Boolean flag indicating whether any `sorry` exists in the whole file.
+- `has_sorry`: Convenience alias for `has_local_sorry`.
+- `has_errors`: Convenience alias for `has_local_errors`.
+- `diagnostics`: List of compiler diagnostics with an `is_local: bool` tag indicating whether each diagnostic belongs to the target declaration scope.
 - `success`: Boolean indicating whether the LSP query completed successfully.
 
 ---
@@ -147,6 +153,10 @@ Add the tactic to the file, and run `lean_goal.py` on the modified line.
 
 - Check `diagnostics`: If any `"severity": "Error"` appears, do not proceed to subsequent lines. Fix or replace the failing tactic immediately.
 - Check `rendered`: Note how the goal and hypotheses transformed.
+- **Harvest `Try this:` Suggestions**:
+  When applying exploratory tactics (`simp?`, `exact?`, `apply?`, `rw?`, `grind?`), inspect the `"diagnostics"` array in the JSON returned by `lean_goal.py`. Look for informational entries containing `"Try this: <replacement>"`.
+  **Note on Modern Lean (4.35+)**: Compiler messages may include metadata action tags like `Try this: [apply] exact <lemma>` or `Try this: [apply] simp only [...]`.
+  Always sanitize the suggested replacement by stripping optional `[tag]` prefixes using `re.search(r"Try this:\s*(?:\[[a-zA-Z]+\]\s*)?([^\n]+)", msg)` before substituting the replacement code back into the file.
 
 ### Step 4: Handle Remaining Goals with `done`
 

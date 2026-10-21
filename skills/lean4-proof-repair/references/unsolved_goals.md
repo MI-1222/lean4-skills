@@ -37,9 +37,9 @@ If a branch fails to close its goal before the next dot, Lean flags an error imm
 
 ---
 
-### 2.2 Pinpoint with `done`
+### 2.2 Pinpoint with `done` (Temporary Debug Probe)
 
-Insert `done` at any point in the proof to assert that all goals should be closed by that stage:
+Insert `done` temporarily at any point in the proof to assert that all goals should be closed by that stage:
 
 ```lean
 theorem my_thm : ... := by
@@ -49,6 +49,16 @@ theorem my_thm : ... := by
 ```
 
 If goals remain, Lean reports `unsolved goals` right at `done`, showing the precise local context and goal target.
+
+> [!WARNING]
+> **Mathlib Linter Conflict (`'done' does nothing`)**:
+> In modern Mathlib, leaving `done` in completed code where all goals have already been resolved triggers the unused tactic linter:
+>
+> ```text
+> warning: Unused tactic linter: 'done' does nothing.
+> ```
+>
+> Always treat `done` strictly as an **ephemeral debug probe**: once you have inspected the open subgoals and structured your branches, delete or comment out `done`.
 
 ---
 
@@ -82,3 +92,4 @@ Sometimes the goal is closed, but Lean reports `unsolved goals` with metavariabl
 2. If at the end of the proof, backtrack to the last tactic that split the goal (`constructor`, `cases`, `induction`).
 3. Wrap each branch in `·` with +2 spaces of indentation.
 4. If a goal seems empty or trivial, try `assumption`, `rfl`, or `trivial`.
+5. Remove temporary `done` probes before final verification to avoid Mathlib's unused tactic linter warnings.

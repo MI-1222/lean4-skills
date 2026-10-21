@@ -76,6 +76,41 @@ Replace `simp?` with the proposed `simp only [...]` call.
 
 Often `simp?` lists 10 lemmas when only 2 were actually necessary. Test removing lemmas from the `simp only [...]` brackets until you find the minimal set that advances the proof.
 
+### Technique 3: Automated CLI Extraction Workflow for AI Agents
+
+For autonomous coding agents operating via headless CLI without an interactive VS Code Infoview, follow this 3-step automated extraction pipeline:
+
+1. **Inject `simp?` Temporarily**:
+   Replace the open `simp` in the source file with `simp?`.
+2. **Capture the `Try this:` Info Diagnostic**:
+   Query compiler diagnostics using either `check_syntax.py` (from `lean4-syntax`) or `lean_goal.py` (from `lean4-interactive-proof`):
+
+   ```bash
+   # Method A: Via check_syntax.py (fast compilation & diagnostic collection)
+   python3 <skills-path>/lean4-syntax/scripts/check_syntax.py <file-path>
+   # Look for: [INFO   ] L<line>:C<col> (lean-compiler) Try this: simp only [...]
+
+   # Method B: Via lean_goal.py (LSP-based diagnostic extraction)
+   python3 <skills-path>/lean4-interactive-proof/scripts/lean_goal.py <file-path> --line <line-num>
+   # Inspect the "diagnostics" array in the JSON response for "message": "Try this: simp only [...]"
+
+   # Method C: Via parse_diagnostics.py + lake env lean
+   lake env lean <file-path> 2>&1 | python3 <skills-path>/lean4-cli/scripts/parse_diagnostics.py
+   ```
+
+3. **Automate Replacement**:
+   - Extract the suggested string after `Try this: `.
+   - **Modern Lean Note (4.35+)**: Compiler output may prepend tactic action metadata tags (e.g. `Try this: [apply] simp only [...]`). Always strip `\[[a-zA-Z]+\]\s*` using regex:
+     ```python
+     # Stripping ^\[[a-zA-Z]+\]\s* ensures metadata tags like [apply] are removed
+     # without corrupting valid Lean brackets (e.g. simp only [lemma])
+     clean_simp = re.sub(
+         r"^\s*\[[a-zA-Z]+\]\s*", "", raw_suggestion.split("Try this:", 1)[-1].strip()
+     )
+     ```
+   - Use `replace_file_content` to substitute `simp?` with the extracted `clean_simp` (e.g. `simp only [Nat.add_zero, MulZeroClass.mul_zero]`).
+   - Re-validate with `check_syntax.py` to ensure the goal closes cleanly without residual warnings.
+
 ---
 
 ## 4. `@[simp]` Lemma Hygiene (Authoring New Lemmas)
@@ -111,3 +146,23 @@ When structuring algebraic derivations or analytical inequalities, `simp` is fre
 
 - Normalize terms upfront with an explicit `simp only [...]` pass, and then rely on domain-specific decision procedures (`gcongr`, `linarith`, `ring`, `omega`, `positivity`) inside the `calc` steps.
 - Avoid calling open `simp` within intermediate steps of a `calc` chain, as it obscures which subterm is being transformed and easily degrades elaboration performance.
+
+### Rule 3: Recovery Recipes for Syntactic `calc` Mismatches
+
+If an `invalid 'calc' step` error occurs due to representation differences between `simp`'s output and your intended `calc` starting point (e.g., division `/` vs reciprocal `* ·⁻¹`, or monus `-`):
+
+1. **Definitional Alignment via `change`**:
+   ```lean
+   change (m : ℝ)⁻¹ * ∑ k : Fin m, f k ≤ ε
+   calc
+     (m : ℝ)⁻¹ * ∑ k : Fin m, f k ≤ ... := by gcongr
+   ```
+2. **Goal Anchoring via `show ... from calc`**:
+   ```lean
+   show (m : ℝ)⁻¹ * |x| ≤ ε from
+     calc
+       (m : ℝ)⁻¹ * |x| ≤ ... := by gcongr
+   ```
+3. **Pre-normalization via `dsimp only`**:
+   Definitional rewrites like `dsimp only [div_eq_mul_inv]` adjust syntax prior to `calc` without accumulating proof terms or heartbeats.
+   (See full details in [documentation_and_style.md](documentation_and_style.md#41-recovery-recipes-for-invalid-calc-step-syntactic--definitional-mismatches)).

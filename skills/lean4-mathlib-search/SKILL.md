@@ -1,12 +1,12 @@
 ---
 name: lean4-mathlib-search
-description: Search Mathlib for theorems, lemmas, definitions, and tactics in Lean 4. Use whenever searching for mathematical lemmas, looking up theorem names by type signature with Loogle (`search_loogle.py`), finding lemmas using inline search tactics (`exact?`, `apply?`, `rw?` (Lean 4.7+ Core)), querying by natural language or semantic meaning (LeanSearch / Moogle), or deriving candidate theorem names from Mathlib naming conventions. Make sure to consult this skill whenever encountering unknown theorem names, unproven proof goals, or missing lemmas.
-compatibility: Target Lean 4.14.0+ and Mathlib v4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for scripts/search_loogle.py.
+description: Search Mathlib for theorems, lemmas, definitions, and tactics in Lean 4. Use whenever searching for mathematical lemmas, looking up theorem names by type signature with Loogle (`search_loogle.py`), finding lemmas using inline search tactics (`exact?`, `apply?`, `rw?` (Lean 4.7+ Core)), querying by natural language or semantic meaning via LeanSearch (`search_leansearch.py`), or deriving candidate theorem names from Mathlib naming conventions. Make sure to consult this skill whenever encountering unknown theorem names, unproven proof goals, or missing lemmas.
+compatibility: Target Lean 4.14.0+ and Mathlib v4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for scripts/search_loogle.py and scripts/search_leansearch.py.
 metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
   tested-mathlib-version: 'v4.35.0'
-  version: '1.2.0'
+  version: '1.3.0'
 ---
 
 # Lean 4 Mathlib Search
@@ -19,11 +19,11 @@ Mathlib is vast (over 100,000 theorems and definitions). Blind guessing or hallu
 
 ## 0. Environment & Version Compatibility
 
-| Component   | Target / Supported          | Verified / Tested Version             | Notes                                                 |
-| :---------- | :-------------------------- | :------------------------------------ | :---------------------------------------------------- |
-| **Lean 4**  | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified with inline search tactics (`exact?`, `rw?`) |
-| **Mathlib** | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Indexes modern naming conventions and module layout   |
-| **Python**  | `>=3.10`                    | `3.14.x`                              | Required for `scripts/search_loogle.py`               |
+| Component   | Target / Supported          | Verified / Tested Version             | Notes                                                            |
+| :---------- | :-------------------------- | :------------------------------------ | :--------------------------------------------------------------- |
+| **Lean 4**  | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified with inline search tactics (`exact?`, `rw?`)            |
+| **Mathlib** | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Indexes modern naming conventions and module layout              |
+| **Python**  | `>=3.10`                    | `3.14.x`                              | Required for `scripts/search_loogle.py` & `search_leansearch.py` |
 
 ### Version-Specific Search Notes
 
@@ -54,7 +54,7 @@ graph TD
     Q2 -- "No, only informal math concept" --> Q3{"Do you know standard Mathlib terminology?"}
 
     Q3 -- "Yes, standard terms" --> Naming["Strategy 3: Mathlib Naming Convention + Grep"]
-    Q3 -- "No, abstract / high-level concept" --> Semantic["Strategy 4: Semantic Search (LeanSearch / Moogle)"]
+    Q3 -- "No, abstract / high-level concept" --> Semantic["Strategy 4: Semantic Search (`search_leansearch.py`)"]
 ```
 
 ---
@@ -78,10 +78,22 @@ When working inside a tactic block (`by ...`), Lean 4 provides built-in metaprog
    ```
 2. **Collect Compiler Diagnostics**: Run `lake env lean <file>` or use `lean4-interactive-proof` (`lean_goal.py`) to inspect compiler messages.
 3. **Extract `Try this:` Suggestion**:
+   In older Lean versions, suggestions appear simply as:
    ```text
    Try this: exact Nat.add_comm x y
    ```
-4. **Replace and Validate**: Permanently substitute `exact?` with the suggested code (`exact Nat.add_comm x y`) and verify diagnostics are clean.
+   In modern Lean versions (e.g., Lean 4.35+), suggestions may include tactic metadata action tags such as `[apply]`:
+   ```text
+   Try this: [apply] exact Nat.add_comm x y
+   ```
+   When automating extraction via script or agent, sanitize the suggestion by stripping the `[tag]` prefix using regex before replacement:
+   ```python
+   # Robust regex: strips metadata action tags like [apply] using [a-zA-Z]+
+   # Prevents accidental removal of actual Lean code brackets (e.g. lists or rw [lemma])
+   match = re.search(r"Try this:\s*(?:\[[a-zA-Z]+\]\s*)?([^\n]+)", message)
+   clean_replacement = match.group(1).strip() if match else None
+   ```
+4. **Replace and Validate**: Permanently substitute `exact?` with the sanitized code (`exact Nat.add_comm x y`) and verify diagnostics are clean.
 5. **Fallback**: If `exact?` fails (goal cannot be closed in one step), fall back to `apply?` or `rw?`.
 
 ### Limitations & Performance Considerations
@@ -121,6 +133,37 @@ python3 <skill-path>/scripts/search_loogle.py "<query>" [-n <limit>] [--json] [-
 - `--prefer-local`: Use local `loogle` if available, falling back to the REST API.
 - `--lake-dir`: Path to a Lake project directory containing `loogle` (optional; auto-detected if omitted).
 - `--timeout`: Timeout in seconds (default: `25.0`).
+
+### Local Loogle Prerequisites & Setup
+
+When running Loogle locally via `--local` or `--prefer-local`, note the following environment requirements and build behaviors:
+
+1. **Root Package Dependency Declaration**:
+   - `lake exe loogle` requires `loogle` to be registered as an executable target in your **root project's Lake configuration**.
+   - **Crucial**: Even if `.lake/packages/loogle` exists on disk (e.g., from transitive dependencies or previous clones), Lake will fail with `error: ... unknown executable loogle` unless explicitly declared in your root project configuration:
+     - In `lakefile.toml`:
+       ```toml
+       [[require]]
+       name = "loogle"
+       git = "https://github.com/leanprover-community/loogle.git"
+       ```
+     - In `lakefile.lean`:
+       ```lean
+       require loogle from git "https://github.com/leanprover-community/loogle.git"
+       ```
+
+2. **Pre-building Executable & Timeout Considerations**:
+   - On the first invocation, `lake exe loogle` initiates compilation of the `loogle` executable and its Lean dependencies. This compilation frequently takes 60–120+ seconds, exceeding the default CLI timeout (`25.0` seconds) and causing an abort.
+   - **Recommended Workflow**: Pre-build the executable explicitly before running search queries:
+     ```bash
+     lake update loogle
+     lake build loogle
+     ```
+   - **On-the-fly Build Timeout**: If invoking `search_loogle.py --local` without a prior build, supply a higher `--timeout` on the first invocation:
+     ```bash
+     python3 <skill-path>/scripts/search_loogle.py "<query>" --local --timeout 180
+     ```
+   - Once compiled, subsequent local queries execute within sub-second to a few seconds.
 
 ### Loogle Query Syntax Guide
 
@@ -225,16 +268,55 @@ Once a candidate name is deduced:
 
 ---
 
-## 5. Strategy 4: Semantic & Natural Language Search
+## 5. Strategy 4: Semantic & Natural Language Search (`search_leansearch.py`)
 
-When you only know high-level mathematical terminology in English (e.g., "Banach-Steinhaus theorem", "Euler totient formula", "Heine-Borel compactness"), use semantic search systems:
+When you do not know the exact Lean type signature or Mathlib naming pattern, but know high-level mathematical terminology in informal English (e.g., "Banach-Steinhaus theorem", "Heine-Borel compactness", "order of element divides group order", "intermediate value theorem"), use **LeanSearch**.
 
-- **LeanSearch (`https://leansearch.net`)**: High-accuracy semantic search engine over Mathlib theorems using hierarchical informalization and neural re-ranking.
-- **Moogle (`https://www.moogle.ai`)**: Natural language neural search for Lean 4.
-- **Lean Exploration Workflow**:
-  1. Query natural language terms to find candidate Mathlib module paths (e.g., `Mathlib.Analysis.NormedSpace.BanachSteinhaus`).
-  2. Add the required `import` to your Lean file.
-  3. Use `search_loogle.py` or inline `exact?` to pinpoint the specific sub-lemma within that module.
+The skill bundles `scripts/search_leansearch.py`, allowing autonomous coding agents and terminal users to query the LeanSearch REST API (`https://leansearch.net/search`) directly without opening a web browser.
+
+### CLI Usage
+
+```bash
+python3 <skill-path>/scripts/search_leansearch.py "<query>" [-n <limit>] [--json] [-t <timeout>]
+```
+
+- `<query>`: Natural language mathematical concept or theorem name in English.
+- `-n`, `--limit`: Maximum number of results to display (default: `10`, `0` for all).
+- `--json`: Output full structured JSON containing declaration names, modules, signatures, kinds, and informal descriptions.
+- `-t`, `--timeout`: Query timeout in seconds (default: `15.0`).
+
+### Practical Examples
+
+```bash
+# 1. Query famous named theorem by mathematical concept
+python3 scripts/search_leansearch.py "Banach-Steinhaus theorem" -n 3
+
+# 2. Query informal property in group theory
+python3 scripts/search_leansearch.py "the order of a group element divides the order of the group" -n 2
+
+# 3. Retrieve JSON for programmatic parsing
+python3 scripts/search_leansearch.py "Heine-Borel theorem" -n 1 --json
+```
+
+### Sample Output
+
+```text
+LeanSearch Results [LEANSEARCH] for: "Banach-Steinhaus theorem"
+Matched 2 declaration(s):
+======================================================================
+1. banach_steinhaus (theorem) [Distance: 0.2447]
+   Module  : Mathlib.Analysis.Normed.Operator.BanachSteinhaus  (use `import Mathlib.Analysis.Normed.Operator.BanachSteinhaus`)
+   Type    : ∀ {E : Type u_1} {F : Type u_2} {𝕜 : Type u_3} {𝕜₂ : Type u_4} ...
+   Concept : Banach-Steinhaus Theorem (Uniform Boundedness Principle)
+   Summary : Let E and F be normed spaces over nontrivially normed fields...
+----------------------------------------------------------------------
+```
+
+### Headless Agent Exploration Workflow
+
+1. **Query Concept**: Run `search_leansearch.py "<concept>"` to discover candidate declarations and their enclosing Mathlib module.
+2. **Add Module Import**: Extract the `Module` field and insert `import <Module>` at the top of your Lean file.
+3. **Pinpoint & Verify**: Use `search_loogle.py` or inline `exact?` / `#check` to confirm the lemma resolves cleanly in your proof context.
 
 ---
 
@@ -248,12 +330,14 @@ When you only know high-level mathematical terminology in English (e.g., "Banach
 - **Never guess lemma names without checking**: Hallucinating identifiers (e.g., `Mathlib.Theorem.pythagorean`) causes `unknown identifier` compilation errors.
 - **Do not overload Loogle queries**: Writing overly complex signatures with 10 type variables causes Loogle timeouts. Start with key constants or subexpressions (e.g., `_ * (_ ^ _)`), then refine.
 - **Avoid plain text searches in Loogle**: Querying `"Measure.map"` as a type signature yields 0 hits because Loogle searches structural types. For constant presence, omit quotes (`Measure.map`); for name substring, use quotes (`"map"`).
+- **Relying on `--local` Loogle without root requirement or pre-building**: Running `search_loogle.py --local` in a project where `.lake/packages/loogle` exists but `loogle` is not declared as a direct dependency in `lakefile.toml` / `lakefile.lean` will fail with `unknown executable loogle`. Furthermore, invoking local Loogle for the first time without pre-building (`lake build loogle`) can trigger a long build exceeding the default 25-second timeout. Always declare `loogle` in the root lakefile and pre-build it.
 
 ### Verification Checklist
 
 - [ ] Identified active goal with `lean_goal.py`?
 - [ ] Attempted inline `exact?` / `apply?` / `rw?` first on active goals?
 - [ ] If inline tactics failed or timed out, transitioned to Loogle search (`search_loogle.py`)?
+- [ ] If using `--local` Loogle, confirmed `loogle` is declared in root `lakefile.toml`/`lakefile.lean` and pre-built (`lake build loogle`)?
 - [ ] Checked search result `Module` and added `import <Module>` to the Lean file header?
 - [ ] Verified that the identifier resolves cleanly (`#check <lemma_name>`)?
 - [ ] Checked for clean compilation without `sorry` or warnings?

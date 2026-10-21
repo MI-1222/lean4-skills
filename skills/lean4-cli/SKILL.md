@@ -6,7 +6,7 @@ metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
   tested-mathlib-version: 'v4.35.0'
-  version: '1.2.0'
+  version: '1.3.0'
 ---
 
 # Lean 4 CLI and Lake Build Management
@@ -241,7 +241,7 @@ If you see `sorryAx` or any custom identifier, the proof is **not complete**. Im
 Run without editing the source file:
 
 ```bash
-lake env lean --run - <<EOF
+lake env lean --stdin <<EOF
 import MyProject.MyModule
 #print axioms MyProject.MyModule.my_theorem
 EOF
@@ -316,6 +316,35 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
   - `column`: 1-indexed column number (`null` if file-level or general).
   - `severity`: `"error"`, `"warning"`, or `"info"`.
   - `message`: Diagnostic message, including multi-line indentation details.
+- `prints`: (Optional) List of non-diagnostic top-level command output strings (such as `#print axioms` results, `#check` types, or `#eval` values), cleanly separated from compiler warnings and errors.
+
+### Capturing "Try this:" Suggestions Headlessly
+
+When running suggestion tactics like `simp?`, `exact?`, or `grind?`, the Lean compiler outputs candidate replacements as `info` level diagnostics.
+In modern Lean (e.g. Lean 4.35+), suggestions may include metadata action tags such as `[apply]`:
+
+```json
+{
+  "file": "MathProof/Basic.lean",
+  "line": 42,
+  "column": 2,
+  "severity": "info",
+  "message": "Try this: [apply] simp only [Nat.add_zero, MulZeroClass.mul_zero]"
+}
+```
+
+AI agents can parse this JSON via `parse_diagnostics.py`, extract the replacement string while stripping any `[tag]` prefix using regex, and programmatically substitute it into the source file without relying on an interactive editor infoview:
+
+```python
+import re
+
+
+def extract_try_this(message: str) -> str | None:
+    # Match 'Try this: ' and strip metadata action tags like '[apply]' or '[exact]'
+    # Using [a-zA-Z]+ prevents false positive matches on code brackets like rw [h1] or lists
+    match = re.search(r"Try this:\s*(?:\[[a-zA-Z]+\]\s*)?([^\n]+)", message)
+    return match.group(1).strip() if match else None
+```
 
 ---
 

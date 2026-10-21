@@ -202,6 +202,69 @@ calc
 - Use `_` for continuation terms on the left.
 - Provide a concise justification for every line using `:= by ...` or a direct proof term.
 
+### 4.1. Recovery Recipes for "invalid 'calc' step" (Syntactic & Definitional Mismatches)
+
+When Lean's elaborator rejects the first step of a `calc` chain with:
+
+```text
+error: invalid 'calc' step, left-hand side is
+  <expr_A>
+but is expected to be
+  <expr_B>
+```
+
+this almost always stems from a syntactic discrepancy between what `simp only` produced and what was written in the first line of `calc` (e.g., division `/` vs reciprocal multiplication `* ·⁻¹`, monus `n - m`, or bundled projection vs explicit application).
+
+Use these four concrete recovery recipes to bridge the gap:
+
+#### Recipe 1: Use `change` for Definitional Alignment
+
+If `<expr_A>` and `<expr_B>` are definitionally equal, place `change` immediately before `calc` to update the goal's syntactic representation to match your intended `calc` LHS:
+
+```lean
+-- Goal syntax: (1 / (m : ℝ)) * ∑ ... ≤ ε
+-- Intended calc LHS: (m : ℝ)⁻¹ * ∑ ...
+change (m : ℝ)⁻¹ * ∑ k : Fin m, f k ≤ ε
+calc
+  (m : ℝ)⁻¹ * ∑ k : Fin m, f k
+    ≤ (m : ℝ)⁻¹ * ∑ k : Fin m, |f k| := by gcongr; exact Finset.abs_sum_le_sum_abs _ _
+  _ ≤ ε                              := by linarith
+```
+
+#### Recipe 2: Anchor the Goal with `show ... from calc`
+
+Explicitly specify the outer goal using `show ... from calc` to bridge the expected type and the calculation block:
+
+```lean
+-- Goal syntax: |(1 / (m : ℝ)) * x| ≤ ε
+show (m : ℝ)⁻¹ * |x| ≤ ε from
+  calc
+    (m : ℝ)⁻¹ * |x| ≤ (m : ℝ)⁻¹ * C := by gcongr
+    _ ≤ ε                           := by linarith
+```
+
+#### Recipe 3: Pre-normalize with `dsimp only` (Zero Proof Overhead)
+
+When operators differ definitionally (such as `x / y` into `x * y⁻¹` or projection unfolding), use `dsimp only` before `calc`. Because `dsimp` only performs definitional reductions, it introduces zero proof terms and aligns the syntactic view cleanly:
+
+```lean
+-- Def-eq normalization pass before calc:
+dsimp only [div_eq_mul_inv]
+calc
+  a * b⁻¹ ≤ c * b⁻¹ := by gcongr
+  _ ≤ d             := by linarith
+```
+
+#### Recipe 4: Headless Goal Inspection via `lean_goal.py`
+
+If you are unsure of the exact elaborated AST of the goal after `simp`:
+
+```bash
+python3 <skills-path>/lean4-interactive-proof/scripts/lean_goal.py MyFile.lean --line <line_of_calc>
+```
+
+Inspect the `⊢ <LHS> ≤ <RHS>` in the `rendered` output, and copy the LHS verbatim into the first line of `calc`.
+
 ---
 
 ## 5. Prefer Term Mode for Trivial Proofs

@@ -1,12 +1,13 @@
 ---
 name: lean4-proof-repair
-description: Comprehensive diagnosis and repair guide for compiler errors, elaboration failures, tactic breakdowns, and unprovable goals in Lean 4 mathematical proofs. Use whenever encountering or fixing Lean 4 errors, including `type mismatch`, `synthesized: ..., inferred: ...` (instance pollution), `motive is not type correct`, `failed to synthesize instance`, `maximum number of heartbeats exceeded`, `tactic '...' failed` (`linarith`, `omega`, `ring`, `grind`, `aesop`, `exact`, etc.), `unsolved goals`, `unknown identifier`, or persistent proof failures requiring falsification and counterexample search. Provides instant triage rules, progressive reference paths, and systematic correction protocols.
+description: >-
+  Comprehensive diagnosis and repair guide for compiler errors, elaboration failures, tactic breakdowns, and unprovable goals in Lean 4 mathematical proofs. Use whenever encountering or fixing Lean 4 errors, including `type mismatch`, `synthesized: ..., inferred: ...` (instance pollution), `motive is not type correct`, `failed to synthesize instance`, `maximum number of heartbeats exceeded`, `tactic '...' failed` (`linarith`, `omega`, `ring`, `grind`, `aesop`, `exact`, etc.), `unsolved goals`, `unknown identifier`, or persistent proof failures requiring falsification and counterexample search. Provides instant triage rules, progressive reference paths, and systematic correction protocols.
 compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib).
 metadata:
-  target-lean-version: ">=4.14.0"
-  tested-lean-version: "v4.35.0"
-  tested-mathlib-version: "v4.35.0"
-  version: '1.2.0'
+  target-lean-version: '>=4.14.0'
+  tested-lean-version: 'v4.35.0'
+  tested-mathlib-version: 'v4.35.0'
+  version: '1.3.0'
 ---
 
 # Lean 4 Proof Repair Guide
@@ -62,10 +63,10 @@ When a Lean file or code block fails verification, execute these four stages:
 
 1. **Parse Diagnostics**:
    Extract structured error diagnostics (file, line, column, severity, message).
-   _Tip_: Use `skills/lean4-cli/scripts/parse_diagnostics.py` to convert compiler output into JSON.
+   _Tip_: Use `parse_diagnostics.py` (from `lean4-cli`, e.g. `<skills-path>/lean4-cli/scripts/parse_diagnostics.py`) to convert compiler output into JSON.
 2. **Inspect the Tactic State**:
    Inspect the exact hypotheses and goal target at the failing line.
-   _Tip_: Use `skills/lean4-interactive-proof/scripts/lean_goal.py` to query the live LSP tactic state without full rebuilds.
+   _Tip_: Use `lean_goal.py` (from `lean4-interactive-proof`, e.g. `<skills-path>/lean4-interactive-proof/scripts/lean_goal.py`) to query the live LSP tactic state without full rebuilds.
 
 ### Stage 2: Classify the Failure
 
@@ -96,7 +97,7 @@ Load only the specialized guide matching the diagnosed error category:
    ```bash
    lake env lean path/to/File.lean
    ```
-   Or use `skills/lean4-syntax/scripts/check_syntax.py` on the edited snippet.
+   Or use `check_syntax.py` (from `lean4-syntax`, e.g. `<skills-path>/lean4-syntax/scripts/check_syntax.py`) on the edited snippet.
 3. Confirm that no downstream proofs were broken.
 
 ---
@@ -124,7 +125,6 @@ graph TD
 2. **Strictly isolate every branching goal with focus dots (`·`)**:
    Do not allow multiple goals to be processed sequentially without `·`. It hides bugs and misplaces error markers.
 3. **Use `omega` (Lean 4.7+ Core) for integers/naturals, `linarith` for rationals/reals**:
-   Mixing up their domains is the #1 cause of arithmetic decision tactic failures.
    Mixing up their domains is the #1 cause of arithmetic decision tactic failures.
 4. **Prefer `refine` over `exact` when debugging**:
    `refine` creates helpful subgoals for any missing conditions, whereas `exact` immediately throws a fatal type mismatch.
