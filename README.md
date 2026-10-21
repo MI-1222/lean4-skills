@@ -20,15 +20,15 @@ AIエージェントがLean 4を用いた数学の形式的証明(Mathlibの利�
 
 ## スキル一覧
 
-| スキル名                                                    | 役割                                                               | 同梱スクリプト / リファレンス                |
-| :---------------------------------------------------------- | :----------------------------------------------------------------- | :------------------------------------------- |
-| [`lean4-interactive-proof`](skills/lean4-interactive-proof) | `lean --server` と通信し、指定位置のゴール状態(Tactic State)を取得 | `scripts/lean_goal.py`                       |
-| [`lean4-proof-repair`](skills/lean4-proof-repair)           | 型不一致やタイムアウトなど、頻出コンパイラエラーの診断と修復       | `references/*.md` (7編のエラー処方箋)        |
-| [`lean4-syntax`](skills/lean4-syntax)                       | 証明構文リファレンスおよび高速構文チェック・Lean 3構文の混同防止   | `scripts/check_syntax.py`, `references/*.md` |
-| [`lean4-cli`](skills/lean4-cli)                             | `lake` / `lean` の運用自動化、ビルドログの構造化JSONパース         | `scripts/parse_diagnostics.py`               |
-| [`lean4-best-practice`](skills/lean4-best-practice)         | トップダウン証明法(Sorry先行)、`simp` 規律、命名規則の活用         | `references/*.md` (6編の実践ガイド)          |
-| [`lean4-mathlib-search`](skills/lean4-mathlib-search)       | Loogle(型シグネチャ検索)や探索タクティクによるMathlib定理検索      | `scripts/search_loogle.py`                   |
-| [`lean4-mathlib-use`](skills/lean4-mathlib-use)             | 最小限インポート指針、型クラス、junk value、古典論理の適切な扱い   | `references/*.md` (4編の利用ガイド)          |
+| スキル名                                                    | 役割                                                                                          | 同梱スクリプト / リファレンス                              |
+| :---------------------------------------------------------- | :-------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
+| [`lean4-interactive-proof`](skills/lean4-interactive-proof) | `lean --server` と通信し、指定位置のゴール状態(Tactic State)を取得                            | `scripts/lean_goal.py`                                     |
+| [`lean4-proof-repair`](skills/lean4-proof-repair)           | 型不一致やタイムアウトなど、頻出コンパイラエラーの診断と修復                                  | `references/*.md` (7編のエラー処方箋)                      |
+| [`lean4-syntax`](skills/lean4-syntax)                       | 証明構文リファレンスおよび高速構文チェック・Lean 3構文の混同防止                              | `scripts/check_syntax.py`, `references/*.md`               |
+| [`lean4-cli`](skills/lean4-cli)                             | `lake` / `lean` の運用自動化、ビルドログの構造化JSONパース                                    | `scripts/parse_diagnostics.py`                             |
+| [`lean4-best-practice`](skills/lean4-best-practice)         | トップダウン証明法(Sorry先行)、`simp` 規律、命名規則の活用                                    | `references/*.md` (6編の実践ガイド)                        |
+| [`lean4-mathlib-search`](skills/lean4-mathlib-search)       | Loogle(型シグネチャ検索)やLeanSearch(セマンティック検索)、探索タクティクによるMathlib定理検索 | `scripts/search_loogle.py`, `scripts/search_leansearch.py` |
+| [`lean4-mathlib-use`](skills/lean4-mathlib-use)             | 最小限インポート指針、型クラス、junk value、古典論理の適切な扱い                              | `references/*.md` (4編の利用ガイド)                        |
 
 ## 導入方法
 
@@ -45,7 +45,7 @@ skills/
 ├── lean4-syntax/             # 構文チェック・リファレンス
 ├── lean4-cli/                # ビルド管理・ログ解析
 ├── lean4-best-practice/      # 証明プラクティス・規律
-├── lean4-mathlib-search/     # Loogle定理検索
+├── lean4-mathlib-search/     # Loogle/LeanSearch定理検索
 └── lean4-mathlib-use/        # Mathlib活用ガイド
 ```
 

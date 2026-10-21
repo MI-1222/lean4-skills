@@ -1,7 +1,7 @@
 ---
 name: lean4-mathlib-search
-description: Search Mathlib for theorems, lemmas, definitions, and tactics in Lean 4. Use whenever searching for mathematical lemmas, looking up theorem names by type signature with Loogle (`search_loogle.py`), finding lemmas using inline search tactics (`exact?`, `apply?`, `rw?` (Lean 4.7+ Core)), querying by natural language or semantic meaning (LeanSearch / Moogle), or deriving candidate theorem names from Mathlib naming conventions. Make sure to consult this skill whenever encountering unknown theorem names, unproven proof goals, or missing lemmas.
-compatibility: Target Lean 4.14.0+ and Mathlib v4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for scripts/search_loogle.py.
+description: Search Mathlib for theorems, lemmas, definitions, and tactics in Lean 4. Use whenever searching for mathematical lemmas, looking up theorem names by type signature with Loogle (`search_loogle.py`), finding lemmas using inline search tactics (`exact?`, `apply?`, `rw?` (Lean 4.7+ Core)), querying by natural language or semantic meaning via LeanSearch (`search_leansearch.py`), or deriving candidate theorem names from Mathlib naming conventions. Make sure to consult this skill whenever encountering unknown theorem names, unproven proof goals, or missing lemmas.
+compatibility: Target Lean 4.14.0+ and Mathlib v4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for scripts/search_loogle.py and scripts/search_leansearch.py.
 metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
@@ -19,11 +19,11 @@ Mathlib is vast (over 100,000 theorems and definitions). Blind guessing or hallu
 
 ## 0. Environment & Version Compatibility
 
-| Component   | Target / Supported          | Verified / Tested Version             | Notes                                                 |
-| :---------- | :-------------------------- | :------------------------------------ | :---------------------------------------------------- |
-| **Lean 4**  | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified with inline search tactics (`exact?`, `rw?`) |
-| **Mathlib** | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Indexes modern naming conventions and module layout   |
-| **Python**  | `>=3.10`                    | `3.14.x`                              | Required for `scripts/search_loogle.py`               |
+| Component   | Target / Supported          | Verified / Tested Version             | Notes                                                            |
+| :---------- | :-------------------------- | :------------------------------------ | :--------------------------------------------------------------- |
+| **Lean 4**  | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified with inline search tactics (`exact?`, `rw?`)            |
+| **Mathlib** | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Indexes modern naming conventions and module layout              |
+| **Python**  | `>=3.10`                    | `3.14.x`                              | Required for `scripts/search_loogle.py` & `search_leansearch.py` |
 
 ### Version-Specific Search Notes
 
@@ -54,7 +54,7 @@ graph TD
     Q2 -- "No, only informal math concept" --> Q3{"Do you know standard Mathlib terminology?"}
 
     Q3 -- "Yes, standard terms" --> Naming["Strategy 3: Mathlib Naming Convention + Grep"]
-    Q3 -- "No, abstract / high-level concept" --> Semantic["Strategy 4: Semantic Search (LeanSearch / Moogle)"]
+    Q3 -- "No, abstract / high-level concept" --> Semantic["Strategy 4: Semantic Search (`search_leansearch.py`)"]
 ```
 
 ---
@@ -268,16 +268,55 @@ Once a candidate name is deduced:
 
 ---
 
-## 5. Strategy 4: Semantic & Natural Language Search
+## 5. Strategy 4: Semantic & Natural Language Search (`search_leansearch.py`)
 
-When you only know high-level mathematical terminology in English (e.g., "Banach-Steinhaus theorem", "Euler totient formula", "Heine-Borel compactness"), use semantic search systems:
+When you do not know the exact Lean type signature or Mathlib naming pattern, but know high-level mathematical terminology in informal English (e.g., "Banach-Steinhaus theorem", "Heine-Borel compactness", "order of element divides group order", "intermediate value theorem"), use **LeanSearch**.
 
-- **LeanSearch (`https://leansearch.net`)**: High-accuracy semantic search engine over Mathlib theorems using hierarchical informalization and neural re-ranking.
-- **Moogle (`https://www.moogle.ai`)**: Natural language neural search for Lean 4.
-- **Lean Exploration Workflow**:
-  1. Query natural language terms to find candidate Mathlib module paths (e.g., `Mathlib.Analysis.NormedSpace.BanachSteinhaus`).
-  2. Add the required `import` to your Lean file.
-  3. Use `search_loogle.py` or inline `exact?` to pinpoint the specific sub-lemma within that module.
+The skill bundles `scripts/search_leansearch.py`, allowing autonomous coding agents and terminal users to query the LeanSearch REST API (`https://leansearch.net/search`) directly without opening a web browser.
+
+### CLI Usage
+
+```bash
+python3 <skill-path>/scripts/search_leansearch.py "<query>" [-n <limit>] [--json] [-t <timeout>]
+```
+
+- `<query>`: Natural language mathematical concept or theorem name in English.
+- `-n`, `--limit`: Maximum number of results to display (default: `10`, `0` for all).
+- `--json`: Output full structured JSON containing declaration names, modules, signatures, kinds, and informal descriptions.
+- `-t`, `--timeout`: Query timeout in seconds (default: `15.0`).
+
+### Practical Examples
+
+```bash
+# 1. Query famous named theorem by mathematical concept
+python3 scripts/search_leansearch.py "Banach-Steinhaus theorem" -n 3
+
+# 2. Query informal property in group theory
+python3 scripts/search_leansearch.py "the order of a group element divides the order of the group" -n 2
+
+# 3. Retrieve JSON for programmatic parsing
+python3 scripts/search_leansearch.py "Heine-Borel theorem" -n 1 --json
+```
+
+### Sample Output
+
+```text
+LeanSearch Results [LEANSEARCH] for: "Banach-Steinhaus theorem"
+Matched 2 declaration(s):
+======================================================================
+1. banach_steinhaus (theorem) [Distance: 0.2447]
+   Module  : Mathlib.Analysis.Normed.Operator.BanachSteinhaus  (use `import Mathlib.Analysis.Normed.Operator.BanachSteinhaus`)
+   Type    : ∀ {E : Type u_1} {F : Type u_2} {𝕜 : Type u_3} {𝕜₂ : Type u_4} ...
+   Concept : Banach-Steinhaus Theorem (Uniform Boundedness Principle)
+   Summary : Let E and F be normed spaces over nontrivially normed fields...
+----------------------------------------------------------------------
+```
+
+### Headless Agent Exploration Workflow
+
+1. **Query Concept**: Run `search_leansearch.py "<concept>"` to discover candidate declarations and their enclosing Mathlib module.
+2. **Add Module Import**: Extract the `Module` field and insert `import <Module>` at the top of your Lean file.
+3. **Pinpoint & Verify**: Use `search_loogle.py` or inline `exact?` / `#check` to confirm the lemma resolves cleanly in your proof context.
 
 ---
 
