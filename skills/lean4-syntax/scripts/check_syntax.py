@@ -20,7 +20,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 
 @dataclasses.dataclass
@@ -63,7 +63,7 @@ class Lean3Linter:
     """Detects legacy Lean 3 patterns frequently hallucinated by LLMs."""
 
     # Patterns to detect Lean 3 syntax
-    RULES: list[tuple[str, re.Pattern, str, str]] = [
+    RULES: ClassVar[list[tuple[str, re.Pattern, str, str]]] = [
         (
             "LEAN3_BEGIN_END",
             re.compile(r"\bbegin\b"),
@@ -264,8 +264,8 @@ class Lean3Linter:
                 has_seen_mod_doc = True
                 mod_doc_line = line_idx
             elif (
-                stripped.startswith("import ") or stripped.startswith("public import ")
-            ) and has_seen_mod_doc:
+                stripped.startswith(("import ", "public import ")) and has_seen_mod_doc
+            ):
                 diagnostics.append(
                     Diagnostic(
                         severity="error",
@@ -372,7 +372,7 @@ class Lean4SyntaxChecker:
 
         try:
             content = file_path.read_text(encoding="utf-8")
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             return CheckResult(
                 is_valid=False,
                 has_warnings=False,
@@ -438,11 +438,12 @@ class Lean4SyntaxChecker:
 
         filtered_lint: list[Diagnostic] = []
         for ld in lint_diags:
-            if "[LEAN3_SPLIT_CONJUNCTION]" in ld.message:
-                # If the compiler executed and did NOT report a split failure on this line,
-                # the split is valid in Lean 4 and should not trigger a warning.
-                if compiler_executed and ld.line not in split_failure_lines:
-                    continue
+            if (
+                "[LEAN3_SPLIT_CONJUNCTION]" in ld.message
+                and compiler_executed
+                and ld.line not in split_failure_lines
+            ):
+                continue
             filtered_lint.append(ld)
 
         return filtered_lint + compiler_diags
@@ -469,26 +470,25 @@ class Lean4SyntaxChecker:
         temp_dir = self.project_root / ".lake" / "temp_check"
         try:
             temp_dir.mkdir(parents=True, exist_ok=True)
-        except Exception:
+        except OSError:
             temp_dir = Path(tempfile.gettempdir())
 
-        temp_file = tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".lean",
-            dir=temp_dir,
-            delete=False,
-            encoding="utf-8",
-        )
-        temp_file_path = Path(temp_file.name)
-
+        temp_file_path = None
         try:
-            temp_file.write(snippet_to_compile)
-            temp_file.flush()
-            temp_file.close()
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".lean",
+                dir=temp_dir,
+                delete=False,
+                encoding="utf-8",
+            ) as temp_file:
+                temp_file_path = Path(temp_file.name)
+                temp_file.write(snippet_to_compile)
+                temp_file.flush()
 
             compiler_result = self._run_lean_compiler(temp_file_path)
         finally:
-            if temp_file_path.exists():
+            if temp_file_path and temp_file_path.exists():
                 try:
                     os.remove(temp_file_path)
                 except OSError:
@@ -536,8 +536,8 @@ class Lean4SyntaxChecker:
             proc = subprocess.run(
                 cmd,
                 cwd=str(self.project_root),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
+                check=False,
                 text=True,
                 timeout=self.timeout,
             )
@@ -548,12 +548,12 @@ class Lean4SyntaxChecker:
                 proc = subprocess.run(
                     cmd_fallback,
                     cwd=str(self.project_root),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
+                    check=False,
                     text=True,
                     timeout=self.timeout,
                 )
-            except Exception as e:
+            except (subprocess.SubprocessError, OSError) as e:
                 return CheckResult(
                     is_valid=False,
                     has_warnings=False,
@@ -583,7 +583,7 @@ class Lean4SyntaxChecker:
                 ],
                 raw_output="",
             )
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError) as e:
             return CheckResult(
                 is_valid=False,
                 has_warnings=False,

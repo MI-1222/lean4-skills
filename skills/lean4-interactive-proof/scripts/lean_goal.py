@@ -62,17 +62,9 @@ def find_declaration_scope(lines: list, target_line_1indexed: int) -> tuple:
         s = start
         while s > 1:
             prev = lines[s - 2].strip()
-            if (
-                (
-                    prev.startswith("/--")
-                    or prev.startswith("@")
-                    or prev.startswith("omit ")
-                    or prev.startswith("open ")
-                    or prev.startswith("set_option ")
-                )
-                or prev.endswith("-/")
-                or prev.startswith("-")
-            ):
+            if prev.startswith(
+                ("/--", "@", "omit ", "open ", "set_option ", "-")
+            ) or prev.endswith("-/"):
                 s -= 1
             else:
                 break
@@ -158,7 +150,7 @@ class LeanLSPClient:
                 message = json.loads(body_bytes.decode("utf-8"))
                 self._dispatch_message(message)
 
-            except Exception:
+            except (json.JSONDecodeError, UnicodeDecodeError, OSError):
                 if not self.running:
                     break
 
@@ -323,7 +315,7 @@ class LeanLSPClient:
         try:
             self.send_request("shutdown", {}, timeout=2.0)
             self.send_notification("exit", {})
-        except Exception:
+        except (TimeoutError, OSError):
             pass
         finally:
             if self.process:
@@ -344,7 +336,10 @@ def find_project_root(target_file: Path) -> Path:
 
 
 def extract_goal_and_diagnostics(
-    file_path: Path, line_1indexed: int, col_1indexed: int = None, timeout: float = 8.0
+    file_path: Path,
+    line_1indexed: int,
+    col_1indexed: int | None = None,
+    timeout: float = 8.0,
 ) -> dict:
     """
     Extract Tactic State and compiler diagnostics at the target position, returning structured JSON.
@@ -485,7 +480,14 @@ def extract_goal_and_diagnostics(
             "error": None,
         }
 
-    except Exception as e:
+    except (
+        OSError,
+        TimeoutError,
+        subprocess.SubprocessError,
+        json.JSONDecodeError,
+        ValueError,
+        RuntimeError,
+    ) as e:
         return {
             "success": False,
             "error": str(e),

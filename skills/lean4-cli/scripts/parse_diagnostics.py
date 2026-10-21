@@ -212,6 +212,7 @@ def run_command_and_capture(command: str) -> tuple[int, str]:
     process = subprocess.run(
         command,
         shell=True,
+        check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

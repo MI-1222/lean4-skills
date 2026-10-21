@@ -118,8 +118,8 @@ def search_via_local_cli(
     try:
         proc = subprocess.run(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
+            check=False,
             text=True,
             timeout=timeout,
             cwd=str(work_dir) if work_dir else None,
@@ -137,7 +137,7 @@ def search_via_local_cli(
                 "'lake build loogle' or run with '--timeout 180'."
             ),
         }
-    except Exception as exc:
+    except (OSError, subprocess.SubprocessError) as exc:
         return {
             "success": False,
             "source": "local",
@@ -156,11 +156,7 @@ def search_via_local_cli(
         for line in raw_output.splitlines():
             line_str = line.strip()
             # Skip compiler warnings and progress bars
-            if (
-                line_str.startswith("⚠")
-                or line_str.startswith("warning:")
-                or "Running job" in line_str
-            ):
+            if line_str.startswith(("⚠", "warning:")) or "Running job" in line_str:
                 continue
             if line_str.startswith("Found ") or "declarations mentioning" in line_str:
                 continue
@@ -379,7 +375,7 @@ def search_via_rest_api(
                 "hits": [],
                 "error": f"Invalid JSON response from server: {json_err}",
             }
-        except Exception as exc:
+        except (TimeoutError, OSError, ValueError, RuntimeError) as exc:
             return {
                 "success": False,
                 "source": "api",
