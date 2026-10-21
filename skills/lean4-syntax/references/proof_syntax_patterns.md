@@ -161,11 +161,46 @@ def add_one : ℕ → ℕ := fun n ↦ n + 1
 def add_one_old : ℕ → ℕ := fun n => n + 1
 ```
 
-### 5.3. `show` Syntax Discipline
+### 5.3. `show` Syntax Discipline (Term Mode vs. Tactic Mode)
 
-- Use `show P by tac` when providing a tactic proof block.
-- Use `show P from term` only when providing a direct proof term.
-- Never write `show P from by tac` (`from` before `by` is redundant).
+The syntax of `show` differs crucially depending on whether it is used in **term mode** or inside a **tactic block**:
+
+#### Term Mode (`:= show ...`)
+
+When constructing a proof expression at the top level or inside term arguments:
+
+- **With tactics**: `show P by <tactics>` (specifies the expected type `P` and enters tactic mode via `by`).
+- **With a proof term**: `show P from <term>` (specifies expected type `P` and proves it directly with `<term>`).
+- ❌ **Anti-pattern**: `show P from by <tactics>` (redundant `from`).
+
+```lean
+-- ✅ Term mode with tactics:
+theorem ex_term_by (h : P) : P :=
+  show P by exact h
+
+-- ✅ Term mode with direct term:
+theorem ex_term_from (h : P) : P :=
+  show P from h
+```
+
+#### Tactic Mode (`by ...`)
+
+Inside an existing `by` block, `show P` is a standalone tactic that restates the current goal to definitionally equal `P` (similar to `change P`):
+
+- **Correct**: Write bare `show P`, then continue proof tactics on subsequent lines.
+- ❌ **Anti-pattern**: Writing `show P by <tactics>` inside a `by` block triggers a syntax error:
+  `unexpected token 'by'; expected command`
+
+```lean
+-- ✅ Tactic mode: bare `show P`
+theorem ex_tactic (h : P) : P := by
+  show P
+  exact h
+
+-- ❌ AVOID inside `by`:
+-- theorem ex_bad (h : P) : P := by
+--   show P by exact h  -- Syntax error: unexpected token 'by'
+```
 
 ### 5.4. Typeclass Instance Registration in Proofs
 
