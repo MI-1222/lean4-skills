@@ -320,7 +320,8 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
 
 ### Capturing "Try this:" Suggestions Headlessly
 
-When running suggestion tactics like `simp?`, `exact?`, or `grind?`, the Lean compiler outputs candidate replacements as `info` level diagnostics:
+When running suggestion tactics like `simp?`, `exact?`, or `grind?`, the Lean compiler outputs candidate replacements as `info` level diagnostics.
+In modern Lean (e.g. Lean 4.35+), suggestions may include metadata action tags such as `[apply]`:
 
 ```json
 {
@@ -328,11 +329,21 @@ When running suggestion tactics like `simp?`, `exact?`, or `grind?`, the Lean co
   "line": 42,
   "column": 2,
   "severity": "info",
-  "message": "Try this: simp only [Nat.add_zero, MulZeroClass.mul_zero]"
+  "message": "Try this: [apply] simp only [Nat.add_zero, MulZeroClass.mul_zero]"
 }
 ```
 
-AI agents can parse this JSON via `parse_diagnostics.py`, extract the replacement string following `Try this: `, and programmatically substitute it into the source file without relying on an interactive editor infoview.
+AI agents can parse this JSON via `parse_diagnostics.py`, extract the replacement string while stripping any `[tag]` prefix using regex, and programmatically substitute it into the source file without relying on an interactive editor infoview:
+
+```python
+import re
+
+def extract_try_this(message: str) -> str | None:
+    # Match 'Try this: ' and strip metadata action tags like '[apply]' or '[exact]'
+    # Using [a-zA-Z]+ prevents false positive matches on code brackets like rw [h1] or lists
+    match = re.search(r"Try this:\s*(?:\[[a-zA-Z]+\]\s*)?([^\n]+)", message)
+    return match.group(1).strip() if match else None
+```
 
 ---
 

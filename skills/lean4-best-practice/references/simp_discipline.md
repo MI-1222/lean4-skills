@@ -99,8 +99,14 @@ For autonomous coding agents operating via headless CLI without an interactive V
    ```
 
 3. **Automate Replacement**:
-   - Extract the suggested string after `Try this: ` (e.g. `simp only [Nat.add_zero, MulZeroClass.mul_zero]`).
-   - Use `replace_file_content` to substitute `simp?` with the extracted `simp only [...]`.
+   - Extract the suggested string after `Try this: `.
+   - **Modern Lean Note (4.35+)**: Compiler output may prepend tactic action metadata tags (e.g. `Try this: [apply] simp only [...]`). Always strip `\[[a-zA-Z]+\]\s*` using regex:
+     ```python
+     # Stripping ^\[[a-zA-Z]+\]\s* ensures metadata tags like [apply] are removed
+     # without corrupting valid Lean brackets (e.g. simp only [lemma])
+     clean_simp = re.sub(r"^\s*\[[a-zA-Z]+\]\s*", "", raw_suggestion.split("Try this:", 1)[-1].strip())
+     ```
+   - Use `replace_file_content` to substitute `simp?` with the extracted `clean_simp` (e.g. `simp only [Nat.add_zero, MulZeroClass.mul_zero]`).
    - Re-validate with `check_syntax.py` to ensure the goal closes cleanly without residual warnings.
 
 ---

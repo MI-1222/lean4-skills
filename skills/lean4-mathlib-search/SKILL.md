@@ -78,10 +78,22 @@ When working inside a tactic block (`by ...`), Lean 4 provides built-in metaprog
    ```
 2. **Collect Compiler Diagnostics**: Run `lake env lean <file>` or use `lean4-interactive-proof` (`lean_goal.py`) to inspect compiler messages.
 3. **Extract `Try this:` Suggestion**:
+   In older Lean versions, suggestions appear simply as:
    ```text
    Try this: exact Nat.add_comm x y
    ```
-4. **Replace and Validate**: Permanently substitute `exact?` with the suggested code (`exact Nat.add_comm x y`) and verify diagnostics are clean.
+   In modern Lean versions (e.g., Lean 4.35+), suggestions may include tactic metadata action tags such as `[apply]`:
+   ```text
+   Try this: [apply] exact Nat.add_comm x y
+   ```
+   When automating extraction via script or agent, sanitize the suggestion by stripping the `[tag]` prefix using regex before replacement:
+   ```python
+   # Robust regex: strips metadata action tags like [apply] using [a-zA-Z]+
+   # Prevents accidental removal of actual Lean code brackets (e.g. lists or rw [lemma])
+   match = re.search(r"Try this:\s*(?:\[[a-zA-Z]+\]\s*)?([^\n]+)", message)
+   clean_replacement = match.group(1).strip() if match else None
+   ```
+4. **Replace and Validate**: Permanently substitute `exact?` with the sanitized code (`exact Nat.add_comm x y`) and verify diagnostics are clean.
 5. **Fallback**: If `exact?` fails (goal cannot be closed in one step), fall back to `apply?` or `rw?`.
 
 ### Limitations & Performance Considerations
