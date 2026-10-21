@@ -144,6 +144,107 @@ class Lean3Linter:
     ]
 
     @classmethod
+    def mask_comments_and_strings(cls, code: str) -> str:
+        """Mask inline/block comments and string literals with spaces.
+
+        Preserves exact line counts, line breaks ('\\n'), and column positions
+        so that syntax lint diagnostics report accurate line and column numbers
+        without false positives from comments or string contents.
+        """
+        chars = list(code)
+        n = len(chars)
+        i = 0
+        state = "code"  # "code", "string", "line_comment", "block_comment"
+        block_depth = 0
+
+        while i < n:
+            c = chars[i]
+            c_next = chars[i + 1] if i + 1 < n else ""
+
+            if state == "code":
+                # Check for character literals like 'a', '"', '\'', etc.
+                # Avoid confusing Lean primed identifiers (e.g., x', h') with character literals.
+                if c == "'":
+                    is_ident_char_before = i > 0 and (chars[i - 1].isalnum() or chars[i - 1] in ("_", "'"))
+                    if not is_ident_char_before:
+                        # Check for simple char literal: 'x'
+                        if i + 2 < n and chars[i + 2] == "'" and chars[i + 1] != "\\":
+                            chars[i] = " "
+                            chars[i + 1] = " "
+                            chars[i + 2] = " "
+                            i += 3
+                            continue
+                        # Check for escaped char literal: '\n', '\'', '\"'
+                        if i + 3 < n and chars[i + 1] == "\\" and chars[i + 3] == "'":
+                            chars[i] = " "
+                            chars[i + 1] = " "
+                            chars[i + 2] = " "
+                            chars[i + 3] = " "
+                            i += 4
+                            continue
+
+                if c == '"':
+                    state = "string"
+                    chars[i] = " "
+                    i += 1
+                elif c == "-" and c_next == "-":
+                    state = "line_comment"
+                    chars[i] = " "
+                    chars[i + 1] = " "
+                    i += 2
+                elif c == "/" and c_next == "-":
+                    state = "block_comment"
+                    block_depth = 1
+                    chars[i] = " "
+                    chars[i + 1] = " "
+                    i += 2
+                else:
+                    i += 1
+            elif state == "string":
+                if c == "\\":
+                    chars[i] = " "
+                    if i + 1 < n:
+                        if chars[i + 1] != "\n":
+                            chars[i + 1] = " "
+                        i += 2
+                    else:
+                        i += 1
+                elif c == '"':
+                    chars[i] = " "
+                    state = "code"
+                    i += 1
+                else:
+                    if c != "\n":
+                        chars[i] = " "
+                    i += 1
+            elif state == "line_comment":
+                if c == "\n":
+                    state = "code"
+                    i += 1
+                else:
+                    chars[i] = " "
+                    i += 1
+            elif state == "block_comment":
+                if c == "/" and c_next == "-":
+                    block_depth += 1
+                    chars[i] = " "
+                    chars[i + 1] = " "
+                    i += 2
+                elif c == "-" and c_next == "/":
+                    block_depth -= 1
+                    chars[i] = " "
+                    chars[i + 1] = " "
+                    i += 2
+                    if block_depth <= 0:
+                        state = "code"
+                else:
+                    if c != "\n":
+                        chars[i] = " "
+                    i += 1
+
+        return "".join(chars)
+
+    @classmethod
     def lint(cls, code: str) -> List[Diagnostic]:
         diagnostics: List[Diagnostic] = []
         lines = code.splitlines()
@@ -168,15 +269,18 @@ class Lean3Linter:
                 )
                 has_seen_mod_doc = False
 
-        for line_idx, line in enumerate(lines, start=1):
-            # Skip pure comment lines
-            stripped = line.strip()
-            if stripped.startswith("--") or stripped.startswith("/-"):
+        # Mask comments and string literals to prevent false positives
+        masked_code = cls.mask_comments_and_strings(code)
+        masked_lines = masked_code.splitlines()
+
+        for line_idx, masked_line in enumerate(masked_lines, start=1):
+            if not masked_line.strip():
                 continue
 
             for rule_id, pattern, severity, message in cls.RULES:
-                if pattern.search(line):
-                    col = line.find(pattern.search(line).group(0)) + 1
+                match = pattern.search(masked_line)
+                if match:
+                    col = match.start() + 1
                     diagnostics.append(
                         Diagnostic(
                             severity=severity,
