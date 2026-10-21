@@ -12,8 +12,7 @@ import os
 import re
 import subprocess
 import sys
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Any
 
 # Regex pattern to strip ANSI color escape sequences.
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -76,7 +75,7 @@ def strip_ansi(text: str) -> str:
     return ANSI_ESCAPE_RE.sub("", text)
 
 
-def parse_build_output(raw_text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
+def parse_build_output(raw_text: str) -> tuple[list[dict[str, Any]], list[str]]:
     """
     Parse console output from Lean 4 and Lake, separating diagnostics from top-level command prints.
 
@@ -86,9 +85,9 @@ def parse_build_output(raw_text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
     clean_text = strip_ansi(raw_text)
     lines = clean_text.splitlines()
 
-    diagnostics: List[Dict[str, Any]] = []
-    prints: List[str] = []
-    current_diag: Optional[Dict[str, Any]] = None
+    diagnostics: list[dict[str, Any]] = []
+    prints: list[str] = []
+    current_diag: dict[str, Any] | None = None
     in_print_block: bool = False
 
     def flush_current():
@@ -182,14 +181,16 @@ def parse_build_output(raw_text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
                     "severity": "error",
                     "message": line,
                 }
-            elif stripped_line.startswith("'") and ("depends on" in stripped_line or "does not depend" in stripped_line):
+            elif stripped_line.startswith("'") and (
+                "depends on" in stripped_line or "does not depend" in stripped_line
+            ):
                 prints.append(stripped_line)
 
     flush_current()
     return diagnostics, prints
 
 
-def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
+def parse_diagnostics_text(raw_text: str) -> list[dict[str, Any]]:
     """
     Parse console output from Lean 4 and Lake, returning a list of diagnostics.
     Maintains backward compatibility by extracting only the diagnostic list.
@@ -201,7 +202,7 @@ def parse_diagnostics_text(raw_text: str) -> List[Dict[str, Any]]:
     return diagnostics
 
 
-def run_command_and_capture(command: str) -> Tuple[int, str]:
+def run_command_and_capture(command: str) -> tuple[int, str]:
     """
     Execute a shell command and capture its exit code and combined stdout/stderr.
 
@@ -294,7 +295,7 @@ def main():
 
     success = (exit_code == 0) and (error_count == 0)
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "success": success,
         "exit_code": exit_code,
         "error_count": error_count,

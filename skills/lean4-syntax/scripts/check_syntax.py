@@ -15,12 +15,12 @@ import argparse
 import dataclasses
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any
 
 
 @dataclasses.dataclass
@@ -31,7 +31,7 @@ class Diagnostic:
     message: str
     source: str  # "lean-compiler" or "lean3-linter"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "severity": self.severity,
             "line": self.line,
@@ -45,11 +45,11 @@ class Diagnostic:
 class CheckResult:
     is_valid: bool
     has_warnings: bool
-    diagnostics: List[Diagnostic]
+    diagnostics: list[Diagnostic]
     raw_output: str
-    checked_path: Optional[str] = None
+    checked_path: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "is_valid": self.is_valid,
             "has_warnings": self.has_warnings,
@@ -63,7 +63,7 @@ class Lean3Linter:
     """Detects legacy Lean 3 patterns frequently hallucinated by LLMs."""
 
     # Patterns to detect Lean 3 syntax
-    RULES: List[Tuple[str, re.Pattern, str, str]] = [
+    RULES: list[tuple[str, re.Pattern, str, str]] = [
         (
             "LEAN3_BEGIN_END",
             re.compile(r"\bbegin\b"),
@@ -119,13 +119,17 @@ class Lean3Linter:
         ),
         (
             "LEAN3_INDUCTION_WITH_VARS",
-            re.compile(r"\binduction\s+\S+\s+with\s+(?!\|\s*)[a-zA-Z0-9_]+\s+[a-zA-Z0-9_]+"),
+            re.compile(
+                r"\binduction\s+\S+\s+with\s+(?!\|\s*)[a-zA-Z0-9_]+\s+[a-zA-Z0-9_]+"
+            ),
             "warning",
             "Found 'induction ... with <var1> <var2>'. Lean 4 pattern-matches induction cases with 'with | zero => ... | succ n ih => ...' or binds them via subsequent 'intro'.",
         ),
         (
             "LEAN3_CASES_WITH_VARS",
-            re.compile(r"^\s*(?:[·•\-]\s*)?cases\s+\S+\s+with\s+(?!\|\s*)[a-zA-Z0-9_]+\s+[a-zA-Z0-9_]+"),
+            re.compile(
+                r"^\s*(?:[·•\-]\s*)?cases\s+\S+\s+with\s+(?!\|\s*)[a-zA-Z0-9_]+\s+[a-zA-Z0-9_]+"
+            ),
             "warning",
             "Found 'cases ... with <var1> <var2>'. Lean 4 uses 'rcases ... with ⟨...⟩', 'obtain', or pattern matching with 'with | ... => ...'.",
         ),
@@ -165,7 +169,9 @@ class Lean3Linter:
                 # Check for character literals like 'a', '"', '\'', etc.
                 # Avoid confusing Lean primed identifiers (e.g., x', h') with character literals.
                 if c == "'":
-                    is_ident_char_before = i > 0 and (chars[i - 1].isalnum() or chars[i - 1] in ("_", "'"))
+                    is_ident_char_before = i > 0 and (
+                        chars[i - 1].isalnum() or chars[i - 1] in ("_", "'")
+                    )
                     if not is_ident_char_before:
                         # Check for simple char literal: 'x'
                         if i + 2 < n and chars[i + 2] == "'" and chars[i + 1] != "\\":
@@ -245,8 +251,8 @@ class Lean3Linter:
         return "".join(chars)
 
     @classmethod
-    def lint(cls, code: str) -> List[Diagnostic]:
-        diagnostics: List[Diagnostic] = []
+    def lint(cls, code: str) -> list[Diagnostic]:
+        diagnostics: list[Diagnostic] = []
         lines = code.splitlines()
 
         # Check for module docstrings `/-!` placed before `import` statements
@@ -257,7 +263,9 @@ class Lean3Linter:
             if stripped.startswith("/-!"):
                 has_seen_mod_doc = True
                 mod_doc_line = line_idx
-            elif (stripped.startswith("import ") or stripped.startswith("public import ")) and has_seen_mod_doc:
+            elif (
+                stripped.startswith("import ") or stripped.startswith("public import ")
+            ) and has_seen_mod_doc:
                 diagnostics.append(
                     Diagnostic(
                         severity="error",
@@ -290,7 +298,9 @@ class Lean3Linter:
                     if rule_id == "LEAN3_SPLIT_CONJUNCTION":
                         # In static linting, if the enclosing declaration contains 'if' or 'match',
                         # 'split' is legitimate Lean 4 syntax for case-splitting branches.
-                        enclosing_context = "\n".join(masked_lines[current_decl_start:line_idx])
+                        enclosing_context = "\n".join(
+                            masked_lines[current_decl_start:line_idx]
+                        )
                         if branch_pattern.search(enclosing_context):
                             continue
 
@@ -311,12 +321,12 @@ class Lean3Linter:
 class Lean4SyntaxChecker:
     """Validates Lean 4 code syntax and elaboration via `lake env lean --json`."""
 
-    def __init__(self, project_root: Optional[Path] = None, timeout: float = 30.0):
+    def __init__(self, project_root: Path | None = None, timeout: float = 30.0):
         self.project_root = self._resolve_project_root(project_root)
         self.timeout = timeout
 
     @staticmethod
-    def _resolve_project_root(explicit_root: Optional[Path]) -> Path:
+    def _resolve_project_root(explicit_root: Path | None) -> Path:
         if explicit_root:
             resolved = explicit_root.resolve()
             if (resolved / "lean-toolchain").exists():
@@ -326,7 +336,11 @@ class Lean4SyntaxChecker:
         cwd = Path.cwd().resolve()
         cur = cwd
         while cur != cur.parent:
-            if (cur / "lean-toolchain").exists() or (cur / "lakefile.lean").exists() or (cur / "lakefile.toml").exists():
+            if (
+                (cur / "lean-toolchain").exists()
+                or (cur / "lakefile.lean").exists()
+                or (cur / "lakefile.toml").exists()
+            ):
                 return cur
             cur = cur.parent
 
@@ -376,7 +390,9 @@ class Lean4SyntaxChecker:
             )
 
         if auto_import_mathlib:
-            res = self.check_snippet(content, run_lint=run_lint, auto_import_mathlib=True)
+            res = self.check_snippet(
+                content, run_lint=run_lint, auto_import_mathlib=True
+            )
             res.checked_path = str(file_path)
             return res
 
@@ -397,8 +413,8 @@ class Lean4SyntaxChecker:
 
     @staticmethod
     def _reconcile_diagnostics(
-        lint_diags: List[Diagnostic], compiler_diags: List[Diagnostic]
-    ) -> List[Diagnostic]:
+        lint_diags: list[Diagnostic], compiler_diags: list[Diagnostic]
+    ) -> list[Diagnostic]:
         """Reconcile static linter warnings with real-time compiler diagnostics.
 
         Suppresses heuristic false positives (such as `LEAN3_SPLIT_CONJUNCTION`) when
@@ -411,14 +427,16 @@ class Lean4SyntaxChecker:
             if cd.line > 0:
                 compiler_executed = True
             msg_lower = cd.message.lower()
-            if "split" in msg_lower and ("failed" in msg_lower or "could not split" in msg_lower):
+            if "split" in msg_lower and (
+                "failed" in msg_lower or "could not split" in msg_lower
+            ):
                 split_failure_lines.add(cd.line)
 
         # If compiler produced no diagnostics, it executed successfully and cleanly
         if not compiler_diags:
             compiler_executed = True
 
-        filtered_lint: List[Diagnostic] = []
+        filtered_lint: list[Diagnostic] = []
         for ld in lint_diags:
             if "[LEAN3_SPLIT_CONJUNCTION]" in ld.message:
                 # If the compiler executed and did NOT report a split failure on this line,
@@ -477,7 +495,7 @@ class Lean4SyntaxChecker:
                     pass
 
         # Adjust compiler diagnostic line numbers to match original snippet
-        adjusted_compiler_diags: List[Diagnostic] = []
+        adjusted_compiler_diags: list[Diagnostic] = []
         for d in compiler_result.diagnostics:
             if line_offset > 0:
                 if d.line > line_offset:
@@ -581,7 +599,7 @@ class Lean4SyntaxChecker:
                 raw_output="",
             )
 
-        diagnostics: List[Diagnostic] = []
+        diagnostics: list[Diagnostic] = []
         has_error = False
         raw_stdout = proc.stdout.strip()
 
@@ -612,7 +630,9 @@ class Lean4SyntaxChecker:
 
         if proc.returncode != 0 and not has_error:
             has_error = True
-            err_msg = proc.stderr.strip() or "Lean compilation failed with non-zero exit code"
+            err_msg = (
+                proc.stderr.strip() or "Lean compilation failed with non-zero exit code"
+            )
             diagnostics.append(
                 Diagnostic(
                     severity="error",
@@ -646,7 +666,9 @@ def format_text_output(result: CheckResult) -> str:
         lines.append(f"Total diagnostics: {len(result.diagnostics)}")
         for d in result.diagnostics:
             pos_str = f"L{d.line}:C{d.column}" if d.line > 0 else "[-:-]"
-            lines.append(f"[{d.severity.upper():<7}] {pos_str:<10} ({d.source}) {d.message}")
+            lines.append(
+                f"[{d.severity.upper():<7}] {pos_str:<10} ({d.source}) {d.message}"
+            )
 
     return "\n".join(lines)
 
@@ -729,7 +751,9 @@ def main() -> int:
                 checked_path="<stdin>",
             )
         else:
-            res = checker.check_snippet(code, run_lint=run_lint, auto_import_mathlib=args.mathlib)
+            res = checker.check_snippet(
+                code, run_lint=run_lint, auto_import_mathlib=args.mathlib
+            )
     elif args.snippet:
         code = args.snippet
         if args.lint_only:
@@ -743,7 +767,9 @@ def main() -> int:
                 checked_path="<snippet>",
             )
         else:
-            res = checker.check_snippet(code, run_lint=run_lint, auto_import_mathlib=args.mathlib)
+            res = checker.check_snippet(
+                code, run_lint=run_lint, auto_import_mathlib=args.mathlib
+            )
     elif args.file:
         file_path = Path(args.file)
         if args.lint_only:
@@ -774,7 +800,9 @@ def main() -> int:
                     checked_path=str(file_path),
                 )
         else:
-            res = checker.check_file(file_path, run_lint=run_lint, auto_import_mathlib=args.mathlib)
+            res = checker.check_file(
+                file_path, run_lint=run_lint, auto_import_mathlib=args.mathlib
+            )
     else:
         parser.print_help()
         return 1

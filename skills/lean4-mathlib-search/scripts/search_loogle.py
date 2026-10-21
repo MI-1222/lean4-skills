@@ -18,14 +18,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Any
 
 DEFAULT_API_URL = "https://loogle.lean-lang.org/json"
 USER_AGENT = "LeanMathlibSearchAgent/1.0 (Autonomous Theorem Prover)"
 
 
-def find_local_loogle_runner(lake_dir: Optional[str] = None) -> Optional[Tuple[List[str], Optional[Path]]]:
+def find_local_loogle_runner(
+    lake_dir: str | None = None,
+) -> tuple[list[str], Path | None] | None:
     """
     Locate a local loogle invocation command and working directory.
     Returns (cmd_args, working_directory) if found, otherwise None.
@@ -46,7 +47,9 @@ def find_local_loogle_runner(lake_dir: Optional[str] = None) -> Optional[Tuple[L
     # 3. Check current working directory and ancestors for a Lake project with loogle
     cwd = Path.cwd().resolve()
     for parent in [cwd] + list(cwd.parents):
-        has_lake = (parent / "lakefile.lean").exists() or (parent / "lakefile.toml").exists()
+        has_lake = (parent / "lakefile.lean").exists() or (
+            parent / "lakefile.toml"
+        ).exists()
         if has_lake:
             loogle_pkg = parent / ".lake" / "packages" / "loogle"
             if loogle_pkg.exists() or (parent / "Loogle").exists():
@@ -60,7 +63,7 @@ def find_local_loogle_runner(lake_dir: Optional[str] = None) -> Optional[Tuple[L
     return None
 
 
-def extract_loogle_json(raw_output: str) -> Optional[Dict[str, Any]]:
+def extract_loogle_json(raw_output: str) -> dict[str, Any] | None:
     """
     Extract a valid Loogle JSON payload from command output,
     ignoring compiler progress indicators, lake replay messages, and warnings.
@@ -71,7 +74,9 @@ def extract_loogle_json(raw_output: str) -> Optional[Dict[str, Any]]:
         if stripped.startswith("{") and stripped.endswith("}"):
             try:
                 data = json.loads(stripped)
-                if isinstance(data, dict) and ("hits" in data or "error" in data or "count" in data):
+                if isinstance(data, dict) and (
+                    "hits" in data or "error" in data or "count" in data
+                ):
                     return data
             except json.JSONDecodeError:
                 continue
@@ -93,8 +98,8 @@ def search_via_local_cli(
     query: str,
     limit: int = 10,
     timeout: float = 20.0,
-    lake_dir: Optional[str] = None,
-) -> Dict[str, Any]:
+    lake_dir: str | None = None,
+) -> dict[str, Any]:
     """Execute search using a locally installed `loogle` CLI or `lake exe loogle`."""
     runner = find_local_loogle_runner(lake_dir)
     if not runner:
@@ -151,7 +156,11 @@ def search_via_local_cli(
         for line in raw_output.splitlines():
             line_str = line.strip()
             # Skip compiler warnings and progress bars
-            if line_str.startswith("⚠") or line_str.startswith("warning:") or "Running job" in line_str:
+            if (
+                line_str.startswith("⚠")
+                or line_str.startswith("warning:")
+                or "Running job" in line_str
+            ):
                 continue
             if line_str.startswith("Found ") or "declarations mentioning" in line_str:
                 continue
@@ -159,14 +168,18 @@ def search_via_local_cli(
                 # Clean up format like: "Real.sin (from Mathlib...)"
                 match_decl = re.match(r"^([^\s]+)(?:\s+\(from\s+([^\)]+)\))?", line_str)
                 if match_decl:
-                    hits.append({
-                        "name": match_decl.group(1),
-                        "type": "",
-                        "module": match_decl.group(2) or "",
-                        "doc": None,
-                    })
+                    hits.append(
+                        {
+                            "name": match_decl.group(1),
+                            "type": "",
+                            "module": match_decl.group(2) or "",
+                            "doc": None,
+                        }
+                    )
                 else:
-                    hits.append({"name": line_str, "type": "", "module": "", "doc": None})
+                    hits.append(
+                        {"name": line_str, "type": "", "module": "", "doc": None}
+                    )
 
         if hits:
             if limit > 0:
@@ -182,8 +195,15 @@ def search_via_local_cli(
                 "error": None,
             }
 
-        err_msg = proc.stderr.strip() or raw_output or f"loogle exited with code {proc.returncode}"
-        if "unknown executable loogle" in err_msg.lower() or "unknown executable `loogle`" in err_msg.lower():
+        err_msg = (
+            proc.stderr.strip()
+            or raw_output
+            or f"loogle exited with code {proc.returncode}"
+        )
+        if (
+            "unknown executable loogle" in err_msg.lower()
+            or "unknown executable `loogle`" in err_msg.lower()
+        ):
             err_msg += (
                 "\nHint: Even if '.lake/packages/loogle' exists, Lake requires 'loogle' to be "
                 "explicitly declared as a direct dependency in the root package configuration.\n"
@@ -216,12 +236,14 @@ def search_via_local_cli(
     total_count = data.get("count", len(raw_hits))
     hits = []
     for hit in raw_hits:
-        hits.append({
-            "name": hit.get("name", ""),
-            "type": hit.get("type", "").strip(),
-            "module": hit.get("module", ""),
-            "doc": hit.get("doc"),
-        })
+        hits.append(
+            {
+                "name": hit.get("name", ""),
+                "type": hit.get("type", "").strip(),
+                "module": hit.get("module", ""),
+                "doc": hit.get("doc"),
+            }
+        )
     if limit > 0:
         hits = hits[:limit]
 
@@ -246,7 +268,7 @@ def search_via_rest_api(
     timeout: float = 15.0,
     max_retries: int = 3,
     default_backoff: float = 3.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Execute search using the public Loogle REST API."""
     encoded_params = urllib.parse.urlencode({"q": query})
     target_url = f"{api_url}?{encoded_params}"
@@ -280,12 +302,14 @@ def search_via_rest_api(
 
                 hits = []
                 for hit in raw_hits:
-                    hits.append({
-                        "name": hit.get("name", ""),
-                        "type": hit.get("type", "").strip(),
-                        "module": hit.get("module", ""),
-                        "doc": hit.get("doc"),
-                    })
+                    hits.append(
+                        {
+                            "name": hit.get("name", ""),
+                            "type": hit.get("type", "").strip(),
+                            "module": hit.get("module", ""),
+                            "doc": hit.get("doc"),
+                        }
+                    )
 
                 if limit > 0:
                     hits = hits[:limit]
@@ -305,7 +329,9 @@ def search_via_rest_api(
             if http_err.code == 503:
                 # Handle server load shedding with Retry-After header
                 retry_header = http_err.headers.get("Retry-After")
-                sleep_duration = float(retry_header) if retry_header else default_backoff
+                sleep_duration = (
+                    float(retry_header) if retry_header else default_backoff
+                )
                 if attempt < max_retries - 1:
                     time.sleep(sleep_duration)
                     continue
@@ -373,7 +399,7 @@ def search_via_rest_api(
     }
 
 
-def format_text_output(result: Dict[str, Any]) -> str:
+def format_text_output(result: dict[str, Any]) -> str:
     """Format search results into human and LLM-friendly plain text."""
     lines = []
     query = result.get("query", "")
@@ -442,7 +468,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Search Mathlib definitions and theorems using Loogle (local Lake CLI and REST API)."
     )
-    parser.add_argument("query", type=str, help="Search query (e.g., 'Real.sqrt ?a * Real.sqrt ?a')")
+    parser.add_argument(
+        "query", type=str, help="Search query (e.g., 'Real.sqrt ?a * Real.sqrt ?a')"
+    )
     parser.add_argument(
         "-n",
         "--limit",

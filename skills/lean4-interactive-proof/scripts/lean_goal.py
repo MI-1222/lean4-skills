@@ -10,11 +10,11 @@ import argparse
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
 import time
-import re
 from pathlib import Path
 from urllib.parse import urljoin
 from urllib.request import pathname2url
@@ -62,9 +62,17 @@ def find_declaration_scope(lines: list, target_line_1indexed: int) -> tuple:
         s = start
         while s > 1:
             prev = lines[s - 2].strip()
-            if prev.startswith("/--") or prev.startswith("@") or prev.startswith("omit ") or prev.startswith("open ") or prev.startswith("set_option "):
-                s -= 1
-            elif prev.endswith("-/") or prev.startswith("-"):
+            if (
+                (
+                    prev.startswith("/--")
+                    or prev.startswith("@")
+                    or prev.startswith("omit ")
+                    or prev.startswith("open ")
+                    or prev.startswith("set_option ")
+                )
+                or prev.endswith("-/")
+                or prev.startswith("-")
+            ):
                 s -= 1
             else:
                 break
@@ -224,7 +232,9 @@ class LeanLSPClient:
             return resp_queue.get(timeout=timeout)
         except queue.Empty:
             self._pending_requests.pop(req_id, None)
-            raise TimeoutError(f"LSP request '{method}' (id={req_id}) timed out after {timeout} seconds.")
+            raise TimeoutError(
+                f"LSP request '{method}' (id={req_id}) timed out after {timeout} seconds."
+            )
 
     def _perform_handshake(self):
         """Execute the LSP initialization sequence (initialize / initialized)."""
@@ -236,7 +246,10 @@ class LeanLSPClient:
             "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
-                    "synchronization": {"dynamicRegistration": False, "sendIncremental": False},
+                    "synchronization": {
+                        "dynamicRegistration": False,
+                        "sendIncremental": False,
+                    },
                     "publishDiagnostics": {"relatedInformation": True},
                 }
             },
@@ -285,7 +298,9 @@ class LeanLSPClient:
 
         while time.time() < deadline:
             try:
-                response = self.send_request("$/lean/plainGoal", params, timeout=timeout)
+                response = self.send_request(
+                    "$/lean/plainGoal", params, timeout=timeout
+                )
                 if "result" in response:
                     res = response["result"]
                     if res is not None:
@@ -296,7 +311,11 @@ class LeanLSPClient:
             time.sleep(backoff)
             backoff = min(backoff * 1.5, 0.5)
 
-        return last_response.get("result") if (last_response and "result" in last_response) else {}
+        return (
+            last_response.get("result")
+            if (last_response and "result" in last_response)
+            else {}
+        )
 
     def close(self):
         """Gracefully shut down the server process."""
@@ -405,7 +424,7 @@ def extract_goal_and_diagnostics(
             d_line = start_pos.get("line", 0) + 1  # 1-indexed
             d_col = start_pos.get("character", 0) + 1
 
-            is_local = (scope_start <= d_line <= scope_end)
+            is_local = scope_start <= d_line <= scope_end
 
             if severity_num == 1:
                 has_file_errors = True
@@ -438,9 +457,10 @@ def extract_goal_and_diagnostics(
         if not has_local_errors and not has_local_sorry:
             if rendered:
                 clean_rendered = rendered.strip()
-                if "goals accomplished" in clean_rendered or "no goals" in clean_rendered:
-                    is_done = True
-                elif len(goals) == 0:
+                if (
+                    "goals accomplished" in clean_rendered
+                    or "no goals" in clean_rendered
+                ) or len(goals) == 0:
                     is_done = True
             elif goal_result is not None and len(goals) == 0:
                 is_done = True
@@ -448,7 +468,9 @@ def extract_goal_and_diagnostics(
         return {
             "success": True,
             "line": line_1indexed,
-            "column": col_1indexed if col_1indexed is not None else len(target_line_content.rstrip("\r\n")),
+            "column": col_1indexed
+            if col_1indexed is not None
+            else len(target_line_content.rstrip("\r\n")),
             "scope": {"start_line": scope_start, "end_line": scope_end},
             "rendered": rendered,
             "goals": goals,
@@ -493,10 +515,18 @@ def main():
         "--line", "-l", type=int, required=True, help="1-indexed line number"
     )
     parser.add_argument(
-        "--col", "-c", type=int, default=None, help="1-indexed column number (defaults to end of line)"
+        "--col",
+        "-c",
+        type=int,
+        default=None,
+        help="1-indexed column number (defaults to end of line)",
     )
     parser.add_argument(
-        "--timeout", "-t", type=float, default=8.0, help="Elaboration timeout in seconds (default: 8.0)"
+        "--timeout",
+        "-t",
+        type=float,
+        default=8.0,
+        help="Elaboration timeout in seconds (default: 8.0)",
     )
 
     args = parser.parse_args()

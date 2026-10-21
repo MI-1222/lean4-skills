@@ -41,27 +41,39 @@ def search_leansearch(
                 parsed = json.loads(raw_data)
 
                 # The API returns a list of result lists (one list per query string in batch)
-                result_batch = parsed[0] if (isinstance(parsed, list) and len(parsed) > 0) else []
+                result_batch = (
+                    parsed[0] if (isinstance(parsed, list) and len(parsed) > 0) else []
+                )
                 hits: list[dict[str, Any]] = []
 
                 for item in result_batch:
                     res_obj = item.get("result", {})
                     name_parts = res_obj.get("name", [])
-                    name = ".".join(name_parts) if isinstance(name_parts, list) else str(name_parts)
+                    name = (
+                        ".".join(name_parts)
+                        if isinstance(name_parts, list)
+                        else str(name_parts)
+                    )
 
                     module_parts = res_obj.get("module_name", [])
-                    module = ".".join(module_parts) if isinstance(module_parts, list) else str(module_parts)
+                    module = (
+                        ".".join(module_parts)
+                        if isinstance(module_parts, list)
+                        else str(module_parts)
+                    )
 
-                    hits.append({
-                        "name": name,
-                        "module": module,
-                        "kind": res_obj.get("kind", ""),
-                        "type": res_obj.get("type", "").strip(),
-                        "signature": res_obj.get("signature", "").strip(),
-                        "informal_name": res_obj.get("informal_name"),
-                        "informal_description": res_obj.get("informal_description"),
-                        "distance": item.get("distance"),
-                    })
+                    hits.append(
+                        {
+                            "name": name,
+                            "module": module,
+                            "kind": res_obj.get("kind", ""),
+                            "type": res_obj.get("type", "").strip(),
+                            "signature": res_obj.get("signature", "").strip(),
+                            "informal_name": res_obj.get("informal_name"),
+                            "informal_description": res_obj.get("informal_description"),
+                            "distance": item.get("distance"),
+                        }
+                    )
 
                 if limit > 0:
                     hits = hits[:limit]
@@ -138,7 +150,7 @@ def format_text_output(result: dict[str, Any]) -> str:
     total_count = result.get("count", 0)
     hits = result.get("hits", [])
 
-    lines.append(f"LeanSearch Results [{source}] for: \"{query}\"")
+    lines.append(f'LeanSearch Results [{source}] for: "{query}"')
     lines.append(f"Matched {total_count} declaration(s):")
     lines.append("=" * 70)
 
@@ -155,7 +167,9 @@ def format_text_output(result: dict[str, Any]) -> str:
         informal_desc = hit.get("informal_description")
         distance = hit.get("distance")
 
-        score_str = f" [Distance: {distance:.4f}]" if isinstance(distance, (int, float)) else ""
+        score_str = (
+            f" [Distance: {distance:.4f}]" if isinstance(distance, (int, float)) else ""
+        )
         lines.append(f"{idx}. {name} ({kind}){score_str}")
         if module:
             lines.append(f"   Module  : {module}  (use `import {module}`)")
@@ -178,7 +192,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Search Mathlib declarations by natural language mathematical concepts via LeanSearch REST API."
     )
-    parser.add_argument("query", type=str, help="Natural language query (e.g., 'Heine-Borel theorem')")
+    parser.add_argument(
+        "query", type=str, help="Natural language query (e.g., 'Heine-Borel theorem')"
+    )
     parser.add_argument(
         "-n",
         "--limit",

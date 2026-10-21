@@ -338,6 +338,7 @@ AI agents can parse this JSON via `parse_diagnostics.py`, extract the replacemen
 ```python
 import re
 
+
 def extract_try_this(message: str) -> str | None:
     # Match 'Try this: ' and strip metadata action tags like '[apply]' or '[exact]'
     # Using [a-zA-Z]+ prevents false positive matches on code brackets like rw [h1] or lists
