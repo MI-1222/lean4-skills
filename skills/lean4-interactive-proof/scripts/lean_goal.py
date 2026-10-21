@@ -37,6 +37,51 @@ def get_eol_utf16_col(line_str: str) -> int:
     return len(clean_line.encode("utf-16le")) // 2
 
 
+# Regex matching the start of a top-level Lean declaration
+DECL_START_RE = re.compile(
+    r"^\s*(?:(?:private|protected|noncomputable|scoped|partial|unsafe)\s+)*(?:theorem|lemma|def|example|instance|axiom|structure|class|inductive)\b",
+)
+
+
+def find_declaration_scope(lines: list, target_line_1indexed: int) -> tuple:
+    """
+    Find the 1-indexed [start_line, end_line] range of the declaration containing target_line_1indexed.
+    Expands start upwards to include leading docstrings and command modifiers.
+    """
+    decl_starts = []
+    for idx, line in enumerate(lines, start=1):
+        if DECL_START_RE.match(line):
+            decl_starts.append(idx)
+
+    if not decl_starts:
+        return 1, len(lines)
+
+    # Expand starts upwards to include leading docstrings, attributes, and command modifiers
+    expanded_starts = []
+    for start in decl_starts:
+        s = start
+        while s > 1:
+            prev = lines[s - 2].strip()
+            if prev.startswith("/--") or prev.startswith("@") or prev.startswith("omit ") or prev.startswith("open ") or prev.startswith("set_option "):
+                s -= 1
+            elif prev.endswith("-/") or prev.startswith("-"):
+                s -= 1
+            else:
+                break
+        expanded_starts.append(s)
+
+    if target_line_1indexed < expanded_starts[0]:
+        return 1, max(1, expanded_starts[0] - 1)
+
+    for i in range(len(expanded_starts)):
+        start = expanded_starts[i]
+        end = expanded_starts[i + 1] - 1 if i + 1 < len(expanded_starts) else len(lines)
+        if start <= target_line_1indexed <= end:
+            return start, end
+
+    return 1, len(lines)
+
+
 class LeanLSPClient:
     """Self-contained client communicating with Lean 4 language server over stdio."""
 
@@ -335,45 +380,62 @@ def extract_goal_and_diagnostics(
         rendered = goal_result.get("rendered") if goal_result else None
         goals = goal_result.get("goals", []) if goal_result else []
 
+        # Determine declaration scope around the target line
+        scope_start, scope_end = find_declaration_scope(lines, line_1indexed)
+
         # Compiler diagnostics and 'sorry' detection.
         formatted_diags = []
         severity_map = {1: "Error", 2: "Warning", 3: "Info", 4: "Hint"}
-        has_errors = False
-        has_sorry = False
+        has_local_errors = False
+        has_file_errors = False
+        has_local_sorry = False
+        has_file_sorry = False
 
         # Check if the target line explicitly contains 'sorry'
         if re.search(r"\bsorry\b", target_line_content):
-            has_sorry = True
+            has_local_sorry = True
+            has_file_sorry = True
 
         for diag in client.diagnostics:
             severity_num = diag.get("severity", 1)
             msg = diag.get("message", "").strip()
-            if severity_num == 1:
-                has_errors = True
-            # Lean 4 warns when 'sorry' is used (e.g., "declaration uses `sorry`")
-            if re.search(r"uses\s*[`'\"]?sorry(?:Ax)?[`'\"]?", msg, re.IGNORECASE):
-                has_sorry = True
 
             d_range = diag.get("range", {})
             start_pos = d_range.get("start", {})
             d_line = start_pos.get("line", 0) + 1  # 1-indexed
             d_col = start_pos.get("character", 0) + 1
+
+            is_local = (scope_start <= d_line <= scope_end)
+
+            if severity_num == 1:
+                has_file_errors = True
+                if is_local:
+                    has_local_errors = True
+
+            # Lean 4 warns when 'sorry' is used (e.g., "declaration uses `sorry`")
+            if re.search(r"uses\s*[`'\"]?sorry(?:Ax)?[`'\"]?", msg, re.IGNORECASE):
+                has_file_sorry = True
+                if is_local:
+                    has_local_sorry = True
+
             formatted_diags.append(
                 {
                     "line": d_line,
                     "column": d_col,
                     "severity": severity_map.get(severity_num, "Error"),
                     "message": msg,
+                    "is_local": is_local,
                 }
             )
 
         # Determine if the proof is complete.
         # CRITICAL RULES:
-        # 1. If compiler errors (severity: 1) exist, elaboration failed. Never mark as done.
-        # 2. If 'sorry' is present (either in diagnostics or on the line), the proof is an incomplete placeholder.
+        # 1. If local compiler errors exist in this declaration, elaboration failed. Never mark as done.
+        # 2. If local 'sorry' is present, the proof is an incomplete placeholder.
         #    'sorry' artificially discharges goals, causing plainGoal to return "no goals", which must NOT be marked as is_done.
+        # 3. Unrelated errors or sorry in other declarations do not invalidate completion of the active target declaration.
         is_done = False
-        if not has_errors and not has_sorry:
+        if not has_local_errors and not has_local_sorry:
             if rendered:
                 clean_rendered = rendered.strip()
                 if "goals accomplished" in clean_rendered or "no goals" in clean_rendered:
@@ -387,10 +449,16 @@ def extract_goal_and_diagnostics(
             "success": True,
             "line": line_1indexed,
             "column": col_1indexed if col_1indexed is not None else len(target_line_content.rstrip("\r\n")),
+            "scope": {"start_line": scope_start, "end_line": scope_end},
             "rendered": rendered,
             "goals": goals,
             "is_done": is_done,
-            "has_sorry": has_sorry,
+            "has_sorry": has_local_sorry,
+            "has_errors": has_local_errors,
+            "has_local_sorry": has_local_sorry,
+            "has_local_errors": has_local_errors,
+            "has_file_sorry": has_file_sorry,
+            "has_file_errors": has_file_errors,
             "diagnostics": formatted_diags,
             "error": None,
         }
@@ -403,6 +471,12 @@ def extract_goal_and_diagnostics(
             "goals": [],
             "is_done": False,
             "has_sorry": False,
+            "has_errors": False,
+            "has_local_sorry": False,
+            "has_local_errors": False,
+            "has_file_sorry": False,
+            "has_file_errors": False,
+            "scope": None,
             "diagnostics": [],
         }
     finally:

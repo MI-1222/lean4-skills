@@ -81,9 +81,15 @@ python3 <skill-path>/scripts/lean_goal.py <lean_file> --line <line_number> [--co
 
 - `rendered`: Markdown-formatted string representing the active proof goals, hypotheses, and target.
 - `goals`: Array of individual subgoal strings. Empty when all goals are discharged.
-- `is_done`: Boolean flag indicating whether all proof goals are completed (`true` only when goals are solved, no compiler errors exist, and no `sorry` remains).
-- `has_sorry`: Boolean flag indicating whether `sorry` is present on the line or in compiler diagnostics (`true` if `sorry` is active).
-- `diagnostics`: List of compiler errors, warnings, and informational diagnostics for the file/position.
+- `is_done`: Boolean flag indicating whether the proof of the _target declaration_ is complete (`true` only when goals are solved, no local compiler errors exist, and no local `sorry` remains).
+- `scope`: Target declaration range `{"start_line": int, "end_line": int}` used to isolate diagnostics.
+- `has_local_errors`: Boolean flag indicating whether compiler errors exist inside the target declaration.
+- `has_local_sorry`: Boolean flag indicating whether `sorry` is active inside the target declaration.
+- `has_file_errors`: Boolean flag indicating whether any compiler errors exist in the whole file.
+- `has_file_sorry`: Boolean flag indicating whether any `sorry` exists in the whole file.
+- `has_sorry`: Convenience alias for `has_local_sorry`.
+- `has_errors`: Convenience alias for `has_local_errors`.
+- `diagnostics`: List of compiler diagnostics with an `is_local: bool` tag indicating whether each diagnostic belongs to the target declaration scope.
 - `success`: Boolean indicating whether the LSP query completed successfully.
 
 ---
