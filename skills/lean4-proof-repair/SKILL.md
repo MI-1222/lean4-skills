@@ -1,11 +1,12 @@
 ---
 name: lean4-proof-repair
-description: Comprehensive diagnosis and repair guide for compiler errors, elaboration failures, tactic breakdowns, and unprovable goals in Lean 4 mathematical proofs. Use whenever encountering or fixing Lean 4 errors, including `type mismatch`, `synthesized: ..., inferred: ...` (instance pollution), `motive is not type correct`, `failed to synthesize instance`, `maximum number of heartbeats exceeded`, `tactic '...' failed` (`linarith`, `omega`, `ring`, `grind`, `aesop`, `exact`, etc.), `unsolved goals`, `unknown identifier`, or persistent proof failures requiring falsification and counterexample search. Provides instant triage rules, progressive reference paths, and systematic correction protocols.
+description: >-
+  Comprehensive diagnosis and repair guide for compiler errors, elaboration failures, tactic breakdowns, and unprovable goals in Lean 4 mathematical proofs. Use whenever encountering or fixing Lean 4 errors, including `type mismatch`, `synthesized: ..., inferred: ...` (instance pollution), `motive is not type correct`, `failed to synthesize instance`, `maximum number of heartbeats exceeded`, `tactic '...' failed` (`linarith`, `omega`, `ring`, `grind`, `aesop`, `exact`, etc.), `unsolved goals`, `unknown identifier`, or persistent proof failures requiring falsification and counterexample search. Provides instant triage rules, progressive reference paths, and systematic correction protocols.
 compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib).
 metadata:
-  target-lean-version: ">=4.14.0"
-  tested-lean-version: "v4.35.0"
-  tested-mathlib-version: "v4.35.0"
+  target-lean-version: '>=4.14.0'
+  tested-lean-version: 'v4.35.0'
+  tested-mathlib-version: 'v4.35.0'
   version: '1.2.0'
 ---
 
