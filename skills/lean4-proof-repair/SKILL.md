@@ -63,10 +63,10 @@ When a Lean file or code block fails verification, execute these four stages:
 
 1. **Parse Diagnostics**:
    Extract structured error diagnostics (file, line, column, severity, message).
-   _Tip_: Use `skills/lean4-cli/scripts/parse_diagnostics.py` to convert compiler output into JSON.
+   _Tip_: Use `parse_diagnostics.py` (from `lean4-cli`, e.g. `<skills-path>/lean4-cli/scripts/parse_diagnostics.py`) to convert compiler output into JSON.
 2. **Inspect the Tactic State**:
    Inspect the exact hypotheses and goal target at the failing line.
-   _Tip_: Use `skills/lean4-interactive-proof/scripts/lean_goal.py` to query the live LSP tactic state without full rebuilds.
+   _Tip_: Use `lean_goal.py` (from `lean4-interactive-proof`, e.g. `<skills-path>/lean4-interactive-proof/scripts/lean_goal.py`) to query the live LSP tactic state without full rebuilds.
 
 ### Stage 2: Classify the Failure
 
@@ -97,7 +97,7 @@ Load only the specialized guide matching the diagnosed error category:
    ```bash
    lake env lean path/to/File.lean
    ```
-   Or use `skills/lean4-syntax/scripts/check_syntax.py` on the edited snippet.
+   Or use `check_syntax.py` (from `lean4-syntax`, e.g. `<skills-path>/lean4-syntax/scripts/check_syntax.py`) on the edited snippet.
 3. Confirm that no downstream proofs were broken.
 
 ---

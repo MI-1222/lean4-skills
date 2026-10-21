@@ -87,15 +87,15 @@ For autonomous coding agents operating via headless CLI without an interactive V
 
    ```bash
    # Method A: Via check_syntax.py (fast compilation & diagnostic collection)
-   python3 skills/lean4-syntax/scripts/check_syntax.py <file-path>
+   python3 <skills-path>/lean4-syntax/scripts/check_syntax.py <file-path>
    # Look for: [INFO   ] L<line>:C<col> (lean-compiler) Try this: simp only [...]
 
    # Method B: Via lean_goal.py (LSP-based diagnostic extraction)
-   python3 skills/lean4-interactive-proof/scripts/lean_goal.py <file-path> --line <line-num>
+   python3 <skills-path>/lean4-interactive-proof/scripts/lean_goal.py <file-path> --line <line-num>
    # Inspect the "diagnostics" array in the JSON response for "message": "Try this: simp only [...]"
 
    # Method C: Via parse_diagnostics.py + lake env lean
-   lake env lean <file-path> 2>&1 | python3 skills/lean4-cli/scripts/parse_diagnostics.py
+   lake env lean <file-path> 2>&1 | python3 <skills-path>/lean4-cli/scripts/parse_diagnostics.py
    ```
 
 3. **Automate Replacement**:

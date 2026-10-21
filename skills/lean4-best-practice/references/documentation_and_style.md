@@ -260,7 +260,7 @@ calc
 If you are unsure of the exact elaborated AST of the goal after `simp`:
 
 ```bash
-python3 skills/lean4-interactive-proof/scripts/lean_goal.py MyFile.lean --line <line_of_calc>
+python3 <skills-path>/lean4-interactive-proof/scripts/lean_goal.py MyFile.lean --line <line_of_calc>
 ```
 
 Inspect the `⊢ <LHS> ≤ <RHS>` in the `rendered` output, and copy the LHS verbatim into the first line of `calc`.

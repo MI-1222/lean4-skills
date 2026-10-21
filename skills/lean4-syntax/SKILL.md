@@ -96,19 +96,19 @@ A standalone CLI tool is bundled in `scripts/check_syntax.py` to validate Lean 4
 
 ```bash
 # 1. Check an inline code snippet (with static linter & compiler check)
-python3 skills/lean4-syntax/scripts/check_syntax.py -s "theorem my_imp_self (P : Prop) : P → P := fun h => h"
+python3 <skill-path>/scripts/check_syntax.py -s "theorem my_imp_self (P : Prop) : P → P := fun h => h"
 
 # 2. Check an existing Lean file
-python3 skills/lean4-syntax/scripts/check_syntax.py path/to/Proof.lean
+python3 <skill-path>/scripts/check_syntax.py path/to/Proof.lean
 
 # 3. Read snippet from standard input
-echo "theorem my_test (p : Prop) (h : p) : p := by exact h" | python3 skills/lean4-syntax/scripts/check_syntax.py --stdin
+echo "theorem my_test (p : Prop) (h : p) : p := by exact h" | python3 <skill-path>/scripts/check_syntax.py --stdin
 
 # 4. Run static Lean 3 linter only (instant, does not invoke Lean compiler)
-python3 skills/lean4-syntax/scripts/check_syntax.py --lint-only -s "theorem bad : P := begin sorry end"
+python3 <skill-path>/scripts/check_syntax.py --lint-only -s "theorem bad : P := begin sorry end"
 
 # 5. Output structured JSON for automated agent pipelines
-python3 skills/lean4-syntax/scripts/check_syntax.py --json -s "theorem bad (p : Prop) : p := by intro h,"
+python3 <skill-path>/scripts/check_syntax.py --json -s "theorem bad (p : Prop) : p := by intro h,"
 ```
 
 ### JSON Output Specification
