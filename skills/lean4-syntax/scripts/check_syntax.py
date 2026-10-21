@@ -133,7 +133,7 @@ class Lean3Linter:
             "LEAN3_SPLIT_CONJUNCTION",
             re.compile(r"^\s*(?:[·•\-]\s*)?split\b\s*,?\s*(?:--.*)?$"),
             "warning",
-            "Found bare 'split' tactic. In Lean 4, 'split' decomposes 'if-then-else' and 'match' statements; to split a conjunction (P ∧ Q) or constructor target, use 'constructor' or 'refine ⟨?_, ?_⟩'.",
+            "Found bare 'split' tactic without an enclosing 'if' or 'match'. In Lean 4, 'split' decomposes 'if-then-else' and 'match' statements; to split a conjunction (P ∧ Q) or constructor target, use 'constructor' or 'refine ⟨?_, ?_⟩'.",
         ),
         (
             "LEAN3_BRACE_SUBGOAL",
@@ -273,13 +273,27 @@ class Lean3Linter:
         masked_code = cls.mask_comments_and_strings(code)
         masked_lines = masked_code.splitlines()
 
+        decl_pattern = re.compile(r"^\s*(?:theorem|lemma|def|instance|example)\b")
+        branch_pattern = re.compile(r"\b(?:if|match)\b")
+        current_decl_start = 0
+
         for line_idx, masked_line in enumerate(masked_lines, start=1):
+            if decl_pattern.search(masked_line):
+                current_decl_start = line_idx - 1
+
             if not masked_line.strip():
                 continue
 
             for rule_id, pattern, severity, message in cls.RULES:
                 match = pattern.search(masked_line)
                 if match:
+                    if rule_id == "LEAN3_SPLIT_CONJUNCTION":
+                        # In static linting, if the enclosing declaration contains 'if' or 'match',
+                        # 'split' is legitimate Lean 4 syntax for case-splitting branches.
+                        enclosing_context = "\n".join(masked_lines[current_decl_start:line_idx])
+                        if branch_pattern.search(enclosing_context):
+                            continue
+
                     col = match.start() + 1
                     diagnostics.append(
                         Diagnostic(
@@ -359,7 +373,7 @@ class Lean4SyntaxChecker:
         lint_diags = Lean3Linter.lint(content) if run_lint else []
         compiler_result = self._run_lean_compiler(file_path)
 
-        all_diags = lint_diags + compiler_result.diagnostics
+        all_diags = self._reconcile_diagnostics(lint_diags, compiler_result.diagnostics)
         has_error = any(d.severity == "error" for d in all_diags)
         has_warning = any(d.severity == "warning" for d in all_diags)
 
@@ -370,6 +384,40 @@ class Lean4SyntaxChecker:
             raw_output=compiler_result.raw_output,
             checked_path=str(file_path),
         )
+
+    @staticmethod
+    def _reconcile_diagnostics(
+        lint_diags: List[Diagnostic], compiler_diags: List[Diagnostic]
+    ) -> List[Diagnostic]:
+        """Reconcile static linter warnings with real-time compiler diagnostics.
+
+        Suppresses heuristic false positives (such as `LEAN3_SPLIT_CONJUNCTION`) when
+        the compiler executed without a split tactic failure on that line.
+        """
+        split_failure_lines = set()
+        compiler_executed = False
+
+        for cd in compiler_diags:
+            if cd.line > 0:
+                compiler_executed = True
+            msg_lower = cd.message.lower()
+            if "split" in msg_lower and ("failed" in msg_lower or "could not split" in msg_lower):
+                split_failure_lines.add(cd.line)
+
+        # If compiler produced no diagnostics, it executed successfully and cleanly
+        if not compiler_diags:
+            compiler_executed = True
+
+        filtered_lint: List[Diagnostic] = []
+        for ld in lint_diags:
+            if "[LEAN3_SPLIT_CONJUNCTION]" in ld.message:
+                # If the compiler executed and did NOT report a split failure on this line,
+                # the split is valid in Lean 4 and should not trigger a warning.
+                if compiler_executed and ld.line not in split_failure_lines:
+                    continue
+            filtered_lint.append(ld)
+
+        return filtered_lint + compiler_diags
 
     def check_snippet(self, code_snippet: str, run_lint: bool = True) -> CheckResult:
         """Writes a snippet to a temporary file in `.lake/temp_check/` and validates it."""
@@ -403,7 +451,7 @@ class Lean4SyntaxChecker:
                 except OSError:
                     pass
 
-        all_diags = lint_diags + compiler_result.diagnostics
+        all_diags = self._reconcile_diagnostics(lint_diags, compiler_result.diagnostics)
         has_error = any(d.severity == "error" for d in all_diags)
         has_warning = any(d.severity == "warning" for d in all_diags)
 
