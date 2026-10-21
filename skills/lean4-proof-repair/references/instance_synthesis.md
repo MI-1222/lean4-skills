@@ -113,7 +113,7 @@ When multiple instances of the same typeclass exist in the same scope (e.g., sub
 - **Prescription**:
   1. **Name and Pin the Ambient Instance**: Name it in the signature `[m0 : MeasurableSpace Ω]` or capture it on line 1: `let m0 : MeasurableSpace Ω := ‹MeasurableSpace Ω›`.
   2. **Pass Ambient Facts Explicitly with `@`**: Use `@Measurable Ω β m0 _ Z` when invoking ambient properties.
-  3. **Strip Unneeded Section Classes with `omit` (Lean 4.11+)**: Use `omit [MeasurableSpace Ω] in` to keep unneeded outer typeclasses from poisoning resolution. (Note: place `omit [...] in` _before_ any `/-- ... -/` docstring to avoid `unexpected token 'omit'` parser errors; see `header_fence_and_docstrings.md`).
+  3. **Strip Unneeded Section Classes with `omit` (Lean 4.11+)**: Use `omit [MeasurableSpace Ω] in` to keep unneeded outer typeclasses from poisoning resolution. (Note: In Lean 4, place `omit [...] in` _before_ any docstring `/-- ... -/`, e.g., `omit [m] in /-- doc -/ theorem ...`, to avoid `unexpected token 'omit'` parser errors; see the `lean4-best-practice` skill for header placement rules).
 
 ---
 
