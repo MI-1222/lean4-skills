@@ -70,6 +70,23 @@ MyProject/
 
 Proof files import **only statements files** (and the definitions those need). They never import each other, so Lake can build them in parallel, and editing one proof does not rebuild the others.
 
+### Top-Level Statements and the Challenge File
+
+When the final result will be judged against a challenge file with Comparator (see `lean4-cli` → `soundness_and_axiom_audit.md` §8), keep the top-level claims in their own statements file and mirror it in the challenge:
+
+```text
+src/
+├── Statements.lean   -- imports only Mathlib; `def MainClaim : Prop := ...` (definitions only)
+├── Challenge.lean    -- the same definitions, byte for byte, plus `theorem main_claim : MainClaim := by sorry`
+├── Proofs/...        -- statement-first milestones and assembly theorems
+└── Main.lean         -- imports Statements and the assemblies; `theorem main_claim : MainClaim := main`
+```
+
+- **Why a copy, not an import**: the challenge must import only Mathlib, so that it is compiled and exported where no project code has run. The solution cannot import the challenge either, because the challenge contains `sorry`. The definitions therefore exist twice and must stay identical.
+- **`Statements.lean` imports only Mathlib**, never a project file. Otherwise the meaning of the claim depends on project definitions that the challenge cannot see.
+- **`Main.lean` contains nothing but the claimed theorems**, with the challenge's exact names and types, each a one-line reference to an assembly theorem. Reviewers then read `Statements.lean` and `Challenge.lean` to know what is claimed, and never have to read the proof for that. In one formalization of about 175,000 modules, `Main.lean` was five one-line theorems.
+- **Check the copy mechanically**: in CI, build `Challenge` alone in a clean clone with only Mathlib's cache (`lake exe mathlib/cache get`, then `lake build Challenge`), and compare its definition block with `Statements.lean`.
+
 ---
 
 ## 2. Why It Helps
@@ -236,3 +253,4 @@ theorem small : Small.Statement := Small.proof.{0} Pointed.proof.{0}
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
 - [ ] Was `#print axioms` run on the assembly theorem, not on conditional `X.proof` declarations?
 - [ ] Does every `X.proof` header give explicit universe arguments (`.{0}`, `.{u}`) to each universe-polymorphic statement it mentions?
+- [ ] If the result goes to Comparator, does `Statements.lean` import only Mathlib, match the definitions in `Challenge.lean` exactly, and does `Main.lean` contain only one-line references to assembly theorems?

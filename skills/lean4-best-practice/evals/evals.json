@@ -30,6 +30,18 @@
         "Recommends writing explicit universe arguments on universe-polymorphic statements in conditional proof headers",
         "Does not weaken `Pointed.Statement` (e.g. by changing `Type u` to `Type`) as the main fix"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Our formalization will be judged with Comparator against a challenge file. The main results use a few Prop-valued definitions such as `def MainClaim : Prop := ...` that are built from Mathlib definitions only. How should we lay out the statement definitions, `Challenge.lean` and `Main.lean` so that the challenge stays trustworthy and the two cannot drift apart?",
+      "expected_output": "A layout with `Statements.lean` (imports only Mathlib, definitions only), `Challenge.lean` containing the same definitions byte for byte plus the theorems with `:= by sorry`, and `Main.lean` importing the statements and the assemblies with one-line theorems of the challenge's names and types. Explains why the definitions are copied rather than imported, and recommends a CI check that builds `Challenge` alone with Mathlib's cache and compares the definition blocks.",
+      "files": [],
+      "expectations": [
+        "States that the statements file and the challenge import only Mathlib, never project files",
+        "Explains that the challenge cannot import the project and the solution cannot import the challenge (it contains `sorry`), so the definitions are duplicated",
+        "Keeps `Main.lean` to one-line theorems with the challenge's exact names and types",
+        "Recommends a mechanical check that the copied definitions are identical (e.g. in CI)"
+      ]
     }
   ]
 }
