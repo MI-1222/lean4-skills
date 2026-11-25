@@ -449,3 +449,12 @@ def extract_try_this(message: str) -> str | None:
 
 - **Cause**: The current `elan` toolchain does not match `lean-toolchain`.
 - **Fix**: Run `elan which lean` or `elan override set $(cat lean-toolchain)`.
+
+### 5. Machine Overloaded When Running Many `lean` Processes in Parallel
+
+- **Cause**: Each `lean` process starts a task manager with one thread per hardware thread by default (`Lean.Shell.defaultNumThreads` in Lean `v4.33.1`). Running N file checks at once (several agents, or a script that checks files in parallel) therefore starts N × (hardware threads) worker threads. Setting `LEAN_NUM_THREADS=1` does not change this default for the `lean` frontend.
+- **Fix**: Pass `-j1` (`--threads=1`) to each process and get parallelism from running several processes:
+  ```bash
+  lake env lean -j1 path/to/File.lean
+  lake lean path/to/File.lean -- -j1
+  ```

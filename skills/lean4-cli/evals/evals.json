@@ -30,6 +30,17 @@
         "Mentions `LAKE_ARTIFACT_CACHE=false` or a clean checkout to avoid reusing prebuilt artifacts",
         "Does not treat the downloaded artifacts as evidence that the proofs are valid"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Four agents on the same 16-core machine each run `lake env lean <file>` on different files in parallel, and a helper script runs a dozen more checks at once. The machine becomes extremely slow. Setting `LEAN_NUM_THREADS=1` did not help. What is going on and how should the checks be run?",
+      "expected_output": "Explanation that each `lean` process starts one worker thread per hardware thread by default (Lean.Shell.defaultNumThreads), so N parallel processes oversubscribe the CPU, and that `LEAN_NUM_THREADS` does not change this default for the `lean` frontend. Recommends passing `-j1` / `--threads=1` to each process (`lake env lean -j1 <file>` or `lake lean <file> -- -j1`) and getting parallelism from the number of processes.",
+      "files": [],
+      "expectations": [
+        "Identifies thread oversubscription from many `lean` processes as the cause",
+        "States that `LEAN_NUM_THREADS` does not limit the `lean` frontend's default thread count",
+        "Recommends `-j1` (or `--threads=1`) with a correct command line"
+      ]
     }
   ]
 }
