@@ -458,3 +458,12 @@ def extract_try_this(message: str) -> str | None:
   lake env lean -j1 path/to/File.lean
   lake lean path/to/File.lean -- -j1
   ```
+
+### 6. Very Large Projects (Tens of Thousands of Modules)
+
+Limits that do not matter for ordinary projects appear at this scale. All of the following were reported for a formalization with about 175,000 modules:
+
+- **`Too many open files` while unpacking a cache**: raise the soft limit in the shell first (`ulimit -n 65536`).
+- **Disk usage during the build**: Lake writes a per-module `.setup.json` listing the import closure. These averaged about 6 MB each, around a terabyte in total. A module's file can be deleted once the module is built; see `lean4-best-practice` → `statement_first_decomposition.md` (§3.6).
+- **Stack overflow in `leantar`** when packing deeply nested `.olean` files into cache archives: raise the stack soft limit (`ulimit -s`) for the packing process. Unpacking works with the default 8 MiB stack.
+- **Progress and time**: a cold build can take many hours. Fetch a cache, check it with `lake build --no-build`, and avoid full rebuilds triggered by option or toolchain changes.
