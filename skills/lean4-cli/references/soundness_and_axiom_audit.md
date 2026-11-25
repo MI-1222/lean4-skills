@@ -4,7 +4,7 @@ In formal mathematics with Lean 4, a proof is not complete merely because `lake 
 
 `#print axioms` catches those shortcuts, but it is only one layer. It cannot tell you whether the theorem **states what you think it states**, whether custom metaprograms bypassed the elaborator, whether the environment was manipulated, or whether the kernel that accepted the proof has known bugs.
 
-This guide establishes the protocols for auditing the **soundness** of completed proofs, from the axiom check up to kernel replay:
+This guide establishes the protocols for auditing the **soundness** of completed proofs, from the axiom check up to independent kernel replay:
 
 | Level | Check                                    | What it establishes                                                             | Section |
 | :---- | :--------------------------------------- | :------------------------------------------------------------------------------ | :------ |
@@ -13,8 +13,9 @@ This guide establishes the protocols for auditing the **soundness** of completed
 | **3** | Static scan (`scan_risky_constructs.py`) | Lists elaborator bypasses, environment hacking and global notation to review    | §5      |
 | **4** | Statement fidelity review                | The formal statement means the intended mathematical claim                      | §6      |
 | **5** | Kernel replay (`leanchecker`)            | The compiled `.olean` declarations re-check in a clean environment              | §7      |
+| **6** | Challenge/Solution check (Comparator)    | The statement is fixed independently of the proof and judged by several kernels | §8      |
 
-Levels 1–2 are mandatory for every task. Apply levels 3–4 whenever the code was not written entirely by you in this session (another agent, a contributor, an external submission). Level 5 is for high-stakes or untrusted results.
+Levels 1–2 are mandatory for every task. Apply levels 3–4 whenever the code was not written entirely by you in this session (another agent, a contributor, an external submission). Levels 5–6 are for high-stakes or untrusted results.
 
 ---
 
@@ -125,12 +126,12 @@ A clean axiom list proves only that the kernel-accepted proof term depends on no
 
 | Gap                        | Example                                                                                                   | Detected by `#print axioms`? | Where to check |
 | :------------------------- | :-------------------------------------------------------------------------------------------------------- | :--------------------------- | :------------- |
-| **Wrong statement**        | Theorem proves a weaker claim, a junk-value edge case, or a redefined notion with the same name           | No                           | §6             |
+| **Wrong statement**        | Theorem proves a weaker claim, a junk-value edge case, or a redefined notion with the same name           | No                           | §6, §8         |
 | **Global notation**        | A non-`local` `notation` / `infix` changes what a statement means when read                               | No                           | §5, §6         |
 | **Elaborator bypass**      | A custom tactic assigns the goal without the elaborator checking the term's type                          | No (kernel still checks)     | §5, §7         |
 | **Environment hacking**    | `addDecl` / `modifyEnv` / `run_cmd` add or alter declarations; `debug.skipKernelTC` skips kernel checking | Partially                    | §5, §7         |
-| **Kernel or runtime bugs** | The build toolchain predates a kernel soundness fix                                                       | No                           | §7             |
-| **Untrusted artifacts**    | Prebuilt `.olean` files from a shared cache were produced by someone else's machine                       | No                           | §7             |
+| **Kernel or runtime bugs** | The build toolchain predates a kernel soundness fix                                                       | No                           | §7, §8         |
+| **Untrusted artifacts**    | Prebuilt `.olean` files from a shared cache were produced by someone else's machine                       | No                           | §7, §8         |
 
 ### Elaborator Bypass Pattern
 
@@ -274,12 +275,12 @@ A result without `goal-assignment` findings therefore does not show that every t
 
 ### Triage by Severity
 
-1. **critical**: The proof is incomplete or trusts something beyond the kernel. Eliminate it (§8) or obtain explicit user consent (e.g. a deliberate `native_decide`). A challenge/statement file that intentionally ends in `sorry` should be excluded with `--exclude`, never silently ignored.
+1. **critical**: The proof is incomplete or trusts something beyond the kernel. Eliminate it (§9) or obtain explicit user consent (e.g. a deliberate `native_decide`). A challenge/statement file that intentionally ends in `sorry` should be excluded with `--exclude`, never silently ignored.
 2. **warning**: Read every occurrence. Record what each metaprogram does (which declarations it adds, which goals it closes, which names it registers). Confirm the affected theorems with kernel replay (§7).
 3. **info**: Inventory only. Read each custom `elab` / `macro` once; most are harmless, but a custom tactic is where an elaborator bypass lives.
 
 > [!WARNING]
-> **A text scan is not a proof.** The scanner works on text, so it can miss constructs produced by macros or code generation, and it can flag harmless identifiers. A clean scan narrows the review; only the kernel check in §7 establishes correctness.
+> **A text scan is not a proof.** The scanner works on text, so it can miss constructs produced by macros or code generation, and it can flag harmless identifiers. A clean scan narrows the review; only the kernel checks in §7–§8 establish correctness.
 
 ---
 
@@ -299,7 +300,7 @@ The kernel certifies that the proof proves **the formal statement**. Whether the
 - [ ] **Scope of the claim is stated.** Record what is _not_ covered (e.g. "Dirichlet L-functions only; Dedekind zeta functions are out of scope").
 
 > [!TIP]
-> Write the primary statements in a separate file that imports **only Mathlib** (no project code) and restate the theorems there with `:= by sorry`. If that file compiles, the statement cannot depend on any project-local definition.
+> Write the primary statements in a separate file that imports **only Mathlib** (no project code) and restate the theorems there with `:= by sorry`. If that file compiles, the statement cannot depend on any project-local definition. This file is also the "challenge" input for §8.
 
 ---
 
@@ -321,11 +322,64 @@ lake env leanchecker --fresh MyProject.Main
 - [lean4lean](https://github.com/digama0/lean4lean) is an independent kernel implementation with a matching CLI (`lake env lean4lean --fresh MyProject.Main`), built against the same Lean version as the project.
 
 > [!IMPORTANT]
-> **The build toolchain's kernel version matters.** A successful build is evidence from that toolchain's kernel only. If kernel soundness fixes were released after the project's pinned Lean version, a build by that version is limited evidence. Check the Lean release notes for kernel fixes newer than the pinned version and, for high-stakes results, judge the proof with a newer toolchain.
+> **The build toolchain's kernel version matters.** A successful build is evidence from that toolchain's kernel only. If kernel soundness fixes were released after the project's pinned Lean version, a build by that version is limited evidence. Check the Lean release notes for kernel fixes newer than the pinned version and, for high-stakes results, judge the proof with a newer toolchain or independent kernels (§8).
 
 ---
 
-## 8. Axiom Elimination Workflow
+## 8. Challenge/Solution Separation with Comparator
+
+For results that must be trusted without trusting the author (external submissions, autonomous agent runs, competition entries), use [Comparator](https://github.com/leanprover/comparator). It checks that a **solution** proves exactly the theorems stated in a **challenge**, using only permitted axioms, and replays the proof with one or more kernels.
+
+### File Layout
+
+```text
+src/Challenge.lean      -- imports only Mathlib; definitions + theorems ending in `:= by sorry`
+src/Main.lean           -- the solution; same theorem names and statements, with proofs
+comparator.json         -- judge configuration
+export-targets.txt      -- declarations to export (see Comparator's README)
+```
+
+`comparator.json`:
+
+```json
+{
+  "challenge_module": "Challenge",
+  "solution_module": "Main",
+  "theorem_names": ["my_main_theorem"],
+  "permitted_axioms": ["propext", "Quot.sound", "Classical.choice"],
+  "external_kernels": {
+    "Lean paranoid": ["leanchecker-paranoid", "--silent", "--from-export"],
+    "nanoda": ["nanoda_bin"]
+  }
+}
+```
+
+### Procedure
+
+```bash
+# 1. Export the challenge from a clean clone, BEFORE any solution code is compiled.
+lake exe mathlib/cache get        # Mathlib's cache only, not prebuilt project artifacts
+lake build Challenge
+lake env lean4export Challenge -- $(cat export-targets.txt) > challenge.export
+
+# 2. Build and export the solution in a separate clone, inside a sandbox without network.
+lake build Main
+lake env lean4export Main -- $(cat "$CLEAN/export-targets.txt") > solution.export
+
+# 3. Judge, using the config and challenge export from the clean clone.
+lake comparator --config "$CLEAN/comparator.json" \
+  --challenge-from-export "$CLEAN/challenge.export" --solution-from-export solution.export
+```
+
+- **`lake comparator`** is available in recent Lean releases (4.35+); for older projects, export with the project's toolchain and judge with a newer one, or use the standalone Comparator. The exporter ([lean4export](https://github.com/leanprover/lean4export)) must be built with exactly the project's toolchain, because Lean refuses `.olean` files written by a different Lean build.
+- **Compiling untrusted code runs it.** `initialize`, `run_cmd`, `elab` and `#eval` execute during the build. Build untrusted solutions in a sandbox with no network, export the challenge where no solution code was ever compiled, and treat everything the build wrote (including the solution export) as untrusted input.
+- **Do not trust shared build caches for verification.** Integrity checks on downloaded `.olean` files prove which bytes were published, not that the proofs are valid. Use a fresh build when the result must be trusted.
+- **Independent kernels** listed under `external_kernels` each judge the export; any non-zero exit is a rejection. Some checkers reject valid exports for reasons unrelated to correctness (unsupported inductive shapes, core-library changes between Lean versions), so test each checker on a small project with the same toolchain before relying on it.
+- **Limits**: Comparator compares challenge and solution against the same dependency versions, so it cannot detect a modified dependency. Pin Mathlib to an official tag and verify `lake-manifest.json` against upstream. A passing run still trusts the checkers, Mathlib's definitions, the exporter and the sandbox.
+
+---
+
+## 9. Axiom Elimination Workflow
 
 When an audit reveals non-standard axioms, `sorryAx`, or critical scan findings:
 
@@ -356,7 +410,7 @@ graph TD
 
 ---
 
-## 9. Verification Checklist
+## 10. Verification Checklist
 
 Before marking any formalization task as complete:
 
@@ -375,4 +429,5 @@ Additionally, for code you did not write entirely yourself in this session:
 For high-stakes or untrusted results:
 
 - [ ] Have the compiled modules been replayed with `leanchecker` (and `--fresh` for the main module)?
+- [ ] Has the proof been judged against an independently built challenge with Comparator and at least one independent kernel?
 - [ ] Have known kernel soundness fixes after the pinned Lean version been considered?
