@@ -199,7 +199,7 @@ In the formalization of about 175,000 modules mentioned above, the published res
 **Rules**:
 
 - **State the result as the source states it, and cite the source in the docstring.** Keep every hypothesis of the published version, such as characteristic zero, algebraic closure or properness. A version stronger than the published one may be false, and §3.2 applies. A weaker or specialized version is fine, but say in the docstring how it differs.
-- **Check that the hypotheses can be satisfied.** A cited statement whose hypotheses no object meets, for example because a project definition such as "nef" or "big" is wrong, is vacuously true and proves nothing downstream. Next to the statement, add an `example` that builds one object meeting all the hypotheses (in the formalization above, projective space for a vanishing theorem).
+- **Check that the hypotheses can be satisfied.** A cited statement whose hypotheses no object meets, for example because a project definition such as "nef" or "big" is wrong, is vacuously true and proves nothing downstream. Next to the statement, add an `example` that builds one object meeting all the hypotheses (in the formalization above, projective space for a vanishing theorem). §3.8 has the general rules.
 - **Name the fields after the results** (`kawamataViehweg`, not `p6`). The bundle is what reviewers read to see what the result still depends on, and the formalization above used `p1` … `q7`.
 - **Bundle instead of chaining.** A theorem with a dozen statement hypotheses in a row (`A → B → C → ... → X`) is hard to read and hard to keep consistent. The formalization above had theorems with sixteen. Group them in one structure per area, and nest structures when areas combine.
 - **Keep adapters next to the statement.** Corollaries that restate a cited result in the form the development needs (`KawamataViehweg.twist (h : KawamataViehweg) ...`) belong in the statement's file, so that each consumer does not derive them again.
@@ -260,6 +260,7 @@ Downstream work built on a wrong statement is wasted, and nothing fails until so
 
 - Before handing out or building on a statement, sanity-check it: probe boundary values and try to refute it (see `lean4-proof-repair` → `falsification_and_disproof.md`).
 - Prefer proving the riskiest statements first (the statement-level version of "hardest case first").
+- Also check the opposite failure, a statement that holds only because its premises cannot be met (§3.8).
 
 ### 3.3. Adding a Hypothesis Is a Contract Change
 
@@ -360,6 +361,52 @@ theorem small : Small.Statement := Small.proof.{0} Pointed.proof.{0}
 - Inside a statement body, `Type _` fails with "Failed to infer universe levels in binder type". Declare `universe u` and write `Type u`, or use Mathlib's `Type*`, which adds a universe parameter to the definition.
 - Fixing a type to `Type` inside a statement (`(σ : Type)`) to avoid universe work makes the claim weaker. That is acceptable for an internal milestone, but it is a contract change for a top-level statement (§3.3) and a point for the statement fidelity review.
 
+### 3.8. Witness That the Premises Can Be Met
+
+§3.2 is about a statement that is false. This section is about the opposite failure: a statement that is true for the wrong reason. A statement of the form `∀ x, Premises x → Conclusion x` is trivially true when no `x` meets `Premises`. This happens easily when the premises are a project definition or a `structure ... : Prop` bundle with many fields, and one field contradicts another or a definition is wrong. Such a statement compiles, passes `#print axioms` (§3.1), and gives nothing downstream: whoever uses it must eventually produce `Premises x`, and finds out late that nobody can.
+
+```lean
+namespace Demo.Buggy
+
+/-- Premises with a bug: `0 < n` and `n < 1` contradict each other. -/
+structure Good (n : Nat) : Prop where
+  pos : 0 < n
+  small : n < 1
+
+/-- A milestone whose premises no `n` meets. -/
+def Bound.Statement : Prop := ∀ n, Good n → n = 42
+
+-- ❌ Compiles, and proves a "result" that says nothing.
+theorem Bound.proof : Bound.Statement := fun n h => absurd h.pos (by have := h.small; omega)
+
+-- The witness cannot be built. Its negation can, which exposes the bug.
+example : ¬ ∃ n, Good n := fun ⟨_, h⟩ => absurd h.pos (by have := h.small; omega)
+
+end Demo.Buggy
+
+namespace Demo
+
+/-- Premises after the fix. -/
+structure Good (n : Nat) : Prop where
+  pos : 0 < n
+  small : n < 10
+
+/-- ✅ Non-vacuity witness: a concrete `n` that meets every premise. -/
+theorem Good.witness : ∃ n, Good n := ⟨3, by decide, by decide⟩
+
+end Demo
+```
+
+In the formalization of about 175,000 modules mentioned above, `Counterexamples/` directories held such witnesses, and the project had 20 files with `Inhabited` in their names. One of them builds the cyclotomic field ℚ(ζ₃), its ring of integers and its trace form to meet a whole list of premises at once. Every file was in the import closure of `Main`, so each build checked the witnesses again.
+
+**Rules**:
+
+- **Give every premise bundle a witness.** For each project-defined premise or `structure ... : Prop` that statements quantify over, add `theorem X.witness : ∃ x, Premises x` (or `Nonempty ...`) built from a concrete object. Write it when the bundle is written, before anyone proves a statement that uses it.
+- **Pick a non-degenerate witness.** Degenerate objects (the empty type, the zero module, `Unit`, the trivial character) often meet premises for reasons that have nothing to do with the intended mathematics, and a statement that holds only for them is still empty. Choose an object for which the conclusion has real content, or add non-degeneracy facts to the witness itself. The witness in the formalization above also proved that the rank is positive and that complex conjugation is not the identity.
+- **Keep witnesses in the build.** Put them in a file that a default build target compiles, so that a later edit to a definition that makes the premises unsatisfiable breaks the build at once. A separate test library listed in `defaultTargets` works and keeps the import closure of `Main` smaller.
+- **Treat a short proof by contradiction from the premises as a red flag.** If `X.proof` closes with `absurd`, `exfalso` or `False.elim` from its premises without the expected argument, try to build the witness before accepting the proof. If the negation of the witness is provable (`¬ ∃ x, Premises x`), the premises are broken.
+- **A witness does not check the conclusion.** It shows only that the statement has content. Also check that the conclusion is not false for the witness, as in §3.2. The witness is the natural first test case.
+
 ---
 
 ## 4. Checklist
@@ -368,6 +415,7 @@ theorem small : Small.Statement := Small.proof.{0} Pointed.proof.{0}
 - [ ] Does each `X.proof` take as hypotheses only the prerequisite statements listed in the plan?
 - [ ] Do proof files import statements files only, never other proof files?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
+- [ ] Does every premise bundle that statements quantify over have a non-degenerate `X.witness : ∃ x, Premises x` that a default build target compiles?
 - [ ] Is the novel argument stated as one core statement in a Mathlib-only statements file, with each top-level claim derived from it by a short reduction that uses only library lemmas?
 - [ ] Is each cited published result a `def Published.X : Prop` with a citation and a satisfiability `example`, collected in a `structure ... : Prop` bundle with descriptive field names, and does the top-level theorem either discharge the bundle or show it in its type?
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
