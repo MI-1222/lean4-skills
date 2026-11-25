@@ -1,7 +1,7 @@
 ---
 name: lean4-best-practice
 description: >-
-  Best practices for formal proving in Lean 4 and Mathlib. Use whenever designing, structuring, refactoring, profiling or reviewing Lean 4 proofs: declaration header fence rules (signature immutability, preventing goal drift), docstring scoping (Rules A/B/C for proof, review and authoring), top-down (sorry-driven) decomposition, statement-first decomposition for multi-file or multi-agent formalizations (`def X.Statement : Prop` contracts, `X.proof` conditional on prerequisite statements, assembly theorems, parallel builds), non-terminal `simp` elimination and `simp only`, Mathlib naming reverse lookup, heartbeats and performance (`set_option maxHeartbeats`), documentation standards (docstrings, module docstrings, `calc` chains), or proof golfing.
+  Best practices for formal proving in Lean 4 and Mathlib. Use whenever designing, structuring, refactoring, profiling or reviewing Lean 4 proofs: declaration header fence rules (signature immutability, preventing goal drift), docstring scoping (Rules A/B/C for proof, review and authoring), top-down (sorry-driven) decomposition, statement-first decomposition for multi-file or multi-agent formalizations (`def X.Statement : Prop` contracts, `X.proof` conditional on prerequisite statements, assembly theorems, parallel builds), non-terminal `simp` elimination and `simp only`, Mathlib naming reverse lookup, heartbeats and performance (`set_option maxHeartbeats N in` scoping, `#count_heartbeats`, `synthInstance.maxHeartbeats`, `synthInstance.maxSize`, `maxSynthPendingDepth`, `maxRecDepth`, `--tstack`), documentation standards (docstrings, module docstrings, `calc` chains), or proof golfing.
 compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib).
 metadata:
   target-lean-version: '>=4.14.0'
@@ -51,7 +51,7 @@ graph TD
 2. **Top-Down (Sorry-Driven) Proving**: Design the architecture of your proof first. Use `sorry` to establish the high-level roadmap and extract helper lemmas before sinking time into technical details. When the work spans many files or agents, write each milestone as a `def X.Statement : Prop` contract and prove it as `X.proof`, conditional only on its prerequisite statements, then discharge everything in a hypothesis-free assembly theorem.
 3. **`simp` Hygiene**: Never leave an open, non-terminal `simp` in the middle of a proof. Use `simp only [...]`, `dsimp`, or `simp_rw` to guarantee proof stability across library versions.
 4. **Mathlib Naming Fluency**: Leverage predictable naming schemes (`Type.op_property`) and dot notation to deduce existing lemma names without endless searches.
-5. **Performance & Heartbeat Control**: Keep elaboration times small. Never treat `set_option maxHeartbeats` as a permanent fix; resolve instance loops, pin type parameters, and use targeted tactics.
+5. **Performance & Heartbeat Control**: Keep elaboration times small. Fix the cause first (instance loops, unpinned type parameters, untargeted tactics). If a raise is genuinely needed, scope it to one declaration (`set_option maxHeartbeats N in`) with a comment explaining why, sized by `#count_heartbeats in`; never raise limits file-wide or project-wide. Identify which limit was hit (`maxHeartbeats`, `synthInstance.*`, `maxSynthPendingDepth`, `maxRecDepth`) before changing anything.
 6. **Human-Readable Documentation & Style**: Formal proofs must be readable by mathematicians. Write informative docstrings, maintain a 100-character line limit, and use structured `calc` proofs for calculational arguments.
 7. **Principled Simplification (Golfing)**: Eliminate redundant tactics and intermediate hypotheses. Prefer domain decision tactics (`omega` (Lean 4.7+ Core), `ring`, `linarith`, `gcongr`) for single domains and SMT-style `grind` (Lean 4.16+ / 4.20+) for cross-domain mixed constraints over fragile manual rewrites.
 
@@ -85,7 +85,7 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 
 ### Stage D: Performance, Hygiene & Soundness
 
-- [ ] **No Artificial Heartbeat Inflation**: Does the proof build cleanly without increased `maxHeartbeats`?
+- [ ] **No Artificial Heartbeat Inflation**: Does the proof build cleanly without increased `maxHeartbeats`? If a raise remains, is it scoped with `in` to one declaration and followed by a comment explaining why?
 - [ ] **Clean Hygiene**: Are there any leftover debugging traces, `#check`, `#eval`, or unused variables?
 - [ ] **Soundness & Axiom Check**: Has `#print axioms <Theorem>` been checked to confirm the proof depends strictly on standard axioms (`propext`, `Classical.choice`, `Quot.sound`) with no residual `sorryAx` or custom axioms?
 
@@ -102,7 +102,7 @@ For in-depth explanations, code templates, and antipattern corrections, consult 
 | **Statement-First at Scale**  | `X.Statement` / `X.proof` split, assembly theorems, parallel builds  | [statement_first_decomposition.md](references/statement_first_decomposition.md)       |
 | **`simp` Hygiene**            | Non-terminal `simp` hazards, `simp only`, `dsimp`, `simp_rw`, simpNF | [simp_discipline.md](references/simp_discipline.md)                                   |
 | **Mathlib Naming**            | Naming formula, head-symbol rules, connectives, dot notation         | [mathlib_naming_conventions.md](references/mathlib_naming_conventions.md)             |
-| **Performance**               | Heartbeat limits, instance resolution, `@[irreducible]`, profiling   | [performance_and_heartbeats.md](references/performance_and_heartbeats.md)             |
+| **Performance**               | Limit catalog, scoping policy, `@[irreducible]`, profiling           | [performance_and_heartbeats.md](references/performance_and_heartbeats.md)             |
 | **Documentation & Style**     | File headers, docstrings, `calc` layout, line length, formatting     | [documentation_and_style.md](references/documentation_and_style.md)                   |
 | **Proof Simplification**      | Redundant step fusion, term vs tactic mode, automation solvers       | [proof_simplification_and_golfing.md](references/proof_simplification_and_golfing.md) |
 

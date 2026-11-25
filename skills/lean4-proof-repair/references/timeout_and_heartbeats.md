@@ -60,12 +60,15 @@ A proof containing 30+ tactic steps accumulates unresolved metavariables and lar
 
 If a proof is mathematically valid and near completion, but genuinely computationally intensive (e.g. large finite case exhaustions or heavy polynomial reductions):
 
-- **Localized option**:
+- **Localized option with a reason**: scope the raise to one declaration and explain it in a comment directly after `in` (Mathlib's linters require both):
   ```lean
   set_option maxHeartbeats 400000 in
+  -- `fin_cases` on 64 cases followed by `norm_num` in each branch
   theorem heavy_proof : ... := by ...
   ```
+- **Size it by measurement**: with Mathlib imported, `#count_heartbeats in theorem heavy_proof ...` reports the usage and suggests a limit of the form `2^k * 200000`. Do not pick the tightest possible value.
 - **Warning**: Do not rely on high heartbeats as a substitute for fixing `simp` loops. If increasing heartbeats to `1000000` still fails, an infinite loop is occurring.
+- **Never** raise `maxHeartbeats` file-wide (without `in`) or project-wide just to make failures disappear.
 
 ---
 
