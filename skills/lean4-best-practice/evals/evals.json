@@ -93,6 +93,19 @@
         "Recommends `#duplicate_fields` from `lean4-cli/scripts/duplicate_fields.lean` for the other bundles",
         "Mentions that definitionally equal types (e.g. a renaming `def`) are reported too"
       ]
+    },
+    {
+      "id": 10,
+      "prompt": "My Lean project has grown to thousands of files. Modules live under top-level folders like `Lemmata/`, `Development/` and `Formalism/`, files under `Development/` mostly declare in `namespace GlobalTheory`, and some files add lemmas directly as `Complex.foo` or `Nat.bar` so I can use dot notation. To keep my own lemmas out of `+suggestions`, I add one `nameDenyListExt` entry per namespace, but new namespaces keep appearing. Should I change anything?",
+      "expected_output": "Recommends putting every declaration under one root namespace and every module under one module root, both named after the package (for example `MyProject`), with areas as sub-namespaces such as `MyProject.GlobalTheory`. Explains that a single deny list entry `\"MyProject\"` then hides the whole project because `nameDenyListExt` matches name components, and that generic roots cannot be denied safely when Mathlib uses the same component (for example `Rep` or `Rel`). Explains that declarations placed directly in Mathlib's namespaces can collide when Mathlib later adds the same name (`has already been declared`, or `environment already contains ... from ...` in a module that imports both), and that generic module roots such as `Lemmata.Basic` can collide with a dependency (`could not disambiguate the module`). Shows that dot notation still works for `MyProject.Complex.foo` after `open MyProject`, including inside `namespace MyProject` once it is opened, and advises the full name when a bare name may also exist in Mathlib.",
+      "files": [],
+      "expectations": [
+        "Recommends one root namespace and one module root named after the package, with areas as sub-namespaces",
+        "Explains that one nameDenyListExt entry then covers the whole project because entries match name components",
+        "Warns that declarations in Mathlib's namespaces can collide with names Mathlib adds later",
+        "Warns that generic module roots can collide with modules of a dependency",
+        "Explains that dot notation still works for MyProject.Complex.foo after open MyProject"
+      ]
     }
   ]
 }
