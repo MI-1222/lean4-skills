@@ -62,7 +62,7 @@ Before running verification or committing code that uses Mathlib, check against 
 
 - [ ] **Imports Fit the File's Purpose**: Does code meant for Mathlib, or for other modules to import, use targeted submodules (e.g., `Mathlib.Basic.Real.Basic`, `Mathlib.Tactic.Linarith`)? Where `import Mathlib` remains, is its per-process cost acceptable (scratch files, exploration, or a project that chose it deliberately)?
 - [ ] **Binary Cache Synchronized**: Has `lake exe cache get` been executed to avoid rebuilding dependencies from source?
-- [ ] **Pruned Dependencies**: Has `lake shake` (or `lake shake --fix`) been run to eliminate unused transitive modules? _(Note: `lake shake` requires standard module identifier paths and fails on paths with hyphens or non-modules; see [minimal_imports_and_shake.md](references/minimal_imports_and_shake.md))_
+- [ ] **Pruned Dependencies**: Has `lake shake` (or `lake shake --fix`) been run to eliminate unused transitive modules? _(Note: `lake shake` runs only when the target modules and everything they import have the `module` header; see [minimal_imports_and_shake.md](references/minimal_imports_and_shake.md))_
 
 ### Stage B: Elaboration & Typeclass Settings
 

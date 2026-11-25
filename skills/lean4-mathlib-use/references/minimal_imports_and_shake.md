@@ -104,13 +104,14 @@ Mathlib provides a dedicated static analysis tool called `shake` to detect and r
 
 Keep these constraints in mind when using `lake shake`:
 
-1. **Strict Standard Module Requirement**:
-   - `lake shake` currently only operates on standard Lean module identifiers (`MyProject.Algebra.Basic`).
-   - If your project contains directories or filenames with hyphens (e.g., `«my-subproject»` requiring French quote escaping or permitted via `allowNonModules = true`), `lake shake` will abort with:
+1. **Every Loaded File Needs the `module` Header**:
+   - `lake shake` works only with the module system. It loads the target modules and everything they import, and if any of these files lacks the `module` header, it aborts with:
      ```text
      error: `lake shake` only works with `module`s currently
      ```
-   - **Workaround**: In projects containing escaped or non-module paths, avoid running whole-project `lake shake`. Either restrict targets, normalize directory names to standard Lean module identifiers (PascalCase or snake_case without hyphens), or inspect and prune imports manually.
+   - File and directory names do not cause this error. With headers, `lake shake --fix` pruned an import in a file under a hyphenated directory (`«my-dir»`); without headers, it aborted whether or not the names had hyphens. `allowNonModules = true` does not help: this Lake option only silences the warning about a file without the header that imports a package or library with `requiresModuleSystem` set.
+   - **Workaround**: In a project that mixes both kinds of files, pass only modules that have the header, e.g. `lake shake MyProject.Algebra.Basic`. A file with the header cannot import one without it, so everything these modules import qualifies too. For the other files, prune imports by hand, or move them to the module system first. Adding the `module` line alone is not enough: declarations and imports become private unless marked `public`, so files that rely on them stop building.
+   - Checked on Lean `v4.33.1`, `v4.35.0` and `v4.36.0`.
 
 2. **Tactic and Typeclass Instance Dependencies**:
    - `shake` relies on AST syntax inspection. If an imported module solely provides a behind-the-scenes tactic, macro, or typeclass instance that is not explicitly named in the file, `shake` may mistakenly consider it unused.
