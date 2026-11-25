@@ -109,6 +109,33 @@ package myproject where
 >
 > A file that builds with `lake build` can therefore fail under `lake env lean` (and the reverse if the lakefile _lowers_ a limit). In projects with lakefile options, use `lake lean <file>` for the fast file check, or pass the options explicitly: `lake env lean -DmaxSynthPendingDepth=3 <file>`. Set **options** through `leanOptions`, not as `-D` flags in `moreLeanArgs`, so that the language server sees them too.
 
+### A Local Limit Replaces the Lakefile Limit
+
+`set_option maxHeartbeats N in` sets the limit to `N`. It does not add to the lakefile value or take the larger of the two. In a project whose lakefile raises the limit, a local setting below the lakefile value therefore **lowers** the limit under `lake build`, while under `lake env lean`, which starts from Lean's default `200000`, the same line **raises** it. Measured with Lean `v4.33.1` and `v4.35.0`, with `maxHeartbeats = 4000000` in `[leanOptions]` and declarations that need about 2,000,000 and 500,000 heartbeats:
+
+| Declaration                                            | `lake build` and `lake lean` | `lake env lean`    |
+| :----------------------------------------------------- | :--------------------------- | :----------------- |
+| Needs 2,000,000, no local option                       | Builds                       | Fails at `200000`  |
+| Needs 2,000,000, `set_option maxHeartbeats 1000000 in` | **Fails at `1000000`**       | Fails at `1000000` |
+| Needs 500,000, no local option                         | Builds                       | Fails at `200000`  |
+| Needs 500,000, `set_option maxHeartbeats 1000000 in`   | Builds                       | Builds             |
+
+The local option made the first declaration fail under `lake build`, which it passed without the option, and it was the only reason the last declaration built under `lake env lean`. A comment such as "raised for a slow proof" above that line is then wrong for the build that matters.
+
+In the formalization of about 175,000 modules described in §2, the lakefile set `maxHeartbeats = 4000000`, and the sources contained 57,556 `set_option maxHeartbeats` lines. 55,575 of them (97%) set a value between `200000` and `4000000`, most often `set_option maxHeartbeats 1000000 in` (50,384 lines). Each of those lowered the limit under `lake build` and raised it under `lake env lean`. Another 1,738 lines set exactly `4000000` and changed nothing under `lake build`.
+
+**Rules**:
+
+- **Raise a limit in one place only.** Either keep Lean's default in the lakefile and raise per declaration (§2), or raise it for a library in the lakefile and do not set it locally. Mixing the two makes the meaning of every local line depend on the entry point.
+- **A local value must exceed the lakefile value** if both are kept. Find local values that lower the limit, here for a lakefile value of `4000000`:
+
+  ```bash
+  grep -rnoE 'set_option maxHeartbeats [0-9]+' --include='*.lean' . \
+    | awk '$NF < 4000000'
+  ```
+
+- **Lower the lakefile value with care.** Removing a lakefile raise turns every declaration that silently relied on it into a timeout. Run `lake build` after the change and give each failure a local raise with a measured value (`#count_heartbeats in`, §2) or a fix.
+
 ### Splitting a Project into Several Libraries
 
 A large project gains from several `[[lean_lib]]` blocks instead of one:

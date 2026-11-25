@@ -106,6 +106,19 @@
         "Warns that generic module roots can collide with modules of a dependency",
         "Explains that dot notation still works for MyProject.Complex.foo after open MyProject"
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "Our lakefile has `maxHeartbeats = 4000000` in `[leanOptions]`, and over the years people added `set_option maxHeartbeats 1000000 in` above tens of thousands of slow proofs. Now a proof that builds fine without that line fails under `lake build` once someone adds it, while other proofs only pass `lake env lean` because of it. What is going on, and how do we clean this up?",
+      "expected_output": "Explains that `set_option maxHeartbeats N in` replaces the limit rather than adding to it or taking the maximum, so under `lake build` (and `lake lean`), which apply the lakefile's 4000000, a local 1000000 lowers the limit, while under `lake env lean`, which ignores `leanOptions` and starts from Lean's default 200000, the same line raises it. Concludes that the meaning of each local line depends on the entry point. Recommends raising the limit in one place only: either keep Lean's default in the lakefile and raise per declaration with a measured value (`#count_heartbeats in`) and a comment, or raise it for a library in the lakefile and drop the local lines; if both are kept, local values must exceed the lakefile value. Suggests finding lowering lines with a search such as `grep -rnoE 'set_option maxHeartbeats [0-9]+' --include='*.lean' . | awk '$NF < 4000000'`, and warns that removing the lakefile raise exposes declarations that relied on it, so `lake build` must be rerun and each failure fixed or given a measured local raise.",
+      "files": [],
+      "expectations": [
+        "States that a local set_option maxHeartbeats replaces the lakefile value instead of adding to it",
+        "Explains that the same line lowers the limit under lake build but raises it under lake env lean",
+        "Recommends raising the limit in one place only, or keeping local values above the lakefile value",
+        "Gives a way to find local values below the lakefile value",
+        "Warns that removing the lakefile raise requires rebuilding and fixing the declarations that relied on it"
+      ]
     }
   ]
 }

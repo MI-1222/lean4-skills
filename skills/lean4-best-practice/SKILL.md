@@ -86,7 +86,7 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 
 ### Stage D: Performance, Hygiene & Soundness
 
-- [ ] **No Artificial Heartbeat Inflation**: Does the proof build cleanly without increased `maxHeartbeats`? If a raise remains, is it scoped with `in` to one declaration and followed by a comment explaining why?
+- [ ] **No Artificial Heartbeat Inflation**: Does the proof build cleanly without increased `maxHeartbeats`? If a raise remains, is it scoped with `in` to one declaration and followed by a comment explaining why? If the lakefile also raises `maxHeartbeats`, does no local setting fall below the lakefile value, where it would lower the limit under `lake build`?
 - [ ] **Clean Hygiene**: Are there any leftover debugging traces, `#check`, `#eval`, or unused variables?
 - [ ] **No Copies or Attempt Suffixes**: Does `#duplicate_decls` report no two theorems with the same statement, and is every variant named by how its statement differs rather than by `_alt`, `_bis`, `_new` or `V2`?
 - [ ] **Soundness & Axiom Check**: Has `#print axioms <Theorem>` been checked to confirm the proof depends strictly on standard axioms (`propext`, `Classical.choice`, `Quot.sound`) with no residual `sorryAx` or custom axioms?
