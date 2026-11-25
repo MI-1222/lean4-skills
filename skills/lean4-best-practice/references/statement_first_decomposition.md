@@ -138,6 +138,73 @@ In one formalization of about 175,000 modules, five top-level claims reduced to 
 - **Keep reductions on the library.** A reduction that needs project definitions or lemmas is part of the development, not a reduction. Move that work behind the core statement, or change the core statement.
 - **Do not let reductions carry hypotheses beyond the core.** An extra statement hypothesis on `X.of_core` is an open prerequisite of the top-level claim, and §3.3 applies to it.
 
+### Citing Published Results as Statements
+
+A long development leans on many published theorems that are not in Mathlib. Do not prove them inline where they are first needed, and never add them as `axiom`. State each one as a `Prop` in a `Published` namespace, bundle the ones a development relies on into a `structure ... : Prop`, and prove the development conditional on that bundle. The bundle is then the explicit list of cited results that are still unproven.
+
+Continuing the example above:
+
+```lean
+namespace Demo
+
+/-- Squares modulo 3. Cite the source here: author, title, theorem number. -/
+def Published.SquareModThree : Prop := ∀ n : Nat, n * n % 3 ≠ 2
+
+/-- Squares modulo 4. Cite the source here. -/
+def Published.SquareModFour : Prop := ∀ n : Nat, n * n % 4 ≠ 2 ∧ n * n % 4 ≠ 3
+
+/-- The published results this development still relies on. -/
+structure Literature : Prop where
+  squareModThree : Published.SquareModThree
+  squareModFour : Published.SquareModFour
+
+/-- A second claim that uses the same bundle. -/
+def Other.Statement : Prop := ∀ n : Nat, n * n ≠ 3
+
+theorem Core.of_literature (L : Literature) : Core.Statement := by
+  intro n h
+  exact L.squareModThree n (by rw [h])
+
+theorem Other.of_literature (L : Literature) : Other.Statement := by
+  intro n h
+  exact (L.squareModFour n).2 (by rw [h])
+
+/-- Discharging a field: prove the published result. -/
+theorem Published.SquareModThree.proof : Published.SquareModThree := by
+  intro n
+  rw [Nat.mul_mod]
+  have h := Nat.mod_lt n (show 3 > 0 by decide)
+  match n % 3, h with
+  | 0, _ | 1, _ | 2, _ => decide
+
+theorem Published.SquareModFour.proof : Published.SquareModFour := by
+  intro n
+  rw [Nat.mul_mod]
+  have h := Nat.mod_lt n (show 4 > 0 by decide)
+  match n % 4, h with
+  | 0, _ | 1, _ | 2, _ | 3, _ => decide
+
+/-- Assembly: the bundle is fully discharged, so no hypothesis remains. -/
+theorem core : Core.Statement :=
+  Core.of_literature ⟨Published.SquareModThree.proof, Published.SquareModFour.proof⟩
+
+end Demo
+```
+
+- A field of a `structure ... : Prop` is a proof, so `L.squareModThree n` applies the cited result directly.
+- One bundle serves every claim that cites the same results, so `Core.of_literature` and `Other.of_literature` take one argument each, not one per citation.
+
+In the formalization of about 175,000 modules mentioned above, the published results lived in `PublishedTheorems/` directories as `def ... : Prop`. In the final version, the bundle of results that were still open had three fields. About 190 theorems in one file derived the published results used downstream from it, and the final assembly discharged the three fields by name.
+
+**Rules**:
+
+- **State the result as the source states it, and cite the source in the docstring.** Keep every hypothesis of the published version, such as characteristic zero, algebraic closure or properness. A version stronger than the published one may be false, and §3.2 applies. A weaker or specialized version is fine, but say in the docstring how it differs.
+- **Check that the hypotheses can be satisfied.** A cited statement whose hypotheses no object meets, for example because a project definition such as "nef" or "big" is wrong, is vacuously true and proves nothing downstream. Next to the statement, add an `example` that builds one object meeting all the hypotheses (in the formalization above, projective space for a vanishing theorem).
+- **Name the fields after the results** (`kawamataViehweg`, not `p6`). The bundle is what reviewers read to see what the result still depends on, and the formalization above used `p1` … `q7`.
+- **Bundle instead of chaining.** A theorem with a dozen statement hypotheses in a row (`A → B → C → ... → X`) is hard to read and hard to keep consistent. The formalization above had theorems with sixteen. Group them in one structure per area, and nest structures when areas combine.
+- **Keep adapters next to the statement.** Corollaries that restate a cited result in the form the development needs (`KawamataViehweg.twist (h : KawamataViehweg) ...`) belong in the statement's file, so that each consumer does not derive them again.
+- **Shrink the bundle, never hide it.** Progress means proving a `Published.X`, plugging the proof into the assembly, and deleting the field. If some citations stay unproven, the top-level theorem must show them in its type (`theorem main (L : Literature) : Main.Statement`) and be reported as conditional. An `axiom` would hide them from the type, and Comparator rejects any axiom its config does not allow.
+
 ---
 
 ## 2. Why It Helps
@@ -302,6 +369,7 @@ theorem small : Small.Statement := Small.proof.{0} Pointed.proof.{0}
 - [ ] Do proof files import statements files only, never other proof files?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Is the novel argument stated as one core statement in a Mathlib-only statements file, with each top-level claim derived from it by a short reduction that uses only library lemmas?
+- [ ] Is each cited published result a `def Published.X : Prop` with a citation and a satisfiability `example`, collected in a `structure ... : Prop` bundle with descriptive field names, and does the top-level theorem either discharge the bundle or show it in its type?
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
 - [ ] Was `#print axioms` run on the assembly theorem, not on conditional `X.proof` declarations?
 - [ ] Does every `X.proof` header give explicit universe arguments (`.{0}`, `.{u}`) to each universe-polymorphic statement it mentions?
