@@ -109,6 +109,64 @@ package myproject where
 >
 > A file that builds with `lake build` can therefore fail under `lake env lean` (and the reverse if the lakefile _lowers_ a limit). In projects with lakefile options, use `lake lean <file>` for the fast file check, or pass the options explicitly: `lake env lean -DmaxSynthPendingDepth=3 <file>`. Set **options** through `leanOptions`, not as `-D` flags in `moreLeanArgs`, so that the language server sees them too.
 
+### Splitting a Project into Several Libraries
+
+A large project gains from several `[[lean_lib]]` blocks instead of one:
+
+- **Per-area limits.** A heavy area gets its own limits, and the rest of the project keeps Lean's defaults.
+- **Partial builds.** `lake build Fields` builds one area, and a challenge or witness library can be built without the development.
+- **Explicit defaults.** `defaultTargets` lists what a plain `lake build` builds.
+
+```toml
+# lakefile.toml
+name = "myproject"
+defaultTargets = ["Core", "Fields", "Witnesses", "Main"]
+
+[leanOptions]
+autoImplicit = false
+
+[[lean_lib]]
+name = "Core"
+globs = ["MyProject.Algebra.+", "MyProject.Geometry.+"]
+
+# Number-field instances are deep; raised here once instead of in every file.
+[[lean_lib]]
+name = "Fields"
+globs = ["MyProject.LocalFields.+", "MyProject.GlobalFields.+"]
+leanOptions = {synthInstance.maxHeartbeats = 400000}
+
+[[lean_lib]]
+name = "Witnesses"
+globs = ["MyProject.Witnesses.+"]
+
+[[lean_lib]]
+name = "Main"
+roots = ["Statements", "Main"]
+```
+
+With this lakefile, a module under `MyProject/LocalFields/` reads `synthInstance.maxHeartbeats` as `400000`, and a module under `MyProject/Algebra/` reads Lean's default `20000`. This holds even when both are built only because `Main` imports them.
+
+In one formalization of about 175,000 modules, one area was split into two libraries in this way. Ten of its twelve directories went to one library, and the two field-theory directories, 543 files, went to a second library with `synthInstance.maxHeartbeats = 400000`. Only 3 of those 543 files set the option themselves.
+
+### Which Library's Options a Module Gets
+
+Lake compiles each module with the options of the library whose `globs` or `roots` match it. Measured with Lake from Lean `v4.33.1`:
+
+| Situation                                                          | What Lake did                                                                                              |
+| :----------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| Library `B` imports a module that library `A` owns                 | Compiled it with `A`'s options                                                                             |
+| Glob `Foo.A.+`                                                     | Matches the submodules of `Foo.A` only, not `Foo.A` itself (`Foo.A.*` matches both)                        |
+| A module that no library matches is imported                       | Not built; the importer fails with `object file ... of module Foo.A does not exist`                        |
+| Two libraries `A` and `C` match the same module                    | `lake build A` and `lake build C` compiled it with different options, and alternating rebuilt it each time |
+| The same overlapping module, built as an import of a third library | It got the options of whichever of `A` and `C` was declared later in the lakefile                          |
+
+**Rules**:
+
+- **Make the globs disjoint and complete.** Every module belongs to exactly one library. With overlapping globs, the options of a module depend on which target is being built and on the order of the blocks in the lakefile, and two targets keep rebuilding each other's modules.
+- **List the directories explicitly** when an area is split. Write `globs = ["Area.X.+", "Area.Y.+"]` for one part and the remaining directories for the other part, not `Area.+` with an exception.
+- **Remember the root file.** If a directory has a root module (`Foo/A.lean` next to `Foo/A/`), use `Foo.A.*` or add it to `roots`. With `Foo.A.+` the root file belongs to no library.
+- **A library-wide raise is still a raise.** The policy in §2 applies: give the reason in a lakefile comment, as in the example above, and keep the area as small as the cause.
+
 ---
 
 ## 5. Profiling Slow Proofs
