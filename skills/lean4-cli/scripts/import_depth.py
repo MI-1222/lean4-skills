@@ -77,7 +77,7 @@ class DepthResult:
     :param depth: Number of modules on the longest chain that ends at each module (1 if it
         imports no scanned module).
     :param previous: For each module, the imported module that precedes it on its longest
-        chain, or `None`.
+        chain (the smallest name if several chains are equally long), or `None`.
     :param cycle: Modules that lie on or behind an import cycle; empty for a valid project.
     """
 
@@ -390,8 +390,14 @@ def longest_chains(modules: dict[str, Module], names: set[str]) -> DepthResult:
     while ready:
         name = ready.pop()
         for importer in importers[name]:
-            if depth[name] + 1 > depth.get(importer, 0):
-                depth[importer] = depth[name] + 1
+            # Among equally long chains, keep the one through the smallest module name, so
+            # the result does not depend on the iteration order of `names`.
+            candidate = depth[name] + 1
+            current = depth.get(importer, 0)
+            if candidate > current or (
+                candidate == current and name < previous[importer]
+            ):
+                depth[importer] = candidate
                 previous[importer] = name
             pending[importer] -= 1
             if pending[importer] == 0:
@@ -442,7 +448,9 @@ def build_report(
     return {
         "module_count": len(names),
         "import_edge_count": edges,
-        "external_import_roots": dict(external.most_common()),
+        "external_import_roots": dict(
+            sorted(external.items(), key=lambda item: (-item[1], item[0]))
+        ),
         "max_depth": len(chain),
         "parallelism": round(len(names) / len(chain), 1),
         "modules_per_depth": {str(d): per_depth[d] for d in sorted(per_depth)},
