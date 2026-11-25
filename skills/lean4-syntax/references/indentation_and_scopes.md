@@ -150,3 +150,32 @@ theorem ne_seven : n ≠ 7 := hn
 - `include` and `omit` can be combined in either order, each followed by `in`, before the declaration's docstring (see `lean4-best-practice` → `header_fence_and_docstrings.md` for the docstring order).
 - If many theorems need the same `omit`, restructure instead: move the instance into an inner `section` that contains only the theorems that use it.
 - Never use a bare `include h` without `in` to make a hypothesis available everywhere; it is added to **every** following declaration of the section, including those that do not need it.
+
+---
+
+## 6. Local Notation That Refers to Section Variables
+
+Notation for an object built from section variables is common, for example the maximal ideal of a local ring:
+
+```lean
+variable (R : Type*) [CommRing R] [IsLocalRing R]
+
+set_option hygiene false in
+local notation "𝔪" => IsLocalRing.maximalIdeal R
+```
+
+With hygiene on (the default), the `R` inside the notation is a hygienic reference to the section variable. That works in theorem statements, but not everywhere (verified on Lean `v4.33.1`):
+
+| Use of the notation                                   | Hygiene on (default)                                                                                                                                                                                   | `set_option hygiene false in`               |
+| :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------ |
+| In a theorem statement or proof                       | Works                                                                                                                                                                                                  | Works                                       |
+| In a `variable` binder (`variable (h : 𝔪 = ⊥)`)       | **Broken**: an elaboration error (`don't know how to synthesize implicit argument`, `internal exception #3`) or, for other terms, a silent `sorry` (only `declaration uses 'sorry'` on later theorems) | Works                                       |
+| Under a binder of the same name (`theorem t (R ...)`) | Still means the section variable, which is added as an extra argument (e.g. `∀ (n n_1 : Nat), ...`)                                                                                                    | Means the binder at the use site (captured) |
+
+**Rules**:
+
+- Write `set_option hygiene false in` directly before the `local notation` (or `scoped notation`). The option then applies to that one command.
+- Keep such notation `local` or `scoped`; a global notation that silently refers to whatever `R` is in scope changes how statements read in other files.
+- Do not reuse the variable's name as a binder in declarations that use the notation; without hygiene, the notation refers to that binder instead.
+- To avoid the question entirely, take the object as an argument of the notation: `local notation "𝔪[" R "]" => IsLocalRing.maximalIdeal R`, used as `𝔪[R]`.
+- If a notation is used in a `variable` declaration, check the result: `#check @theorem_name` must show the intended hypothesis, and `#print axioms` must not list `sorryAx`. A text search for `sorry` does not find this case.

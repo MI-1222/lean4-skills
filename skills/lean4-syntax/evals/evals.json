@@ -30,6 +30,18 @@
         "Explains that disabling `linter.unusedSectionVars` leaves an unnecessary hypothesis in the signature",
         "Does not set `linter.unusedSectionVars false`"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "I introduced a notation for the maximal ideal and used it in a `variable` declaration, but Lean reports `don't know how to synthesize implicit argument` at the `variable` line and `internal exception #3` at the theorem. The same notation works fine in theorem statements. Why, and what is the idiomatic fix?\n\n```lean\nimport Mathlib.RingTheory.LocalRing.MaximalIdeal.Defs\n\nvariable (R : Type*) [CommRing R] [IsLocalRing R]\nlocal notation \"𝔪\" => IsLocalRing.maximalIdeal R\n\nvariable (h : 𝔪 = ⊥)\ninclude h in\ntheorem via_variable : IsLocalRing.maximalIdeal R = ⊥ := h\n```",
+      "expected_output": "Explanation that with hygiene on, the `R` inside the notation is a hygienic reference to the section variable, which does not resolve inside a `variable` binder (for other terms the result can even be a silent `sorry`). Fix with `set_option hygiene false in` directly before the `local notation`, keeping it local, or a notation that takes the ring as an argument (`𝔪[R]`). Recommends checking `#check @via_variable` and `#print axioms` when such notation is used in `variable` declarations, and warns that without hygiene a binder named `R` at the use site captures the notation.",
+      "files": [],
+      "expectations": [
+        "Identifies notation hygiene as the cause",
+        "Fixes it with `set_option hygiene false in` before a `local` notation, or with a notation taking `R` as an argument",
+        "Mentions that the hygienic form can silently become `sorry` in other cases, and recommends `#print axioms` or `#check` to confirm",
+        "Warns about capture by a same-named binder when hygiene is off"
+      ]
     }
   ]
 }
