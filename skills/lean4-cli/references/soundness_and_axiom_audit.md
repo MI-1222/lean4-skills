@@ -4,15 +4,16 @@ In formal mathematics with Lean 4, a proof is not complete merely because `lake 
 
 `#print axioms` catches those shortcuts, but it is only one layer. It cannot tell you whether the theorem **states what you think it states**, whether custom metaprograms bypassed the elaborator, whether the environment was manipulated, or whether the kernel that accepted the proof has known bugs.
 
-This guide establishes the protocols for auditing the **soundness** of completed proofs, from the axiom check up to a static scan of the sources:
+This guide establishes the protocols for auditing the **soundness** of completed proofs, from the axiom check up to the statement review:
 
 | Level | Check                                    | What it establishes                                                             | Section |
 | :---- | :--------------------------------------- | :------------------------------------------------------------------------------ | :------ |
 | **1** | `lake build` succeeds                    | The build toolchain's elaborator and kernel accepted every declaration          | —       |
 | **2** | `#print axioms <Theorem>`                | No `sorryAx`, custom axioms, or native-evaluation axioms in the dependency cone | §2      |
 | **3** | Static scan (`scan_risky_constructs.py`) | Lists elaborator bypasses, environment hacking and global notation to review    | §5      |
+| **4** | Statement fidelity review                | The formal statement means the intended mathematical claim                      | §6      |
 
-Levels 1–2 are mandatory for every task. Apply level 3 whenever the code was not written entirely by you in this session (another agent, a contributor, an external submission).
+Levels 1–2 are mandatory for every task. Apply levels 3–4 whenever the code was not written entirely by you in this session (another agent, a contributor, an external submission).
 
 ---
 
@@ -123,8 +124,8 @@ A clean axiom list proves only that the kernel-accepted proof term depends on no
 
 | Gap                        | Example                                                                                                   | Detected by `#print axioms`? | Where to check |
 | :------------------------- | :-------------------------------------------------------------------------------------------------------- | :--------------------------- | :------------- |
-| **Wrong statement**        | Theorem proves a weaker claim, a junk-value edge case, or a redefined notion with the same name           | No                           | Manual review  |
-| **Global notation**        | A non-`local` `notation` / `infix` changes what a statement means when read                               | No                           | §5             |
+| **Wrong statement**        | Theorem proves a weaker claim, a junk-value edge case, or a redefined notion with the same name           | No                           | §6             |
+| **Global notation**        | A non-`local` `notation` / `infix` changes what a statement means when read                               | No                           | §5, §6         |
 | **Elaborator bypass**      | A custom tactic assigns the goal without the elaborator checking the term's type                          | No (kernel still checks)     | §5             |
 | **Environment hacking**    | `addDecl` / `modifyEnv` / `run_cmd` add or alter declarations; `debug.skipKernelTC` skips kernel checking | Partially                    | §5             |
 | **Kernel or runtime bugs** | The build toolchain predates a kernel soundness fix                                                       | No                           | —              |
@@ -272,7 +273,7 @@ A result without `goal-assignment` findings therefore does not show that every t
 
 ### Triage by Severity
 
-1. **critical**: The proof is incomplete or trusts something beyond the kernel. Eliminate it (§6) or obtain explicit user consent (e.g. a deliberate `native_decide`). A challenge/statement file that intentionally ends in `sorry` should be excluded with `--exclude`, never silently ignored.
+1. **critical**: The proof is incomplete or trusts something beyond the kernel. Eliminate it (§7) or obtain explicit user consent (e.g. a deliberate `native_decide`). A challenge/statement file that intentionally ends in `sorry` should be excluded with `--exclude`, never silently ignored.
 2. **warning**: Read every occurrence. Record what each metaprogram does (which declarations it adds, which goals it closes, which names it registers). Confirm the affected theorems with kernel replay.
 3. **info**: Inventory only. Read each custom `elab` / `macro` once; most are harmless, but a custom tactic is where an elaborator bypass lives.
 
@@ -281,14 +282,34 @@ A result without `goal-assignment` findings therefore does not show that every t
 
 ---
 
-## 6. Axiom Elimination Workflow
+## 6. Statement Fidelity Review
+
+The kernel certifies that the proof proves **the formal statement**. Whether the formal statement is the intended mathematics must be checked by reading it. Do this for every primary theorem, before trusting its proof.
+
+### Review Checklist
+
+- [ ] **Definitions come from the trusted library.** The statement uses Mathlib's definitions (e.g. `RiemannHypothesis`, `riemannZeta`, `DirichletCharacter.LFunction`), not project-local look-alikes with the same name in another namespace. Check with `#print` / `#check` and fully-qualified names.
+- [ ] **Junk values are excluded.** Mathlib's total functions return conventional values outside their domain (`x / 0 = 0`, `riemannZeta 1` is a junk value, `deriv` of a non-differentiable function is `0`). Check that the hypotheses exclude those points (e.g. `s ≠ 1`), otherwise the statement may be vacuous or false for the wrong reason. See `lean4-mathlib-use` → `junk_values_and_partial_functions.md`.
+- [ ] **Numeric literals and division live in the intended type.** `1 / 2` compared with `s.re : ℝ` is real division; the same expression elaborated in `ℕ` is `0`. Hover or `#check` each literal-bearing subterm.
+- [ ] **Coercions point the right way.** `((n : ℕ) : ℂ)` versus arithmetic carried out in `ℕ` before the cast (`↑(n - 1)` vs `↑n - 1`).
+- [ ] **Quantifier scope and hypothesis direction are correct.** Every `∀` covers what it should (all moduli, all characters, imprimitive ones included); implications are not accidentally reversed.
+- [ ] **Exceptional cases match the informal claim.** Trivial zeros, the trivial character at `s = 1`, boundary values: excluded exactly as in the informal statement, no more and no less.
+- [ ] **No global notation or instance changes the reading.** Check the `global-notation` findings from §5 and any local instances in scope of the statement.
+- [ ] **Scope of the claim is stated.** Record what is _not_ covered (e.g. "Dirichlet L-functions only; Dedekind zeta functions are out of scope").
+
+> [!TIP]
+> Write the primary statements in a separate file that imports **only Mathlib** (no project code) and restate the theorems there with `:= by sorry`. If that file compiles, the statement cannot depend on any project-local definition.
+
+---
+
+## 7. Axiom Elimination Workflow
 
 When an audit reveals non-standard axioms, `sorryAx`, or critical scan findings:
 
 ```mermaid
 graph TD
     Audit["Run #print axioms &lt;Theorem&gt;<br/>+ scan_risky_constructs.py"] --> Check{"Only standard axioms<br/>and no critical findings?"}
-    Check -- "Yes" --> Review["Review warning findings"]
+    Check -- "Yes" --> Review["Review warning findings<br/>and statement fidelity"]
     Review --> Sound["Certification: SOUND at the chosen level"]
     Check -- "Contains sorryAx" --> Sorry["Trace remaining sorry in proof body or helper lemmas"]
     Check -- "Contains custom axiom" --> Custom["Identify synthetic axiom declaration"]
@@ -312,7 +333,7 @@ graph TD
 
 ---
 
-## 7. Verification Checklist
+## 8. Verification Checklist
 
 Before marking any formalization task as complete:
 
@@ -326,3 +347,4 @@ Additionally, for code you did not write entirely yourself in this session:
 
 - [ ] Has `scan_risky_constructs.py` reported no critical findings (with intentional `sorry` files excluded explicitly)?
 - [ ] Has every warning finding (goal assignment, environment modification, global notation, ...) been read and explained?
+- [ ] Has each primary statement passed the statement fidelity review (§6)?

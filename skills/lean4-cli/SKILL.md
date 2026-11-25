@@ -271,7 +271,9 @@ A clean axiom list does **not** show that the statement means the intended mathe
 
    Exit code `1` means a `critical` finding (`sorry`, `axiom`, `native_decide`, `debug.skipKernelTC`, ...). Read every `warning` finding as well, especially `goal-assignment` (a custom tactic that assigns the goal without the elaborator's type check) and `global-notation`. Use `--json` for structured output.
 
-For full details on handling private declarations, namespace scope stacks, eliminating synthetic axioms, `native_decide` / `Lean.ofReduceBool` caveats, and the scanner's rule catalog and JSON schema, consult the comprehensive guide:
+2. **Statement fidelity review**: Check that each primary statement uses Mathlib's definitions, excludes junk-value points, and elaborates numeric literals in the intended type.
+
+For full details on handling private declarations, namespace scope stacks, eliminating synthetic axioms, `native_decide` / `Lean.ofReduceBool` caveats, the scanner's rule catalog and JSON schema, and the statement review checklist, consult the comprehensive guide:
 
 - [Soundness and Axiom Audit Guide](references/soundness_and_axiom_audit.md)
 
