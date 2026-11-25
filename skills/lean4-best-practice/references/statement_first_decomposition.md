@@ -214,6 +214,122 @@ In the formalization of about 175,000 modules mentioned above, the published res
 - **Keep adapters next to the statement.** Corollaries that restate a cited result in the form the development needs (`KawamataViehweg.twist (h : KawamataViehweg) ...`) belong in the statement's file, so that each consumer does not derive them again.
 - **Shrink the bundle, never hide it.** Progress means proving a `Published.X`, plugging the proof into the assembly, and deleting the field. If some citations stay unproven, the top-level theorem must show them in its type (`theorem main (L : Literature) : Main.Statement`) and be reported as conditional. An `axiom` would hide them from the type, and Comparator rejects any axiom its config does not allow.
 
+### One Development for Several Variants
+
+A long development is often needed in more than one version: arbitrary and compactly supported coefficients, a local and a global form, a class of objects and a smaller one. When the shared part is written against the first version, calling its theorems in proofs or naming its definitions in statements, the second version tends to need its own copy of those declarations and of the ones built on them. Turning the theorem into a hypothesis is not enough when the type of the hypothesis still names the first version:
+
+```lean
+namespace Demo.OneVersion
+
+/-- Numbers of the first version. -/
+def IsEven (n : Nat) : Prop := n % 2 = 0
+
+/-- Numbers of the second version. -/
+def DivFour (n : Nat) : Prop := n % 4 = 0
+
+def EvenAdd.Statement : Prop := ∀ a b, IsEven a → IsEven b → IsEven (a + b)
+
+/-- A hypothesis instead of a concrete theorem, but its type still names `IsEven`. -/
+theorem even_twice (h : EvenAdd.Statement) (a b : Nat) (ha : IsEven a) (hb : IsEven b) :
+    IsEven (a + b + (a + b)) :=
+  h _ _ (h a b ha hb) (h a b ha hb)
+
+-- ❌ Fails for the second version:
+-- "Application type mismatch: The argument ha has type DivFour a
+--  but is expected to have type IsEven a"
+theorem divFour_twice (h : EvenAdd.Statement) (a b : Nat) (ha : DivFour a) (hb : DivFour b) :
+    DivFour (a + b + (a + b)) :=
+  even_twice h a b ha hb
+
+end Demo.OneVersion
+```
+
+Make **what differs** a parameter, here the class of numbers. State what the shared part uses about it as a `structure ... : Prop`, prove the shared part once from that bundle, and obtain each version as an instance:
+
+```lean
+namespace Demo.Variants
+
+/-- Numbers of the first version. -/
+def IsEven (n : Nat) : Prop := n % 2 = 0
+
+/-- Numbers of the second version. -/
+def DivFour (n : Nat) : Prop := n % 4 = 0
+
+/-- What the shared development uses about its class `Good`. -/
+structure Closed (Good : Nat → Prop) : Prop where
+  add : ∀ a b, Good a → Good b → Good (a + b)
+
+/-- Proved once, for every class that meets the premises. -/
+theorem Closed.twice {Good : Nat → Prop} (h : Closed Good) (a b : Nat) (ha : Good a)
+    (hb : Good b) : Good (a + b + (a + b)) :=
+  h.add _ _ (h.add a b ha hb) (h.add a b ha hb)
+
+theorem IsEven.closed : Closed IsEven :=
+  ⟨fun a b ha hb => by unfold IsEven at *; omega⟩
+
+theorem DivFour.closed : Closed DivFour :=
+  ⟨fun a b ha hb => by unfold DivFour at *; omega⟩
+
+-- ✅ Each version is a one-line instance.
+theorem even_twice (a b : Nat) (ha : IsEven a) (hb : IsEven b) : IsEven (a + b + (a + b)) :=
+  IsEven.closed.twice a b ha hb
+
+theorem divFour_twice (a b : Nat) (ha : DivFour a) (hb : DivFour b) :
+    DivFour (a + b + (a + b)) :=
+  DivFour.closed.twice a b ha hb
+
+/-- The empty class meets the premises too, so they do not show that a class has members. -/
+theorem closed_false : Closed (fun _ => False) := ⟨fun _ _ h _ => h⟩
+
+/-- Non-vacuity witness: the class has a nonzero member. -/
+theorem DivFour.witness : ∃ n, n ≠ 0 ∧ DivFour n := ⟨4, by decide, rfl⟩
+
+end Demo.Variants
+```
+
+When many theorems share the parameter and the bundle, declare both once with `variable`. A theorem receives an explicit section variable only if its header refers to it or it is `include`d (Lean `4.11.0+`). Headers mention the parameter `Good`, but usually not the bundle `h`, which only the proofs use:
+
+```lean
+namespace Demo.Section
+
+structure Closed (Good : Nat → Prop) : Prop where
+  add : ∀ a b, Good a → Good b → Good (a + b)
+
+section
+variable {Good : Nat → Prop} (h : Closed Good)
+
+-- ❌ Fails with "Unknown identifier `h.add`": the header does not mention `h`.
+theorem double (a : Nat) (ha : Good a) : Good (a + a) := h.add a a ha ha
+
+include h
+
+-- ✅ `include` makes `h` an argument.
+theorem double' (a : Nat) (ha : Good a) : Good (a + a) := h.add a a ha ha
+
+-- ⚠️ Added here too: "automatically included section variable(s) unused in theorem"
+theorem same (a : Nat) (ha : Good a) : Good a := ha
+
+-- ✅ Leave it out where the proof does not need it.
+omit h in
+theorem same' (a : Nat) (ha : Good a) : Good a := ha
+
+end
+
+end Demo.Section
+```
+
+In the formalization of about 175,000 modules mentioned above, part of one theory was needed a second time, for compactly supported coefficients. The base premise changed too: the second version assumes a weaker form of it, with an extra `HasCompactSupport F` assumption in one clause. Some theorems already took premises such as `VIso` and `SizeStd` as hypotheses, but each of these was stated for the first class of coefficients, and other proofs applied the concrete theorems that proved them inside their bodies. For the second version, three files write out 45 declarations ending in `Cpt`, and a command, `cpt_copy_thms`, added 21 more (18 theorems and 3 definitions). Starting from six theorems, it followed their dependencies, replaced three premise theorems by ones proved for the new class, rewrote constant names in the elaborated types and values, and added the results with `addDecl` under `set_option maxHeartbeats 0 in`.
+
+**Rules**:
+
+- **Check for a corollary first.** If the second claim follows from the first in a few lines, for example because only a hypothesis narrows to a smaller class (`DivFour n → IsEven n`), write the corollary. It usually does not follow when the class also appears in the conclusion, as above. A second version that rests on a weaker premise rules it out too, because theorems proved from the stronger premise do not apply.
+- **Choose the parameters before the first proof** when a second version is already planned. Cover everything the versions differ in, both the data or class predicate and the premises about it. Definitions and statements that mention these take them as arguments too (`def X.Statement (Good : Nat → Prop) : Prop`).
+- **Put into the bundle only what the proofs use**, one property per field. Adding a field later changes the contract of every instance (§3.3).
+- **Give each instance a proof and a witness.** `theorem X.closed : Closed X` shows that the class meets the premises. A non-degenerate member (§3.8) shows that the class is not empty.
+- **When the second version appears late**, turn the existing proofs into parameterized theorems, and keep the old names and headers as one-line instances. The old contracts stay unchanged, and so do the files that use them.
+- **Treat the wish to copy declarations as a sign of a missing parameter.** This covers a command that re-adds declarations under rewritten names with `addDecl`, and a suffixed copy of a chain of theorems. `#duplicate_decls` compares statements, so it misses every copy whose statement changed. `scan_risky_constructs.py` lists `addDecl` commands and their uses (`lean4-cli` → `soundness_and_axiom_audit.md` §5).
+- **Watch what `include` adds.** Every later theorem in the section gets the included variable, whether its proof uses it or not (§3.10). Keep such sections small, use `omit ... in`, and fail the build on `linter.unusedSectionVars` as on `linter.unusedVariables`.
+
 ### Layered Directories for Larger Developments
 
 When a development also has its own definitions, cited results (previous section) and witnesses (§3.8), give each kind of file its own directory and fix which directory may import which:
@@ -633,6 +749,7 @@ In the formalization of about 175,000 modules mentioned above, the longest chain
 - [ ] Is the novel argument stated as one core statement in a Mathlib-only statements file, with each top-level claim derived from it by a short reduction that uses only library lemmas?
 - [ ] Is each cited published result a `def Published.X : Prop` with a citation and a satisfiability `example`, collected in a `structure ... : Prop` bundle with descriptive field names, and does the top-level theorem either discharge the bundle or show it in its type?
 - [ ] Does `#duplicate_fields` report no two fields of a bundle with the same proposition?
+- [ ] Where a development serves several versions, is the shared part proved once over a parameter and a `structure ... : Prop` of premises, with a proof and a witness for each instance, and no copied chain of declarations (`addDecl` command or suffixed copies)?
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
 - [ ] Was `#print axioms` run on the assembly theorem, not on conditional `X.proof` declarations?
 - [ ] Does every `X.proof` header give explicit universe arguments (`.{0}`, `.{u}`) to each universe-polymorphic statement it mentions?
