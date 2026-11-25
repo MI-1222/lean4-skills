@@ -554,4 +554,4 @@ In the formalization of about 175,000 modules mentioned above (Lean `v4.33.1`), 
 - **Decide the indices before building on them.** A definition should take the components it uses as parameters. Taking the whole structure ties it to that one value.
 - **Group by what changes.** A part that every variant keeps is one field with its own type, not a run of fields in a flat structure.
 - **Transport over variables.** Prove the transport with `subst` for arbitrary data, and give each conversion `@[simp]` lemmas for the components it produces.
-- **Treat repeated conversions as a design signal.** A chain of `{ x with }` copies that follows every new variant means the indices carry too much.
+- **Treat repeated conversions as a design signal.** A chain of `{ x with }` copies that follows every new variant means the indices carry too much. When comparing the two sides times out, see `lean4-proof-repair` → `timeout_and_heartbeats.md` §2.6.

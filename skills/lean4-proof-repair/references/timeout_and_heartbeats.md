@@ -92,6 +92,33 @@ See `lean4-best-practice` → `performance_and_heartbeats.md` for the full limit
 
 ---
 
+### 2.6 Timeouts Between a Structure and Its Converted Copy
+
+**Symptom**: `exact`, `rfl`, `... .refl` or a field-by-field definition that relates something over `x` to the same thing over `x.convert` times out at `isDefEq` or `whnf`, although the two sides should be definitionally equal. Here `x` is a large structure that appears in the types.
+
+**Diagnose**:
+
+```lean
+set_option diagnostics true in
+theorem converted_eq : ... := by exact ...
+```
+
+In the `unfolded declarations` and `unfolded reducible declarations` lists, projections of the structure and the conversion functions have counts in the thousands or more. The elaborator is spending its budget on unfolding the conversion.
+
+**Fix the design, not the limit**:
+
+1. Index the types and instances on the components they use, so that the conversion does not change them.
+2. Where the components are only propositionally equal, state the transport over variables, prove it with `subst`, and supply the equation between the components.
+
+Both patterns, with code, are in `lean4-mathlib-use` → `typeclasses_and_structures.md` §8. In the formalization measured there, one such comparison failed with `maxHeartbeats 4000000`, and neither `with_unfolding_all` nor `set_option smartUnfolding false` rescued it at `1000000`. (A conversion function in the same project did need `smartUnfolding false` for one field, so the option can fix an individual type mismatch.)
+
+**Do not add a tactic that skips the elaborator's check** (`MVarId.assign` without `isDefEq`, or a recursive structure copy built on it). If the code base already has one:
+
+- The kernel still checks the declaration. A wrong term is rejected there with `(kernel) declaration type mismatch`, after the elaborator has accepted the proof script.
+- Treat each use as design debt. List the uses (`lean4-cli` → `soundness_and_axiom_audit.md` §4 and §5) and remove them as the indices are fixed.
+
+---
+
 ## 3. Loop Debugging Checklist
 
 If heartbeats are exceeded immediately:
