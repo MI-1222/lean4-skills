@@ -656,9 +656,7 @@ def _direct_sources(text: str) -> set[str]:
     return sources
 
 
-def collect_syntax_units(
-    file_path: str, source: str, masked: str
-) -> list[SyntaxUnit]:
+def collect_syntax_units(file_path: str, source: str, masked: str) -> list[SyntaxUnit]:
     """
     Find the custom syntax definitions of one file and what traced constructs they contain.
 
@@ -686,7 +684,11 @@ def collect_syntax_units(
         changed = False
         for index, (_, body, sources) in enumerate(helpers):
             for other, (pattern, _, other_sources) in enumerate(helpers):
-                if other != index and not other_sources <= sources and pattern.search(body):
+                if (
+                    other != index
+                    and not other_sources <= sources
+                    and pattern.search(body)
+                ):
                     sources |= other_sources
                     changed = True
 
@@ -859,7 +861,11 @@ def _find_atom_uses(
     for atom in present:
         for match in _reference_pattern(atom).finditer(masked):
             line_index = bisect.bisect_right(line_starts, match.start()) - 1
-            text = original_lines[line_index].strip() if line_index < len(original_lines) else ""
+            text = (
+                original_lines[line_index].strip()
+                if line_index < len(original_lines)
+                else ""
+            )
             column = match.start() - line_starts[line_index] + 1
             uses.append((atom, match.start(), line_index, column, text[:200]))
     return file_path, uses
@@ -879,7 +885,9 @@ def _map_tasks(
     if jobs <= 1 or len(tasks) <= 1:
         return map(function, tasks)
     with ProcessPoolExecutor(max_workers=jobs) as executor:
-        return list(executor.map(function, tasks, chunksize=max(1, len(tasks) // (jobs * 16))))
+        return list(
+            executor.map(function, tasks, chunksize=max(1, len(tasks) // (jobs * 16)))
+        )
 
 
 def build_report(
@@ -940,10 +948,14 @@ def build_report(
         defining_spans: dict[tuple[str, str], list[tuple[int, int]]] = {}
         for atom, entry in tainted.items():
             for unit in entry["definitions"]:
-                defining_spans.setdefault((unit.file, atom), []).append((unit.start, unit.end))
+                defining_spans.setdefault((unit.file, atom), []).append(
+                    (unit.start, unit.end)
+                )
         use_counts = {atom: 0 for atom in atoms}
         seen: set[tuple[str, str, int]] = set()
-        for file_path, uses in _map_tasks(_find_atom_uses, [(f, atoms) for f in files], jobs):
+        for file_path, uses in _map_tasks(
+            _find_atom_uses, [(f, atoms) for f in files], jobs
+        ):
             for atom, offset, line_index, column, text in uses:
                 spans = defining_spans.get((file_path, atom), [])
                 if any(start <= offset < end for start, end in spans):
@@ -973,7 +985,9 @@ def build_report(
                 {
                     "atom": atom,
                     "sources": sorted(tainted[atom]["sources"]),
-                    "defined_at": [f"{u.file}:{u.line}" for u in tainted[atom]["definitions"]],
+                    "defined_at": [
+                        f"{u.file}:{u.line}" for u in tainted[atom]["definitions"]
+                    ],
                     "use_count": use_counts[atom],
                 }
             )
@@ -1040,7 +1054,9 @@ def format_text_report(report: dict[str, Any], max_findings: int) -> str:
     option_census = report["option_census"]
     if option_census:
         lines.append("")
-        lines.append("Local option settings (option value: occurrences / with `in` / files):")
+        lines.append(
+            "Local option settings (option value: occurrences / with `in` / files):"
+        )
         for entry in option_census[:TEXT_OPTION_ROWS]:
             setting = f"{entry['option']} {entry['value']}"
             lines.append(
@@ -1053,7 +1069,9 @@ def format_text_report(report: dict[str, Any], max_findings: int) -> str:
 
     if report["traced_syntax"]:
         lines.append("")
-        lines.append("Custom syntax hiding traced constructs (atom: constructs; definitions; uses):")
+        lines.append(
+            "Custom syntax hiding traced constructs (atom: constructs; definitions; uses):"
+        )
         for entry in report["traced_syntax"]:
             lines.append(
                 f"  `{entry['atom']}`: {', '.join(entry['sources'])}; "
@@ -1069,7 +1087,11 @@ def format_text_report(report: dict[str, Any], max_findings: int) -> str:
         lines.append("Findings:")
         shown = findings if max_findings == 0 else findings[:max_findings]
         for f in shown:
-            via = f"  (via `{f['via']}`, defined at {f['defined_at']})" if "via" in f else ""
+            via = (
+                f"  (via `{f['via']}`, defined at {f['defined_at']})"
+                if "via" in f
+                else ""
+            )
             lines.append(
                 f"  {f['file']}:{f['line']}:{f['column']}: {f['severity']}: [{f['rule']}] {f['text']}{via}"
             )

@@ -118,7 +118,11 @@ def join_components(components: list[str]) -> str:
     """
     escaped = []
     for component in components:
-        plain = component and is_ident_start(component[0]) and all(map(is_ident_rest, component))
+        plain = (
+            component
+            and is_ident_start(component[0])
+            and all(map(is_ident_rest, component))
+        )
         escaped.append(component if plain else f"«{component}»")
     return ".".join(escaped)
 
@@ -424,7 +428,10 @@ def build_report(
     """
     edges = sum(1 for name in names for i in modules[name].imports if i in names)
     external = Counter(
-        i.split(".")[0] for name in names for i in modules[name].imports if i not in modules
+        i.split(".")[0]
+        for name in names
+        for i in modules[name].imports
+        if i not in modules
     )
     if not result.depth:
         return {"module_count": len(names), "max_depth": 0, "chain": []}
@@ -457,7 +464,9 @@ def print_text(report: dict, max_depth: int | None) -> None:
     print(f"Modules: {report['module_count']}, imports between them: {edges}")
     external = report.get("external_import_roots", {})
     if external:
-        roots = ", ".join(f"{root} ({count})" for root, count in list(external.items())[:8])
+        roots = ", ".join(
+            f"{root} ({count})" for root, count in list(external.items())[:8]
+        )
         print(f"Imports outside the scanned directories (not counted): {roots}")
     depth = report["max_depth"]
     print(f"Longest import chain: {depth} module(s)")
@@ -468,7 +477,9 @@ def print_text(report: dict, max_depth: int | None) -> None:
         for index, entry in enumerate(chain, start=1):
             if len(chain) > TEXT_CHAIN_ROWS and half < index <= len(chain) - half:
                 if index == half + 1:
-                    print(f"  ... {len(chain) - TEXT_CHAIN_ROWS} modules omitted (use --json)")
+                    print(
+                        f"  ... {len(chain) - TEXT_CHAIN_ROWS} modules omitted (use --json)"
+                    )
                 continue
             print(f"  {index:>4}. {entry['module']}")
     if max_depth is not None:
@@ -485,7 +496,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Measure the longest import chain (critical path) of a Lean 4 project."
     )
-    parser.add_argument("roots", nargs="*", default=["."], help="source directories (default: .)")
+    parser.add_argument(
+        "roots", nargs="*", default=["."], help="source directories (default: .)"
+    )
     parser.add_argument(
         "--to",
         action="append",

@@ -104,7 +104,8 @@ class Library:
         :return: True if the library can build the module.
         """
         return self.matches_glob(module) or any(
-            (module == root or module.startswith(root + ".")) and self.matches_glob(root)
+            (module == root or module.startswith(root + "."))
+            and self.matches_glob(root)
             for root in self.roots
         )
 
@@ -187,12 +188,19 @@ def read_libraries(package_dir: str, lakefile: str) -> list[Library]:
         name = table.get("name")
         if not isinstance(name, str):
             raise ConfigError(f"{lakefile}: a [[lean_lib]] block has no name")
-        roots = [lean_name(r) for r in string_list(table.get("roots", [name]), f"{name}.roots")]
+        roots = [
+            lean_name(r)
+            for r in string_list(table.get("roots", [name]), f"{name}.roots")
+        ]
         if "globs" in table:
-            globs = [parse_glob(g) for g in string_list(table["globs"], f"{name}.globs")]
+            globs = [
+                parse_glob(g) for g in string_list(table["globs"], f"{name}.globs")
+            ]
         else:
             globs = [(root, "") for root in roots]
-        source_dir = os.path.normpath(os.path.join(package_source, table.get("srcDir", ".")))
+        source_dir = os.path.normpath(
+            os.path.join(package_source, table.get("srcDir", "."))
+        )
         libraries.append(Library(name, source_dir, roots, globs))
     if not libraries:
         raise ConfigError(f"{lakefile}: no [[lean_lib]] blocks")
@@ -287,7 +295,11 @@ def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
     for name in graph:
         if name in assigned:
             continue
-        group = [o for o in graph if o == name or (o in reachable[name] and name in reachable[o])]
+        group = [
+            o
+            for o in graph
+            if o == name or (o in reachable[name] and name in reachable[o])
+        ]
         assigned.update(group)
         if len(group) > 1:
             cycles.append(group)
@@ -342,7 +354,9 @@ def read_allowed(path: str, libraries: list[Library]) -> dict[str, set[str]]:
             entries[library] = targets
     if unknown:
         listed_unknown = ", ".join(sorted(unknown))
-        raise ConfigError(f"{path} names libraries not in the lakefile: {listed_unknown}")
+        raise ConfigError(
+            f"{path} names libraries not in the lakefile: {listed_unknown}"
+        )
     missing = [name for name in names if name not in entries]
     if missing:
         raise ConfigError(f"{path} has no entry for: {', '.join(missing)}")
@@ -375,7 +389,9 @@ def build_report(
     cycles = find_cycles(graph)
     group_of = {name: index for index, group in enumerate(cycles) for name in group}
     edges = []
-    for source, target in sorted(found, key=lambda e: (names.index(e[0]), names.index(e[1]))):
+    for source, target in sorted(
+        found, key=lambda e: (names.index(e[0]), names.index(e[1]))
+    ):
         imports = found[(source, target)]
         if allowed is None:
             failed = source in group_of and group_of.get(source) == group_of.get(target)
@@ -436,7 +452,8 @@ def warnings_of(report: dict) -> list[str]:
     overlapping = report["overlapping_modules"]
     if overlapping:
         shown = ", ".join(
-            f"{e['module']} ({', '.join(e['libraries'])})" for e in overlapping[:WARNING_EXAMPLES]
+            f"{e['module']} ({', '.join(e['libraries'])})"
+            for e in overlapping[:WARNING_EXAMPLES]
         )
         warnings.append(
             f"{len(overlapping)} module(s) match several libraries, counted for the last "
@@ -476,7 +493,11 @@ def print_text(report: dict) -> None:
     for group in report["cycles"]:
         print(f"Cycle among {len(group)} libraries: {', '.join(group)}")
     if report["ok"]:
-        passed = "no cycle between libraries" if report["check"] == "cycles" else "all allowed"
+        passed = (
+            "no cycle between libraries"
+            if report["check"] == "cycles"
+            else "all allowed"
+        )
         print(f"Result: passed, {passed}")
     else:
         failed = sum(1 for edge in report["edges"] if edge["failed"])
@@ -496,7 +517,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Check the direction of imports between the libraries of a Lake package."
     )
-    parser.add_argument("package", nargs="?", default=".", help="package directory (default: .)")
+    parser.add_argument(
+        "package", nargs="?", default=".", help="package directory (default: .)"
+    )
     parser.add_argument(
         "--lakefile",
         metavar="FILE",
@@ -518,7 +541,9 @@ def main() -> int:
     args = parser.parse_args()
 
     lakefile = args.lakefile or os.path.join(args.package, "lakefile.toml")
-    if not os.path.exists(lakefile) and os.path.exists(os.path.join(args.package, "lakefile.lean")):
+    if not os.path.exists(lakefile) and os.path.exists(
+        os.path.join(args.package, "lakefile.lean")
+    ):
         print(
             "error: no lakefile.toml; run `lake translate-config toml <file>` and pass "
             "--lakefile <file>",
@@ -530,7 +555,9 @@ def main() -> int:
         allowed = None if args.allow is None else read_allowed(args.allow, libraries)
         workspace = collect_workspace(libraries)
         if not workspace.modules:
-            raise ConfigError(f"no source file of any library found under {args.package}")
+            raise ConfigError(
+                f"no source file of any library found under {args.package}"
+            )
     except ConfigError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
