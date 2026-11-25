@@ -147,6 +147,17 @@ graph TD
 - **Speed**: Seconds (vs. minutes for `lake build`).
 - **Use case**: Run immediately after editing a local theorem or proof step when upstream imported files have not changed.
 
+### The Lakefile Options Trap (File Gate Scope)
+
+> [!WARNING]
+> `lake env lean <File.lean>` does **not** apply the lakefile's `leanOptions` or `moreLeanArgs` (verified on Lean `v4.33.1`). `lake build`, `lake lean <file>` and the language server do apply `leanOptions`.
+> In a project that sets options such as `maxSynthPendingDepth`, `maxHeartbeats`, `autoImplicit` or `--tstack` in its lakefile, the file gate can report **false failures** (a raised limit is missing) or **false passes** (a stricter setting or linter is missing).
+>
+> - Check the lakefile for `leanOptions` / `moreLeanArgs` before trusting a `lake env lean` result.
+> - Prefer `lake lean <path/to/File.lean>` (Tier 1b) in such projects, or pass the options explicitly: `lake env lean -DmaxSynthPendingDepth=3 <file>`.
+>
+> See `lean4-best-practice` → `performance_and_heartbeats.md` (§4) for the full entry-point table.
+
 ### The Stale `.olean` Cache Trap (File Gate Scope)
 
 > [!WARNING]

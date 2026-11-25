@@ -20,7 +20,7 @@ Raising a limit hides the cause, slows every build, and breaks again when nearby
 
 ### The Rules
 
-1. **Fix the cause first.** Work through §5 (open `simp`, defeq unfolding, instance search, heavy automation) before touching any limit.
+1. **Fix the cause first.** Work through §6 (open `simp`, defeq unfolding, instance search, heavy automation) before touching any limit.
 2. **If a raise is genuinely needed, scope it to one declaration** with `set_option ... in`, and **explain why in a comment** right after `in`:
 
    ```lean
@@ -44,12 +44,12 @@ Raising a limit hides the cause, slows every build, and breaks again when nearby
 
 ### Scope Ladder
 
-| Scope                | How                                                     | When it is acceptable                                                       |
-| :------------------- | :------------------------------------------------------ | :-------------------------------------------------------------------------- |
-| **One declaration**  | `set_option maxHeartbeats N in` + comment               | Default choice for a justified raise                                        |
-| **Rest of the file** | `set_option maxHeartbeats N` (no `in`)                  | Avoid; Mathlib lints against it                                             |
-| **One library**      | `leanOptions` in a `[[lean_lib]]` block of the lakefile | Project-wide settings that differ from Lean's defaults, chosen deliberately |
-| **Whole package**    | `[leanOptions]` / `leanOptions :=` on the package       | Same as above, e.g. Mathlib's `maxSynthPendingDepth := 3`                   |
+| Scope                | How                                                     | When it is acceptable                                                            |
+| :------------------- | :------------------------------------------------------ | :------------------------------------------------------------------------------- |
+| **One declaration**  | `set_option maxHeartbeats N in` + comment               | Default choice for a justified raise                                             |
+| **Rest of the file** | `set_option maxHeartbeats N` (no `in`)                  | Avoid; Mathlib lints against it                                                  |
+| **One library**      | `leanOptions` in a `[[lean_lib]]` block of the lakefile | Project-wide settings that differ from Lean's defaults, chosen deliberately (§4) |
+| **Whole package**    | `[leanOptions]` / `leanOptions :=` on the package       | Same as above, e.g. Mathlib's `maxSynthPendingDepth := 3`                        |
 
 ---
 
@@ -75,7 +75,43 @@ Notes:
 
 ---
 
-## 4. Profiling Slow Proofs
+## 4. Setting Options in the Lakefile
+
+Options can be set for a whole library or package:
+
+```toml
+# lakefile.toml
+[leanOptions]               # applies to the whole package
+autoImplicit = false
+maxSynthPendingDepth = 3
+
+[[lean_lib]]
+name = "HeavyFields"
+leanOptions = {synthInstance.maxHeartbeats = 400000}   # this library only
+moreLeanArgs = ["--tstack=400000"]                       # command-line flags only
+```
+
+```lean
+-- lakefile.lean
+package myproject where
+  leanOptions := #[⟨`autoImplicit, false⟩, ⟨`maxSynthPendingDepth, .ofNat 3⟩]
+```
+
+> [!WARNING]
+> **Lakefile options do not reach every entry point.** Measured with Lean `v4.33.1`:
+>
+> | Entry point                         | `leanOptions` applied? | `moreLeanArgs` applied? |
+> | :---------------------------------- | :--------------------- | :---------------------- |
+> | `lake build`                        | Yes                    | Yes                     |
+> | `lake lean <file>`                  | Yes                    | Yes                     |
+> | Language server (`lake setup-file`) | Yes                    | Not reported            |
+> | `lake env lean <file>`              | **No**                 | **No**                  |
+>
+> A file that builds with `lake build` can therefore fail under `lake env lean` (and the reverse if the lakefile _lowers_ a limit). In projects with lakefile options, use `lake lean <file>` for the fast file check, or pass the options explicitly: `lake env lean -DmaxSynthPendingDepth=3 <file>`. Set **options** through `leanOptions`, not as `-D` flags in `moreLeanArgs`, so that the language server sees them too.
+
+---
+
+## 5. Profiling Slow Proofs
 
 To find the exact line causing the slowdown, enable Lean's built-in profiler:
 
@@ -104,7 +140,7 @@ Remove `trace.*`, `profiler`, and `diagnostics` options after profiling; Mathlib
 
 ---
 
-## 5. The 4 Main Causes of Performance Explosions & Their Remedies
+## 6. The 4 Main Causes of Performance Explosions & Their Remedies
 
 ### Cause 1: Open `simp` Scanning Too Many Lemmas
 
@@ -147,7 +183,7 @@ Using the frozen definition prevents the elaborator from expanding the internals
 
 ---
 
-## 6. Decomposing Monolithic Theorems
+## 7. Decomposing Monolithic Theorems
 
 If a theorem remains slow after tactic tuning:
 
