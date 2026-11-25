@@ -88,6 +88,7 @@ Before running verification or committing code that uses Mathlib, check against 
 
 - [ ] **Right Tactic Selected**: Is `omega` (Lean 4.7+ Core) used for $\mathbb{N}/\mathbb{Z}$, `linarith` for $\mathbb{R}/\mathbb{Q}$, `ring` for polynomials, `positivity` for $>0/\ge 0$, and `gcongr` for sum/integral inequalities?
 - [ ] **Measure Theory Conventions**: Is integrability proven via bounded+measurable (`Integrable.of_bound`), `ae` properties combined via `filter_upwards`, and measurability discharged via `measurability` / `fun_prop`?
+- [ ] **Project Facts Registered**: Are side goals about project definitions that recur across proofs registered once (`@[fun_prop]` for function properties, `@[measurability]` for sets, a `@[positivity]` extension for invariants)? Does every custom tactic compare types before it assigns a goal, and have a `fail_if_success` test with a wrong term or goal?
 
 ---
 
@@ -101,7 +102,7 @@ For comprehensive technical explanations, domain-by-domain modules, and code pat
 | **Typeclasses & Structures**        | Multiple inheritance, invisible dependencies, `autoImplicit false`, plain `have` (Lean 4.14+), avoiding instance pollution, `omit [...] in` (Lean 4.11+), scoped instances instead of copied `attribute [local instance]`, type indices and conversions of large context structures | [typeclasses_and_structures.md](references/typeclasses_and_structures.md)               |
 | **Junk Values & Partial Functions** | Total functions in type theory, junk values table ($x/0$, `deriv`, `tsum`, `sSup`), subscript-`₀` convention, domain preconditions                                                                                                                                                  | [junk_values_and_partial_functions.md](references/junk_values_and_partial_functions.md) |
 | **Classical Logic & Scoping**       | `openClassical` style linter, single-declaration scoping, `classical` tactic, `noncomputable section`, `open scoped` notations                                                                                                                                                      | [classical_logic_and_scoping.md](references/classical_logic_and_scoping.md)             |
-| **Domain-Specific Patterns**        | Analysis, measure theory (`Integrable.of_bound`, `ae_of_all`), geometry betweenness (`Sbtw`), algebra automation (`gcongr`, `ring`)                                                                                                                                                 | [domain_specific_patterns.md](references/domain_specific_patterns.md)                   |
+| **Domain-Specific Patterns**        | Analysis, measure theory (`Integrable.of_bound`, `ae_of_all`), geometry betweenness (`Sbtw`), algebra automation (`gcongr`, `ring`), automating project facts (`@[fun_prop]`, `@[positivity]` extensions, macros, custom tactics)                                                   | [domain_specific_patterns.md](references/domain_specific_patterns.md)                   |
 
 ---
 
