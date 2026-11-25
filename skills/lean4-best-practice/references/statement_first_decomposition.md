@@ -476,11 +476,72 @@ Statements written as one long `∀` over dozens of binders are hard to review, 
 
 ### 3.6. Choose the Granularity Deliberately
 
-One file per milestone maximizes parallelism, but every module has a fixed cost: Lean loads its imports, and Lake writes per-module build metadata. In a formalization with about 175,000 single-milestone modules, the per-module setup files Lake writes averaged about 6 MB each (around a terabyte in total) and had to be deleted during the build.
+Every module has a fixed cost, however short its file is. A separate `lean` process builds it and first loads its whole import closure, and Lake writes a `.setup.json` file that lists that closure. In a formalization with about 175,000 modules, these files averaged about 6 MB each (around a terabyte in total) and had to be deleted during the build.
 
-- Group closely related milestones into one statements file and, where they are proved together, one proof file.
-- Split a proof into its own file when it is slow to elaborate, worked on independently, or frequently edited.
-- Statements files should import only what the definitions need. Importing proof files from a statements file brings back the long build chain.
+Short theorems do not need separate modules to be checked in parallel. Since `v4.19.0` ([#7084](https://github.com/leanprover/lean4/pull/7084)), Lean elaborates the proofs of different theorems in one file in parallel. Two kinds of work still run one after another within a module (measured on Lean `v4.33.1`, `v4.35.0` and `v4.36.0`, eight declarations per file, 12 cores):
+
+- **Elaboration of anything but a standalone theorem.** Tactic proofs of the same cost took 3–7 s of wall time as eight `theorem`s (`private` or not), and 19–27 s as eight `def`s, eight `Prop`-valued `instance`s, eight `example`s or one `mutual` block of theorems. `set_option Elab.async false` makes theorems sequential too. `lemma` behaved like `theorem` (checked on `v4.35.0` with Mathlib).
+- **Kernel type checking.** The kernel checks the declarations of a module one at a time, theorems included. Eight theorems whose cost is almost all in the kernel (`by decide +kernel`) took 19–21 s, about eight times as long as one of them.
+
+The following builds were measured with `lake build` (Lean `v4.35.0`, 12 cores that other processes were also using). The first four rows import `Mathlib.Tactic.Ring`, `Mathlib.Tactic.Positivity` and `Mathlib.Basic.Real.Basic` (964 modules in the closure); the last four use Lean core only. A `.setup.json` file lists absolute paths, so its size also depends on the length of the project path.
+
+| Theorems and layout                       | Cold build, wall | Cold build, CPU | Rebuild after editing one theorem | `.setup.json` in total |
+| :---------------------------------------- | :--------------- | :-------------- | :-------------------------------- | :--------------------- |
+| 96 short, one module                      | 2.0–2.8 s        | 3.0–3.7 s       | 2.0–2.1 s                         | 1 MB                   |
+| 96 short, 96 modules                      | 24–25 s          | 249–264 s       | 1.9 s                             | 97 MB                  |
+| 24 slow (`ring`), one module              | 56–58 s          | 160–176 s       | 53–56 s                           | 1 MB                   |
+| 24 slow (`ring`), 24 modules              | 24–28 s          | 234–238 s       | 6.3–6.7 s                         | 24 MB                  |
+| 8 slow in the kernel only, one module     | 19.9–20.6 s      | 20–21 s         | Not measured                      | Not measured           |
+| 8 slow in the kernel only, 8 modules      | 4.4–4.5 s        | 28–29 s         | Not measured                      | Not measured           |
+| 8 slow in the elaborator only, one module | 4.4–7.1 s        | 22–24 s         | Not measured                      | Not measured           |
+| 8 slow in the elaborator only, 8 modules  | 5.0–5.2 s        | 34–35 s         | Not measured                      | Not measured           |
+
+One module per short theorem made the cold build about ten times slower. Splitting the slow `ring` theorems paid off mainly because of the kernel: checking the one-module file with `-Dprofiler=true` reported 22 s of `type checking` in a run of 41 s. To see where the time of a module goes, run:
+
+```bash
+lake lean MyProject/Foo.lean -- -Dprofiler=true -Dprofiler.threshold=100000
+```
+
+The `cumulative profiling times` at the end list `import`, `elaboration` and `type checking`. `elaboration` adds up the time of all threads, so it can exceed the wall time.
+
+**Rules**: give a proof its own module for one of these reasons.
+
+- **Kernel time.** `type checking` is large compared with `import` and comes from several declarations. Separate modules let the kernel check them at the same time.
+- **Independent or frequent work.** A different person or agent owns the proof, or it is edited often. An edit rebuilds the whole module, including every slow proof that shares it. Without the `module` header, a change to a proof also rebuilds the modules that import it (Lake `v4.35.0`).
+- **An interface boundary.** Definitions and statements that other modules import stay in files without proofs (§1), so that editing a proof does not rebuild their importers. Statements files import only what the definitions need; importing proof files from them brings back the long build chain.
+
+Otherwise, keep it together:
+
+- **Do not create a module only to check a short theorem in parallel.** Group closely related milestones into one statements file and, where they are proved together, one proof file.
+- **State a slow proof as a theorem.** `theorem aux : C := by ...` followed by `instance : C := aux` runs the proof in its own task. Eight such pairs took under 4 s, against 22–27 s for the proofs written directly in eight `instance`s.
+- **Before `v4.19.0`** the proofs of one file were not elaborated in parallel, so this advice about parallelism does not apply there.
+
+#### Check for Small Modules
+
+Count the modules under 25 lines, then look at what they are. The threshold only selects files to review; it is not a minimum length. For comparison, 223 of the 8,624 files of Mathlib (`v4.35.0`) were under 25 lines (2.6%), and 161 of those were `deprecated_module` files.
+
+```bash
+cd src   # the source directory of the project
+# 1. Modules under 25 lines per top-level entry; their paths go to /tmp/small.txt
+find . -name '*.lean' -not -path '*/.lake/*' -exec wc -l {} + |
+  awk '$2 != "total" { split($2, p, "/"); n[p[2]]++
+         if ($1 < 25) { s[p[2]]++; sub(/^\.\//, "", $2); print $2 > "/tmp/small.txt" } }
+       END { for (d in n) printf "%s: %d of %d (%.1f%%)\n", d, s[d], n[d], 100 * s[d] / n[d] }'
+# 2. How many of them are catch-all glue (§3.9)
+tr '\n' '\0' < /tmp/small.txt | xargs -0 grep -lE 'first +\| +\(?exact @' | wc -l
+# 3. Small modules with exactly one importer
+grep -rE --include='*.lean' --exclude-dir=.lake '^(public +)?(meta +)?import +' . |
+  LC_ALL=C sort -u | awk '{ print $NF }' | LC_ALL=C sort | uniq -c |
+  awk '$1 == 1 { print $2 }' > /tmp/one-importer.txt
+sed 's/\.lean$//; s|/|.|g' /tmp/small.txt | LC_ALL=C sort |
+  LC_ALL=C comm -12 - /tmp/one-importer.txt
+```
+
+In the formalization of about 175,000 modules, 55,396 of 175,188 modules (31.6%) were under 25 lines, and 35.8% of the modules in its largest library. Step 2 found the catch-all `first` of §3.9 in 44,280 of them (80%), so most small files there called for removing glue rather than for merging theorems.
+
+- **Remove glue first** (§3.9).
+- **Review the single-importer modules** that step 3 prints. Move each into its importer or into a neighboring proof file unless one of the three reasons above applies.
+- **Leave small interface files** (definitions and statements that several modules share) as they are.
 
 ### 3.7. Write Universe Arguments Explicitly (Universe-Polymorphic Statements)
 
@@ -742,6 +803,7 @@ In the formalization of about 175,000 modules mentioned above, the longest chain
 - [ ] Do proof files import statements files only, never other proof files?
 - [ ] In a layered layout, does CI check that `Definitions`, `Statements` and `Published` never import `Proofs`, and that nothing imports `Witnesses`?
 - [ ] Does CI measure the longest import chain with `import_depth.py` and fail when it exceeds the set `--max-depth`?
+- [ ] Does each separate proof module have a reason (kernel time, independent or frequent work, an interface boundary), with no module added only to check a short theorem in parallel, and have the modules under 25 lines been reviewed (§3.6)?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Does every premise bundle that statements quantify over have a non-degenerate `X.witness : ∃ x, Premises x` that a default build target compiles?
 - [ ] Is every proof connected to its contract by its own header, a plain term, or an explicit adaptation, with no catch-all `first | exact ... | apply ...` glue left?

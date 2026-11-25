@@ -145,6 +145,19 @@
         "Mentions comparing the parallelism (modules / chain length) with the core count",
         "Recommends capping the chain in CI with --max-depth and cutting proof-to-proof imports on the chain"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "To make our Lean 4 build faster, an agent proposes moving every theorem into its own file so that Lake can check them in parallel. About a third of our modules are already under 25 lines. Is this a good idea, and when should a proof get its own file?",
+      "expected_output": "Explains that since Lean v4.19.0 (#7084) the proofs of different theorems in one file already elaborate in parallel, while every module has a fixed cost (a separate lean process that loads the import closure, and a `.setup.json` listing it), so one module per short theorem makes the build slower. States the limits of in-file parallelism: `def`s, `instance`s, `example`s and `mutual` blocks elaborate one after another, and the kernel checks the declarations of a module one at a time. Gives the reasons for a separate module: kernel (`type checking`) time that is large compared with import time and spread over several declarations, measured with `-Dprofiler=true`; independent or frequent edits, since an edit rebuilds the whole module; and an interface boundary that keeps definitions and statements apart from proofs. Suggests stating a slow proof as a `theorem` when it sits in an `instance`, and reviewing the small modules before merging: remove catch-all glue first, then merge modules with a single importer, and keep shared interface files.",
+      "files": [],
+      "expectations": [
+        "States that proofs of different theorems in one file elaborate in parallel since Lean v4.19.0, so a module per short theorem is not needed for parallelism and adds per-module cost",
+        "States that kernel type checking is sequential within a module, so splitting helps when kernel time is large",
+        "Mentions that defs, instances, examples or mutual blocks do not get in-file parallel elaboration",
+        "Lists independent or frequent edits and interface boundaries as reasons to split",
+        "Recommends reviewing the existing small modules (glue, single importer, interface files) rather than applying a line-count minimum"
+      ]
     }
   ]
 }
