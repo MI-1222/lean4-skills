@@ -184,15 +184,18 @@ python3 <skill-path>/scripts/scan_risky_constructs.py src/ --json
 python3 <skill-path>/scripts/scan_risky_constructs.py --list-rules
 ```
 
-| Option               | Meaning                                                                               |
-| :------------------- | :------------------------------------------------------------------------------------ |
-| `paths`              | Files or directories to scan (default: `.`). `.lake/` and `.git/` are always skipped. |
-| `--exclude GLOB`     | Skip matching paths (repeatable).                                                     |
-| `--ignore-rule RULE` | Disable a rule by ID (repeatable).                                                    |
-| `--fail-on LEVEL`    | `critical` (default), `warning`, `info`, or `never`.                                  |
-| `--max-findings N`   | Findings printed in text mode (default `200`, `0` = all). JSON always lists all.      |
-| `--json`             | Print the full report as JSON.                                                        |
-| `--list-rules`       | Print the rule catalog and exit.                                                      |
+| Option               | Meaning                                                                                  |
+| :------------------- | :--------------------------------------------------------------------------------------- |
+| `paths`              | Files or directories to scan (default: `.`). `.lake/` and `.git/` are always skipped.    |
+| `--exclude GLOB`     | Skip matching paths (repeatable).                                                        |
+| `--ignore-rule RULE` | Disable a rule by ID (repeatable).                                                       |
+| `--fail-on LEVEL`    | `critical` (default), `warning`, `info`, or `never`.                                     |
+| `--max-findings N`   | Findings printed in text mode (default `200`, `0` = all). JSON always lists all.         |
+| `--jobs N`           | Worker processes (default `0` = auto: one per CPU for 256 or more files, otherwise `1`). |
+| `--json`             | Print the full report as JSON.                                                           |
+| `--list-rules`       | Print the rule catalog and exit.                                                         |
+
+**Scale**: a project of 175,187 files (about 1 GB of source) is scanned in about 10 seconds with automatic parallelism on 12 cores, using about 120 MB of memory. The report does not depend on `--jobs`.
 
 **Exit codes**: `0` = no finding at or above `--fail-on`; `1` = at least one such finding; `2` = usage error (unknown rule, missing path, no `.lean` files).
 
