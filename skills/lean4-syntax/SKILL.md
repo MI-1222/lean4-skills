@@ -312,6 +312,12 @@ theorem nested_have_correct (p : Prop) (hp : p) : p := by
   exact h
 ```
 
+### 4.4. Section Variables
+
+- A `variable` enters a theorem only if the **statement** mentions it (instance variables about it come along). A hypothesis variable used only in the proof needs `include h in`; an unused instance that came along is removed with `omit [Inst x] in`. Fix the `linter.unusedSectionVars` warning this way instead of disabling the linter: the warning means the theorem's signature carries a hypothesis it does not need.
+
+See [Indentation and Scope Rules](./references/indentation_and_scopes.md) §5 for verified examples and pitfalls.
+
 ---
 
 ## 5. Reference Documentation
@@ -319,5 +325,5 @@ theorem nested_have_correct (p : Prop) (hp : p) : p := by
 For detailed specifications and troubleshooting guides, consult the reference files:
 
 - [Lean 3 to Lean 4 Migration Guide](./references/lean3_to_lean4.md): In-depth table of deprecated constructs and error fix patterns.
-- [Indentation and Scope Rules](./references/indentation_and_scopes.md): Precise rules of the offside parser, baseline column calculations, and nested macro scoping.
+- [Indentation and Scope Rules](./references/indentation_and_scopes.md): Precise rules of the offside parser, baseline column calculations, nested macro scoping, and section variables (`include` / `omit`).
 - [Proof Syntax Patterns](./references/proof_syntax_patterns.md): Complete patterns for Term mode, Tactic mode, calculation chains (`calc`), and structural destructuring.

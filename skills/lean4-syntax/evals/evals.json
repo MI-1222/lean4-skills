@@ -18,6 +18,18 @@
       "prompt": "Explain why this nested `have` tactic causes `unexpected token 'have'; expected command` in Lean 4, and provide the fixed code:\n```lean\ntheorem test (p : Prop) (hp : p) : p := by\n  have h : p := by\n  exact hp\n  exact h\n```",
       "expected_output": "Explain Lean 4's offside rule and that tactics inside `:= by` must be indented deeper than the `have` keyword; provide the fixed code with at least 2-space deeper indentation for `exact hp`.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "This file gives `Unknown identifier 'hn'` in `uses_hn` and the warning `automatically included section variable(s) unused in theorem `add_zero'`: [Tame n]`. A colleague suggests adding `set_option linter.unusedSectionVars false` at the top. Fix the file properly.\n\n```lean\nclass Tame (n : Nat) : Prop where\n  pos : 0 < n\n\nvariable (n : Nat) [Tame n] (hn : n ≠ 7)\n\ntheorem uses_hn : n ≠ 7 ∧ n + 0 = n := by\n  exact ⟨hn, by omega⟩\n\ntheorem add_zero' : n + 0 = n := by omega\n```",
+      "expected_output": "Explanation that section variables enter a theorem only when its statement mentions them (instance variables come along), so `hn` is unavailable in the proof and `[Tame n]` is included but unused. Fix with `include hn in` (and `omit [Tame n] in`) before `uses_hn` and `omit [Tame n] in` before `add_zero'`, and rejects disabling the linter because the unused instance would remain a hypothesis in the theorem's signature.",
+      "files": [],
+      "expectations": [
+        "Adds `include hn in` before `uses_hn`",
+        "Adds `omit [Tame n] in` before `add_zero'` (and before `uses_hn`, where the instance is also unused)",
+        "Explains that disabling `linter.unusedSectionVars` leaves an unnecessary hypothesis in the signature",
+        "Does not set `linter.unusedSectionVars false`"
+      ]
     }
   ]
 }

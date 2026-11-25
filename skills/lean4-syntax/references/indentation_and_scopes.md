@@ -110,3 +110,43 @@ theorem calc_indent_rule (a b c : Nat) (h1 : a = b) (h2 : b = c) : a = c := by
 ```
 
 All continuation lines start with underscore `_` matching the position of the initial left-hand side.
+
+---
+
+## 5. Section Variables (`variable`, `include`, `omit`)
+
+`variable` declarations are not copied into every declaration of the section. The rules (verified on Lean `v4.33.1`):
+
+1. A variable becomes an argument of a theorem only if the theorem's **statement** mentions it.
+2. Instance-implicit variables about included variables come along automatically: with `variable (n : Nat) [Tame n]`, every theorem that mentions `n` also takes `[Tame n]`.
+3. Variables mentioned only in the **proof** are not available there: using a hypothesis variable `hn` inside `by` fails with `Unknown identifier 'hn'`.
+
+```lean
+variable (n : Nat) [Tame n] (hn : n ≠ 7)
+
+-- ❌ `hn` is not in scope: the statement does not mention it
+theorem uses_hn : n + 0 = n := by
+  have := hn
+  omega
+
+-- ⚠️ Builds, but `[Tame n]` was included and is unused:
+-- "automatically included section variable(s) unused in theorem `add_zero'`: [Tame n]"
+theorem add_zero' : n + 0 = n := by omega
+-- #check @add_zero'  -- ∀ (n : Nat) [Tame n], n + 0 = n
+
+-- ✅ Drop the unused instance from the signature
+omit [Tame n] in
+theorem add_zero'' : n + 0 = n := by omega
+-- #check @add_zero''  -- ∀ (n : Nat), n + 0 = n
+
+-- ✅ Bring in a hypothesis the statement does not mention (and drop the unused instance)
+include hn in
+omit [Tame n] in
+theorem ne_seven : n ≠ 7 := hn
+```
+
+**Fix the `unusedSectionVars` warning; do not silence it.** The warning is about the theorem's **signature**, not about style: the unused instance stays a hypothesis that every caller must supply, and the theorem is weaker than it needs to be. `omit [...] in` gives the stronger, easier-to-use statement. One large formalization had `set_option linter.unusedSectionVars false` in 491 files, each hiding signatures of this kind.
+
+- `include` and `omit` can be combined in either order, each followed by `in`, before the declaration's docstring (see `lean4-best-practice` → `header_fence_and_docstrings.md` for the docstring order).
+- If many theorems need the same `omit`, restructure instead: move the instance into an inner `section` that contains only the theorems that use it.
+- Never use a bare `include h` without `in` to make a hypothesis available everywhere; it is added to **every** following declaration of the section, including those that do not need it.
