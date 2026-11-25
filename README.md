@@ -28,7 +28,7 @@ AIエージェントがLean 4を用いた数学の形式的証明(Mathlibの利�
 | [`lean4-cli`](skills/lean4-cli)                             | `lake` / `lean` の運用自動化、ビルドログの構造化JSONパース、証明の健全性監査                  | `scripts/parse_diagnostics.py`, `scan_risky_constructs.py`, `unused_hypotheses.lean`, `duplicate_fields.lean`, `duplicate_decls.lean`, `long_decls.lean`, `import_depth.py`, `library_dag.py` |
 | [`lean4-best-practice`](skills/lean4-best-practice)         | トップダウン証明法(Sorry先行、Statement分割)、`simp` 規律、命名規則の活用                     | `references/*.md` (8編の実践ガイド)                                                                                                                                                           |
 | [`lean4-mathlib-search`](skills/lean4-mathlib-search)       | Loogle(型シグネチャ検索)やLeanSearch(セマンティック検索)、探索タクティクによるMathlib定理検索 | `scripts/search_loogle.py`, `scripts/search_leansearch.py`                                                                                                                                    |
-| [`lean4-mathlib-use`](skills/lean4-mathlib-use)             | 最小限インポート指針、型クラス、junk value、古典論理の適切な扱い                              | `references/*.md` (4編の利用ガイド)                                                                                                                                                           |
+| [`lean4-mathlib-use`](skills/lean4-mathlib-use)             | 最小限インポート指針、型クラス、junk value、古典論理の適切な扱い                              | `references/*.md` (5編の利用ガイド)                                                                                                                                                           |
 
 ## 導入方法
 
