@@ -14,7 +14,7 @@ Before diagnosing decision procedure failures, verify whether the tactic is buil
 | :---------------------------- | :-------------- | :------------------------------------------------- | :--------------------------------------------- |
 | `omega` (Lean 4.7+ Core)      | **Lean 4 Core** | _None (built-in since Lean 4.7.0)_                 | Presburger arithmetic on `Nat` and `Int`       |
 | `linarith`                    | **Mathlib**     | `import Mathlib.Tactic.Linarith`                   | Linear arithmetic on ordered fields (`ℝ`, `ℚ`) |
-| `nlinarith`                   | **Mathlib**     | `import Mathlib.Tactic.Nlinarith`                  | Non-linear inequalities via cross products     |
+| `nlinarith`                   | **Mathlib**     | `import Mathlib.Tactic.Linarith`                   | Non-linear inequalities via cross products     |
 | `positivity`                  | **Mathlib**     | `import Mathlib.Tactic.Positivity`                 | Proving terms are non-negative or positive     |
 | `ring` / `ring1`              | **Mathlib**     | `import Mathlib.Tactic.Ring`                       | Equalities in commutative (semi)rings          |
 | `gcongr`                      | **Mathlib**     | `import Mathlib.Tactic.GCongr`                     | Monotonic function congruences                 |
