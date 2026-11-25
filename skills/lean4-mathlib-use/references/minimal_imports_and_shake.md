@@ -4,16 +4,37 @@ This guide explains how to optimize module dependencies, eliminate compile-time 
 
 ---
 
-## 1. The Cost of Monolithic `import Mathlib`
+## 1. The Trade-Off of `import Mathlib`
 
-Placing `import Mathlib` at the top of a Lean 4 file is the single most common cause of catastrophic elaboration and compile-time delays.
+`import Mathlib` loads all of Mathlib into every Lean process that elaborates the file. That has a real cost per process, but it does not make builds rebuild more, and it has benefits of its own. Decide per file, not by reflex.
 
-### Why `import Mathlib` Slows Down Proving Agents
+### Measured Cost per Process
 
-1. **Massive Environment Footprint**: Mathlib contains over two million lines of Lean 4 code. Loading the root module loads tens of thousands of theorems, notations, macros, syntax definitions, and typeclass instances into memory simultaneously.
-2. **Elaboration Latency & Cache Invalidation**: Lean 4 compiles and elaborates at file granularity. Whenever an agent creates a temporary file or restarts an LSP session, resolving the full Mathlib environment requires substantial memory and warmup time.
-3. **High Transitive Redundancy**: Empirical analysis of Mathlib dependency graphs demonstrates that the median utilization rate of declared imports is only ~1.6%, and approximately 17.5% of imports are transitively redundant.
-4. **Fragile Downstream Reusability**: Monolithic imports tightly couple your code to everything in Mathlib, making it difficult to extract helper modules or integrate proofs into lighter downstream libraries.
+One small file proving `0 < x ^ 2 + 1` over `ℝ` with `positivity`, checked with `lake env lean` (Lean `v4.33.1`, Mathlib `v4.33.1`):
+
+| Header                                                                 | Modules in the import closure | Imported constants | Peak memory (RSS) |
+| :--------------------------------------------------------------------- | ----------------------------: | -----------------: | :---------------- |
+| `import Mathlib`                                                       |                        10,498 |            771,129 | 4.0–5.7 GB        |
+| `import Mathlib.Data.Real.Basic`<br>`import Mathlib.Tactic.Positivity` |                         2,382 |            234,479 | 1.5 GB            |
+
+- **Every fresh process pays the load.** Lean maps the `.olean` files of the whole closure into memory when it starts: `lake env lean` on a scratch file, a language-server restart, and each module that a build compiles. Load time grows with the closure as well.
+- **RSS includes the mapped `.olean` files.** The OS can share those pages between processes, so parallel processes need less than a multiple of this figure. On a machine short of memory, the full import still pushes other data out of the cache first.
+- **Search tactics see everything.** `exact?`, `apply?`, `simp?` and instance search run over about three times as many constants. They find more, and they take longer.
+- **Lake's per-module bookkeeping grows with the closure.** Lake writes a `.setup.json` per module that lists its whole import closure. In one formalization of about 175,000 modules, where 136,004 files began with `import Mathlib`, those files averaged about 6 MB, around a terabyte in total, and had to be deleted during the build.
+
+### What `import Mathlib` Does Not Cost, and What It Gives
+
+- **No extra rebuilds.** Within one Mathlib pin, Mathlib does not change, so `import Mathlib` never causes a module to be recompiled. Rebuild cost depends on the project's own import graph, not on how Mathlib is imported.
+- **The same environment in every file.** Every file sees the same instances, `simp` lemmas, notation and tactics. A proof moved from one file to another behaves the same, and no time goes into finding the import that provides a missing instance or tactic.
+
+### Recommendation
+
+| Situation                                               | Recommendation                                                                                                                                                        |
+| :------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code meant for Mathlib, or a library others will import | Targeted imports, pruned with `lake shake` (§4)                                                                                                                       |
+| Scratch files and quick checks with `lake env lean`     | Targeted imports when the needed modules are known; otherwise `import Mathlib` and accept the load time                                                               |
+| Exploration in a warm language server                   | `import Mathlib` is fine; the load happens once per session                                                                                                           |
+| A large downstream project                              | Either is workable. With `import Mathlib`, plan for its memory per build process and for Lake's bookkeeping files; with targeted imports, plan for import maintenance |
 
 ---
 
@@ -94,20 +115,20 @@ Keep these constraints in mind when using `lake shake`:
 
 ## 5. Exemplary Import Pattern
 
-### Anti-Pattern: Monolithic Import
+### Monolithic Import
 
 ```lean
--- Bad: Loads the entirety of Mathlib into memory
+-- Loads all of Mathlib (10,498 modules) into every process that checks this file (§1)
 import Mathlib
 
 theorem square_nonneg_real (x : ℝ) : 0 ≤ x^2 := by
   exact sq_nonneg x
 ```
 
-### Best Practice: Targeted Imports
+### Targeted Imports
 
 ```lean
--- Good: Loads only the real numbers, basic ring order axioms, and necessary tactics
+-- Loads only the real numbers, basic ring order axioms, and necessary tactics
 import Mathlib.Basic.Real.Basic
 import Mathlib.Algebra.Order.Ring.Defs
 import Mathlib.Tactic.Linarith
