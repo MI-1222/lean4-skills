@@ -25,7 +25,7 @@ A suite of skills designed for AI coding agents to autonomously perform formal m
 | [`lean4-interactive-proof`](skills/lean4-interactive-proof) | Interacts with `lean --server` to fetch Tactic State (goals) at a target position                     | `scripts/lean_goal.py`                                     |
 | [`lean4-proof-repair`](skills/lean4-proof-repair)           | Diagnoses and repairs common compiler errors (type mismatch, timeouts, etc.)                          | `references/*.md` (7 diagnostic guides)                    |
 | [`lean4-syntax`](skills/lean4-syntax)                       | Fast syntax checking and proof syntax reference (prevents Lean 3 contamination)                       | `scripts/check_syntax.py`, `references/*.md`               |
-| [`lean4-cli`](skills/lean4-cli)                             | Automates `lake`/`lean` commands and parses build logs into structured JSON                           | `scripts/parse_diagnostics.py`                             |
+| [`lean4-cli`](skills/lean4-cli)                             | Automates `lake`/`lean` commands, parses build logs into JSON, and audits proof soundness             | `scripts/parse_diagnostics.py`, `scan_risky_constructs.py` |
 | [`lean4-best-practice`](skills/lean4-best-practice)         | Top-down proof workflow (sorry-driven), `simp` discipline, and naming rules                           | `references/*.md` (6 practice guides)                      |
 | [`lean4-mathlib-search`](skills/lean4-mathlib-search)       | Searches Mathlib lemmas via Loogle (type signature), LeanSearch (semantic search), and inline tactics | `scripts/search_loogle.py`, `scripts/search_leansearch.py` |
 | [`lean4-mathlib-use`](skills/lean4-mathlib-use)             | Minimal imports, typeclass hierarchy guidance, junk values, and classical logic                       | `references/*.md` (4 usage guides)                         |
@@ -43,7 +43,7 @@ skills/
 ├── lean4-interactive-proof/  # Interactive goal inspection via LSP
 ├── lean4-proof-repair/       # Error triage and fix prescriptions
 ├── lean4-syntax/             # Syntax checker and proof conventions
-├── lean4-cli/                # Build commands and diagnostic parser
+├── lean4-cli/                # Build commands, diagnostic parser, soundness audit
 ├── lean4-best-practice/      # Proving methodology and simp hygiene
 ├── lean4-mathlib-search/     # Loogle & LeanSearch theorem search
 └── lean4-mathlib-use/        # Mathlib usage and import guidelines
