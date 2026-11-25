@@ -4,6 +4,8 @@ Lean 4 and Lake build/typecheck output parser.
 
 Extracts diagnostic messages (errors, warnings, infos) from stdin,
 log files, or command execution results, and outputs structured JSON.
+Linter warnings are counted per linter option, and selected linters can be
+treated as failures (optionally only under given paths) with --fail-on-linter.
 """
 
 import argparse
@@ -74,6 +76,43 @@ LEAN_TOPLEVEL_PRINT_RE = re.compile(
     r"^\s*(?:'(?:[^'\n\r]+)'\s*:|(?:def|theorem|inductive|structure|class)\s+[a-zA-Z0-9_.]+\s*:)",
 )
 
+# Regex pattern matching the note that Lean appends to linter warnings, naming the linter option.
+# e.g.: Note: This linter can be disabled with `set_option linter.unusedVariables false`
+LINTER_NOTE_RE = re.compile(
+    r"can be disabled with `set_option\s+(?P<option>[\w.]+)\s+false`"
+)
+
+
+def linter_of(message: str) -> str | None:
+    """
+    Return the linter option named in a diagnostic message, if any.
+
+    :param message: Full diagnostic message, including continuation lines.
+    :return: Linter option name such as ``linter.unusedVariables``, or ``None``.
+    """
+    match = LINTER_NOTE_RE.search(message)
+    return match.group("option") if match else None
+
+
+def path_matches(file: str | None, prefixes: list[str]) -> bool:
+    """
+    Check whether a diagnostic's file lies under one of the given path prefixes.
+
+    A prefix matches at the start of the normalized path or after any ``/``, so
+    ``MyProject/Proofs`` matches both ``MyProject/Proofs/A.lean`` and
+    ``/abs/path/MyProject/Proofs/A.lean``. An empty prefix list matches every file.
+
+    :param file: File path reported in the diagnostic, or ``None``.
+    :param prefixes: Path prefixes; an empty list matches everything.
+    :return: ``True`` if the file matches.
+    """
+    if not prefixes:
+        return True
+    if file is None:
+        return False
+    path = "/" + os.path.normpath(file).replace(os.sep, "/").lstrip("/")
+    return any("/" + prefix.strip("/") + "/" in path + "/" for prefix in prefixes)
+
 
 def strip_ansi(text: str) -> str:
     """
@@ -108,6 +147,7 @@ def parse_build_output(raw_text: str) -> tuple[list[dict[str, Any]], list[str]]:
             current_diag["message"] = current_diag["message"].strip()
             # Diagnostics created outside a header line (e.g. panics) carry no name.
             current_diag.setdefault("error_name", None)
+            current_diag["linter"] = linter_of(current_diag["message"])
             diagnostics.append(current_diag)
             current_diag = None
 
@@ -259,6 +299,26 @@ def main():
         action="store_true",
         help="Output only the summary, omitting detailed diagnostic list.",
     )
+    parser.add_argument(
+        "--fail-on-linter",
+        action="append",
+        default=[],
+        metavar="OPTION",
+        help=(
+            "Treat diagnostics from this linter as failures (e.g. linter.unusedVariables). "
+            "May be given more than once."
+        ),
+    )
+    parser.add_argument(
+        "--fail-path-prefix",
+        action="append",
+        default=[],
+        metavar="PREFIX",
+        help=(
+            "Restrict --fail-on-linter to files under this path (e.g. MyProject/Proofs). "
+            "May be given more than once; without it, every file counts."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -309,7 +369,25 @@ def main():
     warning_count = sum(1 for d in diagnostics if d["severity"] == "warning")
     info_count = sum(1 for d in diagnostics if d["severity"] == "info")
 
-    success = (exit_code == 0) and (error_count == 0)
+    linter_counts: dict[str, int] = {}
+    for d in diagnostics:
+        if d["linter"] is not None:
+            linter_counts[d["linter"]] = linter_counts.get(d["linter"], 0) + 1
+
+    linter_failures = [
+        d
+        for d in diagnostics
+        if d["linter"] in args.fail_on_linter
+        and path_matches(d["file"], args.fail_path_prefix)
+    ]
+
+    success = (exit_code == 0) and (error_count == 0) and not linter_failures
+
+    summary = (
+        f"{error_count} error(s), {warning_count} warning(s), {info_count} info(s)"
+    )
+    if args.fail_on_linter:
+        summary += f", {len(linter_failures)} linter failure(s)"
 
     result: dict[str, Any] = {
         "success": success,
@@ -317,8 +395,13 @@ def main():
         "error_count": error_count,
         "warning_count": warning_count,
         "info_count": info_count,
-        "summary": f"{error_count} error(s), {warning_count} warning(s), {info_count} info(s)",
+        "linter_counts": dict(
+            sorted(linter_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        ),
+        "summary": summary,
     }
+    if args.fail_on_linter:
+        result["linter_failure_count"] = len(linter_failures)
 
     if not args.summary_only:
         result["diagnostics"] = diagnostics

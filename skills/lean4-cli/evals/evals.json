@@ -66,6 +66,18 @@
         "Recommends naming checkers explicitly in `external_kernels` and keeping at least one independent kernel such as nanoda",
         "Recommends documenting which checker was excluded and why"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "My `lake build` log for a large project has thousands of warnings. I want CI to fail only when `linter.unusedVariables` fires in files under `MyProject/Proofs`, and still see how many warnings each linter produces everywhere. How do I do that with the bundled scripts?",
+      "expected_output": "Shows piping `lake build 2>&1` into `parse_diagnostics.py` with `--fail-on-linter linter.unusedVariables --fail-path-prefix MyProject/Proofs` (optionally `--summary-only`), explains that `linter_counts` reports the number of diagnostics per linter for every file, that the `linter` field of each diagnostic is read from Lean's `set_option ... false` note, and that `success` becomes false with exit code 1 when `linter_failure_count` is non-zero. Mentions that Lake replays the warnings of up-to-date modules, so the check also works on incremental builds.",
+      "files": [],
+      "expectations": [
+        "Uses `--fail-on-linter linter.unusedVariables` together with `--fail-path-prefix MyProject/Proofs`",
+        "Explains `linter_counts` as the per-linter warning count",
+        "Explains that a match sets `success` to false and the exit code to 1",
+        "Notes that replayed warnings of up-to-date modules are also checked"
+      ]
     }
   ]
 }

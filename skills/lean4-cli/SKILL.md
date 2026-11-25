@@ -360,6 +360,18 @@ lake env lean MathProof/Basic.lean 2>&1 | python3 <skill-path>/scripts/parse_dia
 python3 <skill-path>/scripts/parse_diagnostics.py build.log
 ```
 
+#### Option D: Fail on Selected Linters
+
+`--fail-on-linter OPTION` turns every diagnostic of that linter into a failure (`success: false`, exit code `1`), even when the build itself succeeded. `--fail-path-prefix PREFIX` limits this to files under the given paths. Both options can be repeated.
+
+```bash
+# Fail when a proof file has an unused hypothesis; warnings elsewhere are only counted.
+lake build 2>&1 | python3 <skill-path>/scripts/parse_diagnostics.py --summary-only \
+  --fail-on-linter linter.unusedVariables --fail-path-prefix MyProject/Proofs
+```
+
+The linter of a warning is read from the note Lean appends to it (``Note: This linter can be disabled with `set_option linter.unusedVariables false` ``).
+
 ### JSON Output Schema
 
 ```json
@@ -369,6 +381,7 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
   "error_count": 1,
   "warning_count": 0,
   "info_count": 0,
+  "linter_counts": {},
   "summary": "1 error(s), 0 warning(s), 0 info(s)",
   "diagnostics": [
     {
@@ -377,7 +390,8 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
       "column": 4,
       "severity": "error",
       "error_name": null,
-      "message": "type mismatch\n  has type\n    Nat\n  but is expected to have type\n    String"
+      "message": "type mismatch\n  has type\n    Nat\n  but is expected to have type\n    String",
+      "linter": null
     }
   ]
 }
@@ -385,11 +399,13 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
 
 ### Fields
 
-- `success`: `true` if exit code is 0 and `error_count == 0`.
+- `success`: `true` if exit code is 0, `error_count == 0` and, with `--fail-on-linter`, `linter_failure_count == 0`.
 - `exit_code`: Process return code.
 - `error_count`: Number of errors detected.
 - `warning_count`: Number of warnings detected.
 - `info_count`: Number of informational diagnostics detected.
+- `linter_counts`: Number of diagnostics per linter option (e.g. `{"linter.unusedVariables": 152}`), most frequent first. Use it to see which linters a large build triggers before deciding which ones to enforce.
+- `linter_failure_count`: (Only with `--fail-on-linter`) Number of diagnostics that matched the selected linters and paths.
 - `summary`: Short human-readable summary string.
 - `diagnostics`: List of structured issues:
   - `file`: Path to the file where the diagnostic occurred (`null` for general lake build errors).
@@ -398,6 +414,7 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
   - `severity`: `"error"`, `"warning"`, or `"info"`.
   - `error_name`: Name of a named error (e.g. `"lean.unknownIdentifier"`), or `null`. Since Lean `v4.22.0`, `lean` and `lake env lean` print such errors as `File.lean:3:17: error(lean.unknownIdentifier): ...`; `lake build` prints the same error without the name, so this field is `null` for build logs.
   - `message`: Diagnostic message, including multi-line indentation details.
+  - `linter`: Option named in the note Lean appends to the diagnostic (``can be disabled with `set_option ... false` ``), or `null`. Usually a linter (`"linter.unusedVariables"`), sometimes a warning option (`"warn.classDefReducibility"`).
 - `prints`: (Optional) List of non-diagnostic top-level command output strings (such as `#print axioms` results, `#check` types, or `#eval` values), cleanly separated from compiler warnings and errors.
 
 ### Capturing "Try this:" Suggestions Headlessly
