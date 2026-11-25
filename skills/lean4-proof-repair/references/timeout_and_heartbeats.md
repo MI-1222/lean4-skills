@@ -72,6 +72,26 @@ If a proof is mathematically valid and near completion, but genuinely computatio
 
 ---
 
+### 2.5 Identify Which Limit Was Hit
+
+Not every "too much work" error is about `maxHeartbeats`. Read the message before changing an option:
+
+| Message                                                                             | Limit                            | Default  |
+| :---------------------------------------------------------------------------------- | :------------------------------- | :------- |
+| `(deterministic) timeout at 'isDefEq' / 'whnf' / ..., maximum number of heartbeats` | `maxHeartbeats`                  | `200000` |
+| `failed to synthesize ...` + `(deterministic) timeout at 'typeclass'`               | `synthInstance.maxHeartbeats`    | `20000`  |
+| Plain `failed to synthesize instance` for an instance that should exist             | possibly `synthInstance.maxSize` | `128`    |
+| `maximum recursion depth has been reached`                                          | `maxRecDepth`                    | `512`    |
+| Process aborts with a stack overflow                                                | thread stack (`--tstack`)        | —        |
+
+- Typeclass limits are covered in [instance_synthesis.md](instance_synthesis.md) (Scenario 5).
+- For deep recursion from large literal terms or long `decide` computations, a scoped `set_option maxRecDepth N in` is the usual fix; for native stack overflows, the build needs `moreLeanArgs = ["--tstack=<Kb>"]` in the lakefile.
+- If the error appears under `lake env lean <file>` but not under `lake build`, the project probably raises the limit in its lakefile `leanOptions`, which `lake env lean` ignores. Re-check with `lake lean <file>`.
+
+See `lean4-best-practice` → `performance_and_heartbeats.md` for the full limit catalog, the scoping policy, and where lakefile options apply.
+
+---
+
 ## 3. Loop Debugging Checklist
 
 If heartbeats are exceeded immediately:
