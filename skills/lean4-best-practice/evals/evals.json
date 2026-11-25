@@ -171,6 +171,19 @@
         "Advises moving shared declarations to a lower library rather than extending the allowed list",
         "Recommends running the check in CI, using its exit code"
       ]
+    },
+    {
+      "id": 16,
+      "prompt": "Our `Main.lean` proves the main theorems, and it also imports a few files of corollaries that those theorems do not use. Many folders have an `Imports.lean` that only imports other files. An agent says that moving the corollaries out of `Main` will make our Comparator export and kernel time much smaller, and that replacing each `import X.Imports` with imports of all the files it lists will stop the wide rebuilds and shrink the `.setup.json` files. Is that right, and what should we do?",
+      "expected_output": "Explains that Comparator exports only the named theorems, definitions, permitted axioms and primitives with their dependencies, so modules that the theorems do not use change neither the export nor the kernel time; they cost build time, exporter memory and time for loading, and `leanchecker --fresh` time, while `lake check` follows `defaultTargets`. Advises keeping any corollary that must be judged in the import closure of the solution module and naming it in `theorem_names` and the challenge file, moving the others to a library of their own that a default target builds, and measuring the closure difference first, for example with `import_depth.py --to`. Explains that an aggregate adds only itself to a closure and that replacing its import with all its members gains next to nothing; the cost is that an importer gets members it does not use, so each file should import only the modules it uses. Mentions `lake shake --fix` for files with `module` headers, marking an aggregate that is kept for users with `module -- shake: keep-all`, and that `lake shake` does not run without the headers.",
+      "files": [],
+      "expectations": [
+        "States that unused imports in the solution module do not change the Comparator export or the kernel time of judging it",
+        "Names what the unused imports do cost: build time, exporter loading memory or time, or `leanchecker --fresh`",
+        "Advises that results which must be judged be listed in `theorem_names`, with other results in a separate library that is still built",
+        "States that replacing an aggregate import with all of its members changes next to nothing, and that the gain comes from importing only what each file uses",
+        "Mentions `lake shake` and its requirement of `module` headers"
+      ]
     }
   ]
 }

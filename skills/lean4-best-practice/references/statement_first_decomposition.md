@@ -823,6 +823,48 @@ A corollary, a special case or an extra check that no top-level theorem uses doe
 
 In the formalization of about 175,000 modules mentioned above, `Main` imported, through two import-only files, four modules of further results that none of its theorems used. Without them the closure of `Main` would have had 175,181 modules instead of 175,187.
 
+### 3.13. Import the Modules You Use, Not an Aggregate
+
+An **aggregate** (umbrella or barrel) module holds only `import` lines. The file itself adds one module to a closure. What costs is that each importer gets everything behind it, including the parts it does not use. Measured with Lake from Lean `v4.33.1`, `v4.35.0` and `v4.36.0`, where `Hub` imports `A` and `B` (with `public import` in the variant with `module` headers):
+
+| Change                                                          | Imports `Hub`, uses `A` | Imports `A` | Imports `Hub`, uses `A` and `B` | Imports `A` and `B` |
+| :-------------------------------------------------------------- | :---------------------- | :---------- | :------------------------------ | :------------------ |
+| Proof edited in `B`, no `module` header                         | Rebuilt                 | Not rebuilt | Rebuilt                         | Rebuilt             |
+| Proof edited in `B`, `module` header, public `.olean` unchanged | Not rebuilt             | Not rebuilt | Not rebuilt                     | Not rebuilt         |
+| Public theorem added to `B`                                     | Rebuilt                 | Not rebuilt | Rebuilt                         | Rebuilt             |
+| Import added to `Hub`                                           | Rebuilt                 | Not rebuilt | Rebuilt                         | Not rebuilt         |
+| Project modules listed in the importer's `.setup.json`          | `A`, `B`, `Hub`         | `A`         | `A`, `B`, `Hub`                 | `A`, `B`            |
+
+With a `module` header, a proof edit that changes the public `.olean` still rebuilds the importers; replacing the test proof with `by simp [B.val]` did.
+
+Replacing an aggregate import with imports of all its members therefore gains next to nothing. The gain comes from leaving out the members that a file does not use.
+
+**Rules**:
+
+- **Inside the project, import the modules that declare what the file uses.**
+- **Keep an aggregate only as an entry point for users of the library**, such as the root file of a library, and let no module of the project import it. For comparison, Mathlib's header linter (`v4.35.0`) reports a Mathlib file that imports all of `Mathlib.Tactic`, `Std` or `Batteries`.
+- **With `module` headers, let `lake shake` narrow the imports.** In the module that used only `A`, `lake shake --fix` replaced the import of `Hub` with an import of `A` (checked on `v4.33.1`, `v4.35.0` and `v4.36.0`). It also proposes removing the imports of the aggregate itself, which declares nothing, so write the first line of an aggregate you keep as `module -- shake: keep-all`. If any loaded module lacks the header, it stops with ``lake shake` only works with `module`s currently``, and the imports have to be narrowed by hand. Run `lake build` afterwards.
+- **Find the aggregates that project modules import.** The command prints each one with the number of `import` lines that name it:
+
+  ```bash
+  cd src   # the source directory of the project
+  # 1. Modules that hold only import lines (a file with a block comment is not listed)
+  find . -name '*.lean' -not -path '*/.lake/*' -exec awk '
+    FNR == 1 { if (n && !other) print f; f = FILENAME; n = other = 0 }
+    /^(public +)?(meta +)?import / { n++; next }
+    !/^((module|prelude)([[:space:]]|$)|[[:space:]]*(--|$))/ { other = 1 }
+    END { if (n && !other) print f }' {} + |
+    sed 's|^\./||; s/\.lean$//; s|/|.|g' | LC_ALL=C sort > /tmp/aggregates.txt
+  # 2. How often the project imports each of them
+  grep -rhE --include='*.lean' --exclude-dir=.lake '^(public +)?(meta +)?import +' . |
+    sed 's/ *--.*//' | awk '{ print $NF }' | LC_ALL=C sort | uniq -c |
+    awk 'NR == FNR { agg[$1] = 1; next } $2 in agg' /tmp/aggregates.txt - | sort -rn
+  ```
+
+  Start with the aggregates that have both many imports and many importers. An aggregate with a single import adds only itself to a closure.
+
+In the formalization of about 175,000 modules, 150 of 175,188 modules held only imports (0.09%). 54 of them had a single import, among them the most imported one, with 2,242 importers.
+
 ---
 
 ## 4. Checklist
@@ -835,6 +877,7 @@ In the formalization of about 175,000 modules mentioned above, `Main` imported, 
 - [ ] Does CI measure the longest import chain with `import_depth.py` and fail when it exceeds the set `--max-depth`?
 - [ ] Does each separate proof module have a reason (kernel time, independent or frequent work, an interface boundary), with no module added only to check a short theorem in parallel, and have the modules under 25 lines been reviewed (§3.6)?
 - [ ] Does `Main` import only what the top-level theorems use, with other results in a library of their own that a default target builds (§3.12)?
+- [ ] Do project modules import the modules they use rather than import-only aggregates (§3.13)?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Does every premise bundle that statements quantify over have a non-degenerate `X.witness : ∃ x, Premises x` that a default build target compiles?
 - [ ] Is every proof connected to its contract by its own header, a plain term, or an explicit adaptation, with no catch-all `first | exact ... | apply ...` glue left?
