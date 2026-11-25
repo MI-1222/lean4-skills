@@ -36,10 +36,12 @@ This skill provides operational workflows and automated tools for managing Lean 
 | Command                         | Purpose                                    | When to Use                                                          |
 | :------------------------------ | :----------------------------------------- | :------------------------------------------------------------------- |
 | `lake exe cache get`            | Fetch Mathlib pre-compiled `.olean` cache  | **Mandatory** on fresh workspace setup or after modifying `lakefile` |
+| `lake exe mathlib/cache get`    | Run Mathlib's own `cache` tool explicitly  | When the project defines its own `cache` executable (§3)             |
 | `lake exe cache get!`           | Force re-download of Mathlib cache         | When `.olean` files are corrupted or type errors occur in Mathlib    |
 | `lake env lean <file>`          | Fast single-file type checking             | **Primary verification loop** while actively editing Lean code       |
 | `lake build <Module>`           | Build specific library module or target    | After cross-file modifications or adding new imports                 |
 | `lake build`                    | Full project verification                  | Checkpoint gate or before completing the proof task                  |
+| `lake build --no-build`         | Check targets are up to date, compile none | After fetching a cache; exit code `3` means something needs a build  |
 | `#print axioms <theorem>`       | Audit proof soundness and axioms           | **Final gate** to ensure no `sorryAx` or custom axioms exist         |
 | `scan_risky_constructs.py`      | Static scan for trust-base risks           | Reviewing code written by other agents, contributors or submissions  |
 | `lake env leanchecker <Module>` | Replay compiled declarations in the kernel | High-stakes results; detecting "environment hacking"                 |
@@ -84,7 +86,42 @@ Execute the cache retrieval command from the project root:
 lake exe cache get
 ```
 
-_Note: In newer Lake releases where the cache tool is built-in, `lake cache get` may also be used._
+_Note: `lake cache get` (no `exe`) is a different command: Lake's built-in remote cache, which downloads from Reservoir or from a service configured in the lakefile's `[cache]` table. It is not Mathlib's `cache` tool. Use `lake exe cache get` for Mathlib's `.olean` cache unless the project documents otherwise._
+
+### Which `cache` Executable Runs
+
+`lake exe cache` runs the executable named `cache` that Lake finds in the workspace, and **the root package's executable wins over a dependency's**. Most projects have no `cache` executable of their own, so the command reaches Mathlib's. A project that defines one (for example, to download its own prebuilt modules as well) shadows Mathlib's tool, and `lake exe cache get` then does whatever that project's tool does.
+
+Qualify the target with the package name to run a specific package's executable:
+
+```bash
+lake exe mathlib/cache get     # always Mathlib's cache tool, Mathlib's .olean files only
+```
+
+Check the lakefile for a `[[lean_exe]]` named `cache` (or `lean_exe cache` in `lakefile.lean`) before running the bare command. When verifying a project independently, use `lake exe mathlib/cache get` so that no prebuilt artifacts of the project itself are downloaded; otherwise `lake build` can finish without compiling anything.
+
+### Checking That the Cache Covers the Build (`lake build --no-build`)
+
+After fetching a cache, confirm that it matches the current sources without starting a long compilation:
+
+```bash
+lake build --no-build          # exit 0: every target is up to date; exit 3: something needs a build
+lake build MyModule --no-build # the same check for one target
+```
+
+Exit code `3` means that some module's sources, options, dependencies or toolchain differ from what the cache was built for. Find the cause (an edited file, a changed lakefile option, a different toolchain) before running a full `lake build`, which may take hours on a large project.
+
+### Build and Cache Environment Variables
+
+| Variable                    | Read by             | Effect                                                                                                                  |
+| :-------------------------- | :------------------ | :---------------------------------------------------------------------------------------------------------------------- |
+| `MATHLIB_CACHE_GET_URL`     | Mathlib `cache` exe | Download from this single URL instead of the default storage containers (e.g. a mirror or another official server)      |
+| `MATHLIB_CACHE_DIR`         | Mathlib `cache` exe | Local cache directory (default `~/.cache/mathlib`)                                                                      |
+| `LAKE_ARTIFACT_CACHE=false` | Lake                | Disables Lake's local artifact cache, shared across copies of a project; by default Lake may **read** artifacts from it |
+| `LEAN_ABORT_ON_PANIC=1`     | Lean runtime        | Aborts the process on a panic instead of printing `PANIC` and continuing with a default value                           |
+
+- For an **independent rebuild** (verifying someone else's proof), set `LAKE_ARTIFACT_CACHE=false` so that Lake does not reuse artifacts that an earlier session or setup script placed in the local artifact cache.
+- For **verification and CI runs**, set `LEAN_ABORT_ON_PANIC=1` so that an internal error stops the build instead of being lost in the log. Comparator runs Lean this way.
 
 ### Corrupted Cache Recovery
 

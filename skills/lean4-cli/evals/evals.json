@@ -18,6 +18,18 @@
       "prompt": "Our CI or local build started failing with corrupted olean errors inside Mathlib files during lake build. How do we verify our toolchain health and force-refresh the pre-compiled Mathlib cache?",
       "expected_output": "Guidance on checking toolchains with `elan show`, executing `lake exe cache get!` to force re-download the cache, and cleaning artifacts with `lake clean` if necessary.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "I am independently verifying a Lean project downloaded from someone else. Its lakefile.toml contains a `[[lean_exe]]` named `cache`. I ran `lake exe cache get` and then `lake build Main`, and the build finished in seconds without compiling anything. What happened, and which commands and environment settings should I use instead?",
+      "expected_output": "Explanation that `lake exe cache` runs the root package's own `cache` executable, which shadows Mathlib's and here also downloaded the project's prebuilt modules, so nothing was compiled. Recommends `lake exe mathlib/cache get` to fetch only Mathlib's cache, `LAKE_ARTIFACT_CACHE=false` so that Lake does not reuse artifacts from its local artifact cache, a fresh clone, and notes that `lake build --no-build` (exit code 3 when something needs building) can check whether a cache covers the build.",
+      "files": [],
+      "expectations": [
+        "Explains that the root package's `cache` executable takes precedence over Mathlib's",
+        "Recommends `lake exe mathlib/cache get`",
+        "Mentions `LAKE_ARTIFACT_CACHE=false` or a clean checkout to avoid reusing prebuilt artifacts",
+        "Does not treat the downloaded artifacts as evidence that the proofs are valid"
+      ]
     }
   ]
 }
