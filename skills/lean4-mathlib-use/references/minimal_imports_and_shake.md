@@ -80,7 +80,7 @@ Skipping this step forces Lean to build Mathlib from source, which can take anyw
 
 ## 4. Pruning Unused Imports with `lake shake`
 
-Mathlib provides a dedicated static analysis tool called `shake` to detect and remove unused imports based on syntax tree inspection.
+`lake shake` is a tool built into Lake that reports and removes unused imports. It analyzes the compiled `.olean` files: an import counts as needed when a declaration of the file refers to one of its constants, in the type or the body, or when elaboration recorded a use of it, such as a macro or a piece of syntax. From the source files it reads only the header, with its `import` lines and `shake:` annotations. Run `lake build` first; shake refuses to run while the `.olean` files of the default targets are out of date.
 
 ### Running `shake`
 
@@ -92,13 +92,18 @@ Mathlib provides a dedicated static analysis tool called `shake` to detect and r
    lake shake
    ```
 
-   This command inspects all files in the project and reports unnecessary `import` statements.
+   Without arguments, shake starts from the root modules of the default targets: the `roots` of each library and the root of each executable. It reports only files that those roots import, directly or indirectly, and whose module names are under the top-level name of a root. It therefore does not report:
+   - a file that the `globs` of a library match but that no root imports,
+   - a library that is not a default target and that no root imports,
+   - an imported file under another top-level name.
+
+   To check such files, pass their module names, e.g. `lake shake MyProject.Extra`. If a default target is a library with `globs` and no root module, the run without arguments stops with ``object file ... of module `<Library>` does not exist``, with or without `module` headers; pass module names there too.
 
 2. **Automatically Fix and Prune**:
    ```bash
    lake shake --fix
    ```
-   This automatically rewrites the import headers of affected files, pruning redundant dependencies while preserving required modules.
+   This rewrites the import headers of the reported files. It can remove an import that a file needs (limitation 2 below).
 
 ### Limitations & Constraints of `lake shake`
 
@@ -113,9 +118,23 @@ Keep these constraints in mind when using `lake shake`:
    - **Workaround**: In a project that mixes both kinds of files, pass only modules that have the header, e.g. `lake shake MyProject.Algebra.Basic`. A file with the header cannot import one without it, so everything these modules import qualifies too. For the other files, prune imports by hand, or move them to the module system first. Adding the `module` line alone is not enough: declarations and imports become private unless marked `public`, so files that rely on them stop building.
    - Checked on Lean `v4.33.1`, `v4.35.0` and `v4.36.0`.
 
-2. **Tactic and Typeclass Instance Dependencies**:
-   - `shake` relies on AST syntax inspection. If an imported module solely provides a behind-the-scenes tactic, macro, or typeclass instance that is not explicitly named in the file, `shake` may mistakenly consider it unused.
-   - **Rule**: Always run `lake build` immediately after `lake shake --fix` to confirm that all tactics and typeclass instances remain functional.
+2. **Some Needed Imports Are Removed**:
+   - A use that leaves nothing in the compiled file can be missed. An `example` adds no declaration, so the constants it refers to are not seen. Results of `lake shake --fix` on one small case of each kind:
+
+     | The file needs the import only for                                                     | Result                                      |
+     | :------------------------------------------------------------------------------------- | :------------------------------------------ |
+     | A macro, `macro_rules`, `elab` tactic or notation used in a theorem or a definition    | Kept                                        |
+     | An instance, a coercion or an added `attribute [simp]` used in a theorem or definition | Kept                                        |
+     | A `rfl` lemma for `dsimp`, or a simproc, used in a theorem                             | Kept                                        |
+     | A macro used in an `example`                                                           | Kept                                        |
+     | A constant, an instance or an added `attribute [simp]` used in an `example`            | Removed, build fails                        |
+     | A constant used in `#check`, `#eval` or `#guard`                                       | Removed, build fails                        |
+     | A namespace named by `open`, or an option named by `set_option`                        | Removed, build fails                        |
+     | A linter that the import registers                                                     | Removed, build succeeds without its warning |
+
+   - **Keep such an import** by annotating it: `import MyProject.Linters -- shake: keep`. The annotated import survived `--fix` in every removed case above.
+   - **Rule**: Run `lake build` immediately after `lake shake --fix`, and read the removed imports in the diff. A successful build does not prove that nothing was lost: without its linter, a build only stops warning.
+   - Checked on Lean `v4.33.1`, `v4.35.0` and `v4.36.0`.
 
 ---
 
