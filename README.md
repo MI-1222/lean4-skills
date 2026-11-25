@@ -23,7 +23,7 @@ AIエージェントがLean 4を用いた数学の形式的証明(Mathlibの利�
 | スキル名                                                    | 役割                                                                                          | 同梱スクリプト / リファレンス                              |
 | :---------------------------------------------------------- | :-------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
 | [`lean4-interactive-proof`](skills/lean4-interactive-proof) | `lean --server` と通信し、指定位置のゴール状態(Tactic State)を取得                            | `scripts/lean_goal.py`                                     |
-| [`lean4-proof-repair`](skills/lean4-proof-repair)           | 型不一致やタイムアウトなど、頻出コンパイラエラーの診断と修復                                  | `references/*.md` (7編のエラー処方箋)                      |
+| [`lean4-proof-repair`](skills/lean4-proof-repair)           | 型不一致やタイムアウトなど、頻出コンパイラエラーの診断と修復                                  | `references/*.md` (9編のエラー処方箋)                      |
 | [`lean4-syntax`](skills/lean4-syntax)                       | 証明構文リファレンスおよび高速構文チェック・Lean 3構文の混同防止                              | `scripts/check_syntax.py`, `references/*.md`               |
 | [`lean4-cli`](skills/lean4-cli)                             | `lake` / `lean` の運用自動化、ビルドログの構造化JSONパース、証明の健全性監査                  | `scripts/parse_diagnostics.py`, `scan_risky_constructs.py` |
 | [`lean4-best-practice`](skills/lean4-best-practice)         | トップダウン証明法(Sorry先行、Statement分割)、`simp` 規律、命名規則の活用                     | `references/*.md` (8編の実践ガイド)                        |
