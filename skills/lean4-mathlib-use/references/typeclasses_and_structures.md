@@ -245,3 +245,136 @@ theorem independent_lemma (n : ℕ) : n + 0 = n := by
 > ```
 >
 > In Lean 4's grammar, `/-- ... -/` begins `declModifiers` which must immediately precede the declaration keyword (`theorem`, `def`, `lemma`). Interleaving a command like `omit` between the docstring and declaration causes a syntax error.
+
+---
+
+## 7. Instances Needed in Many Files: Fix the Cause or Use a Scope
+
+`attribute [local instance] foo` makes the definition `foo` an instance until the end of the current section or file. It is the right tool for a single file. When the same line is copied into hundreds of files, the choice of structure is made again in every file instead of once:
+
+- Files with the line and files without it elaborate the same expression differently. Without it, synthesis fails or finds another instance.
+- Renaming `foo`, or switching to a better structure, means editing every one of those files.
+
+In one formalization of about 175,000 modules, `attribute [local instance]` appeared in 46,562 files. A single definition, a `StarRing` on a CM field, was registered this way in 24,134 files. `Matrix.normedAddCommGroup` was registered locally in 1,794 files, while Mathlib's own scope for it (`open scoped Matrix.Norms.Elementwise`) was opened in only 216.
+
+Count the repeated registrations first:
+
+```bash
+rg -o --no-filename 'attribute \[local instance\] (\S+)' -r '$1' . | sort | uniq -c | sort -rn | head
+```
+
+For every definition near the top of that list, find out why it is not already an instance, and pick one of the fixes below.
+
+### 7.1. The Structure Is Canonical but an Instance Argument Is Missing
+
+The commonest cause is a `Prop` class, such as `IsCMField E`, stored as an ordinary structure field. Mathlib's global instance needs that class as an instance argument, cannot find it, and so a wrapper definition gets registered locally in every file:
+
+```lean
+import Mathlib.NumberTheory.NumberField.CMField
+
+open NumberField
+
+structure Host where
+  E : Type
+  [field : Field E]
+  [numberField : NumberField E]
+  isCM : IsCMField E          -- an ordinary field, not an instance
+
+attribute [instance] Host.field Host.numberField
+
+-- ❌ Fails: "failed to synthesize instance of type class Star H.E"
+example (H : Host) (x : H.E) : star (star x) = x := star_star x
+
+-- ❌ The workaround that spread to every file:
+--   @[instance_reducible] noncomputable def cmStar : StarRing H.E :=
+--     @IsCMField.starRing H.E _ _ H.isCM _
+--   attribute [local instance] cmStar
+
+-- ✅ Register the stored field once, next to the structure.
+attribute [instance] Host.isCM
+
+-- Mathlib's global `IsCMField.starRing` now applies in every importing file.
+example (H : Host) (x : H.E) : star (star x) = x := star_star x
+```
+
+Verified on Lean `v4.35.0` with Mathlib `v4.35.0`. In the formalization above, three files declared `instance : IsCMField H.E := H.isCMField_hostE` themselves, but the 24,134 files that registered the wrapper never did.
+
+- Mark `Prop` fields that are classes with `[...]` binders in the `structure`, or register them with `attribute [instance]` in the structure's file.
+- `Prop` instances cannot conflict with each other (proof irrelevance), so registering them globally is safe.
+
+### 7.2. The Structure Is Not Canonical: Use a Scope
+
+Some structures are deliberately not instances, because a type has several natural choices: the norms on matrices, a monoidal structure on a category, a relation derived from one particular valuation. Give each choice a **scope**: a namespace in which the definitions are `scoped` instances. Files activate the scope with `open scoped`.
+
+**Reuse Mathlib's scopes first.** Mathlib (`v4.35.0`, `Mathlib/Analysis/Matrix/Normed.lean`) defines the matrix norms as definitions and groups them by scope:
+
+```lean
+namespace Norms.Elementwise
+
+attribute [scoped instance]
+  Matrix.seminormedAddCommGroup
+  Matrix.normedAddCommGroup
+  Matrix.normedSpace
+  ...
+```
+
+```lean
+import Mathlib.Analysis.Matrix.Normed
+
+-- ✅ One line activates the whole elementwise-norm package for one declaration.
+open scoped Matrix.Norms.Elementwise in
+example (A : Matrix (Fin 2) (Fin 2) ℝ) : 0 ≤ ‖A‖ := norm_nonneg A
+
+-- ❌ Outside the scope: "failed to synthesize instance of type class Norm (Matrix (Fin 2) (Fin 2) ℝ)"
+example (A : Matrix (Fin 2) (Fin 2) ℝ) : 0 ≤ ‖A‖ := norm_nonneg A
+```
+
+Search Mathlib for `attribute [scoped instance]` and `scoped[` before defining a scope of your own. Other scopes, such as `Matrix.Norms.Frobenius`, `Matrix.Norms.Operator` and `MatrixOrder`, are built the same way. Outside the namespace, Mathlib also uses the one-line form `scoped[Matrix.Norms.L2Operator] attribute [instance] Matrix.instL2OpNormedAddCommGroup`.
+
+**For project definitions, declare the scope once:**
+
+```lean
+def Pt := Nat
+
+@[instance_reducible] def ptInhabitedFive : Inhabited Pt := ⟨(5 : Nat)⟩
+
+namespace MyProject.PtFive
+attribute [scoped instance] ptInhabitedFive
+end MyProject.PtFive
+
+-- ❌ Inactive until the scope is opened: "failed to synthesize instance of type class Inhabited Pt"
+example : Inhabited Pt := inferInstance
+
+-- ✅ For the rest of the section or file
+section
+open scoped MyProject.PtFive
+example : (default : Pt) = (5 : Nat) := rfl
+end
+
+-- ✅ For one declaration
+open scoped MyProject.PtFive in
+example : (default : Pt) = (5 : Nat) := rfl
+```
+
+Verified on Lean `v4.33.1` and `v4.35.0`. Each file still needs one line, but the line names a choice (`MyProject.PtFive`), not an implementation detail. Several definitions can share one scope, and adding a definition to the scope changes every user at once.
+
+**Alternative: a type synonym.** If one type is always used with the same non-canonical structure, define a synonym (`def Pt := Nat`, as above) and make the structure a global instance on the synonym. The synonym does not inherit the original type's instances (the example above shows `Inhabited Pt` missing although `Nat` has one), so every instance it needs must be transferred explicitly, for example with `inferInstanceAs`. This is the better fix when the synonym already exists for another reason, and more work otherwise.
+
+### 7.3. Mark Definitions Meant as Instances `@[instance_reducible]`
+
+A definition of class type that will be used as an instance should carry `@[instance_reducible]`, as Mathlib's `Matrix.normedAddCommGroup` does. Without it, both the definition and each `attribute [local instance]` / `attribute [scoped instance]` that uses it report (Lean `v4.33.1` and `v4.35.0`):
+
+```text
+warning: Definition `ptInhabitedSeven` of class type is semireducible. Most type class instances should be
+instance-reducible, so consider marking this definition with `@[instance_reducible]`. If it is
+intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+```
+
+Since Lean `v4.29.0`, unification no longer unfolds ordinary definitions automatically when it compares implicit arguments, including instances. This is why the reducibility of instance definitions matters. Since Lean `v4.33.0` (lean4#13637), `@[implicit_reducible]` no longer lets type class search see through a definition. Use `@[instance_reducible]` for definitions that are meant to be instances.
+
+### Rules
+
+- **Fix the cause before scoping.** If the instance is missing only because an argument is not an instance (§7.1), register that argument once. Only structures that are genuinely non-canonical need a scope.
+- **One choice, one scope.** Name the scope after the choice it makes (`Matrix.Norms.Elementwise`, `MyProject.CMConjugation`), not after the file that first needed it. Reuse Mathlib's scope when one exists.
+- **Keep `attribute [local instance]` local.** Use it for a structure needed in one file or one section. Mathlib itself does this for a single section of `Mathlib/Analysis/Matrix/Normed.lean` (`attribute [local instance] Matrix.seminormedAddCommGroup`). A definition registered locally in more than a few files is a design decision and belongs in one place.
+- **Do not silence `warn.classDefReducibility`.** Add `@[instance_reducible]` to the definition instead.
