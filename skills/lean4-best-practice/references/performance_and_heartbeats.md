@@ -337,7 +337,7 @@ What Lean accepts depends on the definition's current status (verified on Lean `
 If a theorem remains slow after tactic tuning:
 
 1. Identify natural intermediate milestones in the argument.
-2. Break each milestone into a separate `private lemma` or `local lemma`.
+2. Break each milestone into a separate `private lemma`.
 3. Verify each helper lemma independently.
    Lean elaborates declarations in separate tasks; modularizing proofs allows the compiler to parallelize work across CPU cores and keeps individual declaration heartbeats under 20,000.
 
