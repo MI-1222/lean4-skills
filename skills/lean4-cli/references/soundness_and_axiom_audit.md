@@ -478,6 +478,41 @@ lake comparator --config "$CLEAN/comparator.json" \
 - **Do not trust shared build caches for verification.** Integrity checks on downloaded `.olean` files prove which bytes were published, not that the proofs are valid. Use a fresh build when the result must be trusted.
 - **Independent kernels** listed under `external_kernels` each judge the export; any non-zero exit is a rejection. Some checkers reject valid exports for reasons unrelated to correctness, so test each checker on a small project with the same toolchain before relying on it (see "Checker Compatibility" below).
 
+### Which Declarations Each Command Checks
+
+The commands differ in what they read, so the same change to a project can shrink one run and leave another as it was:
+
+| Command                                                   | Declarations exported or replayed                                                                                |
+| :-------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| `lake comparator` (4.35+)                                 | `theorem_names`, `definition_names`, `permitted_axioms` and the kernel's primitives, with all their dependencies |
+| `lake env leanexport M -- <names>` (older: `lean4export`) | The named declarations, with all their dependencies                                                              |
+| `lake env leanexport M`                                   | Every non-internal constant in the environment of `M`, imported ones included, with their dependencies           |
+| `lake check` (4.35+)                                      | The same for the modules of all default targets together; it takes no theorem names                              |
+| `lake env leanchecker M`                                  | The declarations of the modules whose names start with `M`                                                       |
+| `lake env leanchecker --fresh M`                          | Every constant in the import closure of `M`                                                                      |
+
+Measured with Lean core only on `v4.35.0` and `v4.36.0`, timing each replay twice per version: `Main` proves one theorem, and an unrelated module `Extra` holds four proofs that are slow in the kernel. `<targets>` is the list that `lake comparator` exports.
+
+| Run                            | `Main` imports `Extra`   | `Extra` is only a default target | `Extra` is neither          |
+| :----------------------------- | :----------------------- | :------------------------------- | :-------------------------- |
+| `leanexport Main -- <targets>` | 1.0 MB                   | The same bytes                   | The same bytes              |
+| Export made by `lake check`    | 346–348 MB, with `Extra` | The same bytes                   | 346–348 MB, without `Extra` |
+| `leanchecker Main`             | 0.5–0.8 s                | 0.5–0.6 s                        | 0.5 s                       |
+| `leanchecker --fresh Main`     | 34–35 s                  | 26–32 s                          | 27–28 s                     |
+
+The exporter still loads the whole environment of the module it is given. A theorem proved by `irrational_sqrt_two` was exported from a module that imports `Mathlib.NumberTheory.Real.Irrational`, and from one that also imports `Mathlib` (Lean and Mathlib `v4.35.0`, three runs each, macOS):
+
+| The exported module imports | Modules loaded | Export         | Exporter wall time | Peak memory (RSS) |
+| :-------------------------- | -------------: | :------------- | :----------------- | :---------------- |
+| What the proof needs        |          3,484 | 43.3 MB        | 3.1–4.9 s          | 2.2 GiB           |
+| The same, and `Mathlib`     |         10,978 | The same bytes | 5.2–5.4 s          | 5.3–5.4 GiB       |
+
+RSS includes the mapped `.olean` files; the peak memory footprint that macOS reports for the process itself was 0.5 and 0.9 GiB.
+
+- **To make a judging run cheaper, reduce what the named theorems depend on.** Removing unused imports from the solution module saves build time and exporter memory, not kernel time.
+- **Choose `defaultTargets` knowing that `lake check` exports all of them**, with everything they import. For the final theorems alone, judge them with Comparator.
+- For how to arrange the modules, see `lean4-best-practice` → `statement_first_decomposition.md` (§3.12).
+
 ### Checker Compatibility
 
 `lake comparator --paranoid` runs five external checkers besides Lean's kernel: `leanchecker-paranoid`, `lean4lean`, `nanoda`, `con-leche` and `con-ron`. A non-zero exit from any of them fails the whole run, including a refusal that says nothing about whether the proof is right.

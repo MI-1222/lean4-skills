@@ -68,6 +68,7 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 - [ ] **Hardest Case First**: If doing case analysis or induction, is the most difficult branch solved or planned first before doing routine base cases?
 - [ ] **Statement-First at Scale**: For multi-file or multi-agent work, does each milestone have a `def X.Statement : Prop` contract, and is the soundness audit run on a hypothesis-free assembly theorem rather than on conditional `X.proof` declarations? Does CI cap the longest import chain (`import_depth.py --max-depth`)?
 - [ ] **One-Way Libraries**: With several `[[lean_lib]]` blocks, is it written down which library may import which, with CI checking it (`library_dag.py --allow`)?
+- [ ] **Narrow Imports**: Does `Main` import only what the top-level theorems use, with every result to be judged named in `theorem_names` (`statement_first_decomposition.md` §3.12)?
 - [ ] **One Project Root**: Are all of the project's declarations under one root namespace and all of its modules under one module root, with nothing declared directly in Mathlib's namespaces?
 
 ### Stage B: Tactic Discipline

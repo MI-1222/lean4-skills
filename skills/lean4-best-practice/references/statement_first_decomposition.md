@@ -795,6 +795,34 @@ In the formalization of about 175,000 modules mentioned above, the longest chain
 - **Do not count glue modules as separation.** A statement module that imports its own proof adds a step to every chain through it (§3.9).
 - **Check the parallelism against the build machine.** If the number of modules divided by the chain length is below the number of cores, shortening the chain shortens every cold build.
 
+### 3.12. Keep the Assembly's Imports to What the Theorems Use
+
+A corollary, a special case or an extra check that no top-level theorem uses does not need to be imported by `Main.lean`, directly or through another module. Moving it out saves less than it seems, because the checks differ in what they read:
+
+| An unused module in the import closure of `Main`   | Effect                                                                            |
+| :------------------------------------------------- | :-------------------------------------------------------------------------------- |
+| `lake build Main`                                  | Builds it and its imports too, and fails if it fails                              |
+| `lake comparator`, or `leanexport Main -- <names>` | The export is byte-identical. The exporter loads the module (memory and time)     |
+| Kernels judging that export                        | None, since they read the same file                                               |
+| `lake env leanchecker --fresh Main`                | Replays its declarations too                                                      |
+| `lake check`                                       | Moving it out changes nothing while a default target still includes or imports it |
+
+`lean4-cli` → `soundness_and_axiom_audit.md` §8 lists what each command checks, with measurements.
+
+**Rules**:
+
+- **Treat a result that must be judged as a top-level theorem.** Keep it in the import closure of the solution module, and name it in the challenge file and in `theorem_names`. Comparator exports only what `theorem_names` and `definition_names` list, the permitted axioms and the kernel's primitives, with their dependencies, so a theorem that `Main` merely imports is not judged.
+- **Move the other results that no top-level theorem uses to a library of their own.** List it in `defaultTargets` so that every build checks it (as for witnesses, §3.8), and do not import it from `Main`.
+- **Do not expect a smaller export from moving files.** The size of a targeted export, and the kernel time of the judging run, follow from the declarations that the named theorems depend on.
+- **Measure before restructuring.** Compare the closure of `Main` with the closure of the statements and of the modules that declare what its theorems use:
+
+  ```bash
+  python3 <skills-path>/lean4-cli/scripts/import_depth.py src --to Main | grep '^Modules'
+  python3 <skills-path>/lean4-cli/scripts/import_depth.py src --to Statements --to MyProject.MainTheorems | grep '^Modules'
+  ```
+
+In the formalization of about 175,000 modules mentioned above, `Main` imported, through two import-only files, four modules of further results that none of its theorems used. Without them the closure of `Main` would have had 175,181 modules instead of 175,187.
+
 ---
 
 ## 4. Checklist
@@ -806,6 +834,7 @@ In the formalization of about 175,000 modules mentioned above, the longest chain
 - [ ] If the project has several `[[lean_lib]]` blocks, does CI check the imports between them against a list of allowed imports with `library_dag.py --allow`?
 - [ ] Does CI measure the longest import chain with `import_depth.py` and fail when it exceeds the set `--max-depth`?
 - [ ] Does each separate proof module have a reason (kernel time, independent or frequent work, an interface boundary), with no module added only to check a short theorem in parallel, and have the modules under 25 lines been reviewed (§3.6)?
+- [ ] Does `Main` import only what the top-level theorems use, with other results in a library of their own that a default target builds (§3.12)?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Does every premise bundle that statements quantify over have a non-degenerate `X.witness : ∃ x, Premises x` that a default build target compiles?
 - [ ] Is every proof connected to its contract by its own header, a plain term, or an explicit adaptation, with no catch-all `first | exact ... | apply ...` glue left?
