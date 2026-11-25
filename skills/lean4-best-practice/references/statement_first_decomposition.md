@@ -201,6 +201,15 @@ In the formalization of about 175,000 modules mentioned above, the published res
 - **State the result as the source states it, and cite the source in the docstring.** Keep every hypothesis of the published version, such as characteristic zero, algebraic closure or properness. A version stronger than the published one may be false, and §3.2 applies. A weaker or specialized version is fine, but say in the docstring how it differs.
 - **Check that the hypotheses can be satisfied.** A cited statement whose hypotheses no object meets, for example because a project definition such as "nef" or "big" is wrong, is vacuously true and proves nothing downstream. Next to the statement, add an `example` that builds one object meeting all the hypotheses (in the formalization above, projective space for a vanishing theorem). §3.8 has the general rules.
 - **Name the fields after the results** (`kawamataViehweg`, not `p6`). The bundle is what reviewers read to see what the result still depends on, and the formalization above used `p1` … `q7`.
+- **Cite different results as different propositions.** Two fields with the same type cite one proposition under two names. At least one of them then does not state the result its name refers to, and the bundle looks longer than the list of results still open. Fix the misstated field so that it states its source (§3.2 applies to it). If the same result really is cited twice, keep one field and name both sources in its docstring. Check every bundle mechanically with `#duplicate_fields` from `lean4-cli` (`scripts/duplicate_fields.lean`):
+
+  ```bash
+  { echo "import MyProject.Main"; cat <skills-path>/lean4-cli/scripts/duplicate_fields.lean
+    echo "#duplicate_fields MyProject.Literature"; } | lake env lean --stdin
+  ```
+
+  It expands nested bundles and parent structures, and reports both identical types and types that are only definitionally equal, such as a `def Published.B : Prop := Published.A` that renames another citation. A definitional match can also come from computation (`k + 0 = k` and `k = k` for `k : Nat`), so read both statements before merging. In the formalization above, two of the three fields of the final bundle, `caraianiLocalGlobalDual` and `galoisRepOfPolarizedPairLit`, had the same type, and the assembly filled both with the same hypothesis `h`: the bundle named three open results, but only two were different.
+
 - **Bundle instead of chaining.** A theorem with a dozen statement hypotheses in a row (`A → B → C → ... → X`) is hard to read and hard to keep consistent. The formalization above had theorems with sixteen. Group them in one structure per area, and nest structures when areas combine.
 - **Keep adapters next to the statement.** Corollaries that restate a cited result in the form the development needs (`KawamataViehweg.twist (h : KawamataViehweg) ...`) belong in the statement's file, so that each consumer does not derive them again.
 - **Shrink the bundle, never hide it.** Progress means proving a `Published.X`, plugging the proof into the assembly, and deleting the field. If some citations stay unproven, the top-level theorem must show them in its type (`theorem main (L : Literature) : Main.Statement`) and be reported as conditional. An `axiom` would hide them from the type, and Comparator rejects any axiom its config does not allow.
@@ -596,6 +605,7 @@ Callers stop passing the argument, and the assembly shows one prerequisite fewer
 - [ ] Does `#unused_hypotheses` report no unused statement hypotheses, with no `_`-renamed hypotheses and no `set_option linter.unusedVariables false` in proof files?
 - [ ] Is the novel argument stated as one core statement in a Mathlib-only statements file, with each top-level claim derived from it by a short reduction that uses only library lemmas?
 - [ ] Is each cited published result a `def Published.X : Prop` with a citation and a satisfiability `example`, collected in a `structure ... : Prop` bundle with descriptive field names, and does the top-level theorem either discharge the bundle or show it in its type?
+- [ ] Does `#duplicate_fields` report no two fields of a bundle with the same proposition?
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
 - [ ] Was `#print axioms` run on the assembly theorem, not on conditional `X.proof` declarations?
 - [ ] Does every `X.proof` header give explicit universe arguments (`.{0}`, `.{u}`) to each universe-polymorphic statement it mentions?

@@ -80,6 +80,19 @@
         "Recommends deleting the hypothesis instead of renaming it to `_L` or disabling the linter",
         "Recommends failing CI on `linter.unusedVariables` in proof files, e.g. with `parse_diagnostics.py --fail-on-linter`"
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "My development is conditional on a bundle of cited results that are still open:\n\n```lean\nstructure OpenLiterature : Prop where\n  caraianiLocalGlobal : Published.LocalGlobalRow\n  galoisRepOfPolarizedPair : Published.LocalGlobalRow\n  localLanglands : Published.LocalLanglandsExists\n```\n\nThe final assembly is `main_of_literature ⟨h, recTExists, h⟩`. A reviewer reports that three published results remain open. Is that right, and how do I check my other bundles for the same problem?",
+      "expected_output": "Explains that the first two fields have the same type, so the bundle cites one proposition under two names and only two different results remain open, which the assembly confirms by filling both fields with the same `h`. Explains that at least one of the two fields does not state the result its name refers to, so it must be restated to match its source (and sanity-checked), or, if the same result is cited twice, merged into one field whose docstring names both sources. Recommends running `#duplicate_fields` from `lean4-cli/scripts/duplicate_fields.lean` on every bundle, noting that it expands nested bundles and parents and also reports definitionally equal types such as a `def` that renames another statement, and that definitional matches should be read before merging.",
+      "files": [],
+      "expectations": [
+        "States that the two fields have the same type, so only two different results remain open",
+        "Points out that filling both fields with the same `h` confirms the duplication",
+        "Recommends restating the misstated field to match its source, or merging a genuine double citation into one field",
+        "Recommends `#duplicate_fields` from `lean4-cli/scripts/duplicate_fields.lean` for the other bundles",
+        "Mentions that definitionally equal types (e.g. a renaming `def`) are reported too"
+      ]
     }
   ]
 }

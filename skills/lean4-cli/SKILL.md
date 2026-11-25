@@ -45,6 +45,7 @@ This skill provides operational workflows and automated tools for managing Lean 
 | `#print axioms <theorem>`       | Audit proof soundness and axioms           | **Final gate** to ensure no `sorryAx` or custom axioms exist         |
 | `scan_risky_constructs.py`      | Static scan for trust-base risks           | Reviewing code written by other agents, contributors or submissions  |
 | `#unused_hypotheses <Prefix>`   | Find `Prop` hypotheses a proof never uses  | Conditional proofs whose types may misreport their dependencies      |
+| `#duplicate_fields <Bundle>`    | Find bundle fields with the same type      | Bundles of cited results that may cite one proposition twice         |
 | `lake env leanchecker <Module>` | Replay compiled declarations in the kernel | High-stakes results; detecting "environment hacking"                 |
 | `elan show`                     | Show current active toolchain and override | When inspecting Lean version consistency or environment issues       |
 
