@@ -18,6 +18,18 @@
       "prompt": "The following Lean 4 proof is slow and requires increasing heartbeats to compile. Identify the performance antipattern, optimize the proof to run efficiently without `set_option maxHeartbeats`, and explain why the original proof was problematic:\n\n```lean\nset_option maxHeartbeats 500000 in\ntheorem slow_arithmetic (a b c d : ℕ) (h1 : a + 2 * b ≤ c) (h2 : c + 3 * d ≤ 10) : a ≤ 10 := by\n  have h_trans : a ≤ c := by\n    have : a + 0 ≤ a + 2 * b := by simp\n    linarith\n  have h_trans2 : c ≤ 10 := by\n    have : c + 0 ≤ c + 3 * d := by simp\n    linarith\n  linarith\n```",
       "expected_output": "Identification of the antipatterns (unnecessary `maxHeartbeats`, slow subproofs with non-terminal `simp` and manual transitivity), followed by a streamlined 1-line or 2-line solution using `omega` that compiles in a few milliseconds without increased heartbeats.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "We split a formalization into statements and conditional proofs. The assembly theorem at the end fails with `declaration `small` contains universe level metavariables at the expression`. How do we fix it, and how do we avoid this in the rest of the project?\n\n```lean\nuniverse u\n\ndef Pointed.Statement : Prop := ∀ (K : Type u) [Inhabited K], ∃ _ : K, True\ndef Small.Statement : Prop := ∀ K : Type, Nonempty K → True\n\ntheorem Pointed.proof : Pointed.Statement := by\n  intro K _\n  exact ⟨default, trivial⟩\n\ntheorem Small.proof (h : Pointed.Statement) : Small.Statement := fun _ _ => trivial\n\ntheorem small : Small.Statement := Small.proof Pointed.proof\n```",
+      "expected_output": "Explanation that each theorem header gets a fresh universe parameter for a universe-polymorphic statement mentioned without explicit levels, so the universe of `Pointed.Statement` in `Small.proof` is a phantom that the assembly cannot determine. Fix by pinning the level, e.g. `(h : Pointed.Statement.{0})` in `Small.proof` or `Small.proof.{0} Pointed.proof.{0}` in the assembly, and a project rule to write explicit universe arguments (`.{0}` / `.{u}`) on every universe-polymorphic statement in `X.proof` headers.",
+      "files": [],
+      "expectations": [
+        "Identifies the universe parameter of `Pointed.Statement` in `Small.proof` as the cause (it does not occur in `Small.Statement`)",
+        "Gives a fix that compiles: `Pointed.Statement.{0}` in the hypothesis of `Small.proof`, or `Small.proof.{0} Pointed.proof.{0}` in the assembly",
+        "Recommends writing explicit universe arguments on universe-polymorphic statements in conditional proof headers",
+        "Does not weaken `Pointed.Statement` (e.g. by changing `Type u` to `Type`) as the main fix"
+      ]
     }
   ]
 }

@@ -53,6 +53,7 @@ end Demo
 ```
 
 - `intro` unfolds `X.Statement` to reach its binders, so a proof starts exactly as if the statement were written inline.
+- Instance binders in a statement (`∀ (K : Type u) [Field K], ...`) can be introduced as `_` (`intro K _`). The instance stays in the local context and type class resolution still finds it.
 - A hypothesis `h : X.Statement` can be applied directly (`h n`) because application also unfolds the definition.
 
 ### File Layout
@@ -173,6 +174,57 @@ One file per milestone maximizes parallelism, but every module has a fixed cost:
 - Split a proof into its own file when it is slow to elaborate, worked on independently, or frequently edited.
 - Statements files should import only what the definitions need. Importing proof files from a statements file brings back the long build chain.
 
+### 3.7. Write Universe Arguments Explicitly (Universe-Polymorphic Statements)
+
+A statement that quantifies over types (`∀ (K : Type u) ...`) is a universe-polymorphic definition, and **every `theorem` header gets fresh universe parameters for each statement it mentions without explicit levels**. Two failures follow (verified on Lean `v4.33.1`):
+
+```lean
+universe u
+
+def Pointed.Statement : Prop := ∀ (K : Type u) [Inhabited K], ∃ _ : K, True
+def NatPointed.Statement : Prop := ∃ _ : Nat, True
+def Small.Statement : Prop := ∀ K : Type, Nonempty K → True
+
+theorem Pointed.proof : Pointed.Statement := by   -- becomes Pointed.proof.{u_1}
+  intro K _
+  exact ⟨default, trivial⟩
+
+-- ❌ Failure 1: the hypothesis is used at a concrete universe.
+-- `h` has a fresh parameter `u_1` that the body cannot specialize:
+-- "Application type mismatch: ... Nat has type Type ... but is expected to have type Type u_1"
+theorem NatPointed.proof (h : Pointed.Statement) : NatPointed.Statement := h Nat
+
+-- ❌ Failure 2: the universe appears only in a hypothesis (a phantom universe).
+-- `Small.proof` compiles, but the assembly cannot choose the level:
+-- "declaration `small` contains universe level metavariables"
+theorem Small.proof (h : Pointed.Statement) : Small.Statement := fun _ _ => trivial
+theorem small : Small.Statement := Small.proof Pointed.proof
+```
+
+```lean
+-- ✅ Pin the level where the prerequisite is used at a fixed universe
+theorem NatPointed.proof (h : Pointed.Statement.{0}) : NatPointed.Statement := h Nat
+theorem natPointed : NatPointed.Statement := NatPointed.proof Pointed.proof
+
+-- ✅ Name the shared universe when the milestone is polymorphic in it
+def Lift.Statement : Prop := ∀ (K : Type u) [Inhabited K], Nonempty K
+
+theorem Lift.proof (h : Pointed.Statement.{u}) : Lift.Statement.{u} := by
+  intro K _
+  obtain ⟨x, -⟩ := h K
+  exact ⟨x⟩
+
+-- ✅ Or fix the level at the assembly
+theorem small : Small.Statement := Small.proof.{0} Pointed.proof.{0}
+```
+
+**Rules**:
+
+- In every `X.proof` header, write the universe arguments of each universe-polymorphic statement explicitly: `.{0}` (or another fixed level) where the prerequisite is used at that level, `.{u}` where the milestone is polymorphic in the same universe.
+- A polymorphic proof such as `Pointed.proof` can be used at any level (`Pointed.Statement.{1}` works), so prove statements at the most general universe and pin levels only at the use site.
+- Inside a statement body, `Type _` fails with "Failed to infer universe levels in binder type". Declare `universe u` and write `Type u`, or use Mathlib's `Type*`, which adds a universe parameter to the definition.
+- Fixing a type to `Type` inside a statement (`(σ : Type)`) to avoid universe work makes the claim weaker. That is acceptable for an internal milestone, but it is a contract change for a top-level statement (§3.3) and a point for the statement fidelity review.
+
 ---
 
 ## 4. Checklist
@@ -183,3 +235,4 @@ One file per milestone maximizes parallelism, but every module has a fixed cost:
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
 - [ ] Was `#print axioms` run on the assembly theorem, not on conditional `X.proof` declarations?
+- [ ] Does every `X.proof` header give explicit universe arguments (`.{0}`, `.{u}`) to each universe-polymorphic statement it mentions?

@@ -99,7 +99,7 @@ For in-depth explanations, code templates, and antipattern corrections, consult 
 | :---------------------------- | :------------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
 | **Header Fence & Docstrings** | Signature immutability, preventing goal drift, Docstring Rules A/B/C | [header_fence_and_docstrings.md](references/header_fence_and_docstrings.md)           |
 | **Top-Down Proving**          | Sorry-driven development, helper extraction, hardest-case-first      | [sorry_driven_development.md](references/sorry_driven_development.md)                 |
-| **Statement-First at Scale**  | `X.Statement` / `X.proof` split, assembly theorems, parallel builds  | [statement_first_decomposition.md](references/statement_first_decomposition.md)       |
+| **Statement-First at Scale**  | `X.Statement` / `X.proof` split, assembly, universes                 | [statement_first_decomposition.md](references/statement_first_decomposition.md)       |
 | **`simp` Hygiene**            | Non-terminal `simp` hazards, `simp only`, `dsimp`, `simp_rw`, simpNF | [simp_discipline.md](references/simp_discipline.md)                                   |
 | **Mathlib Naming**            | Naming formula, head-symbol rules, connectives, dot notation         | [mathlib_naming_conventions.md](references/mathlib_naming_conventions.md)             |
 | **Performance**               | Limit catalog, scoping policy, lakefile options, `@[irreducible]`    | [performance_and_heartbeats.md](references/performance_and_heartbeats.md)             |
