@@ -67,6 +67,19 @@
         "Prefers an `@[irreducible]` wrapper definition or a `def` over enabling the option globally",
         "If the option is used, scopes it with `set_option ... in` inside a `section` and documents why"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "In my statement-first development, a reviewer counts which results are still conditional on the cited literature by reading the types of the theorems that take `(L : Literature)`. One of them is\n\n```lean\ntheorem Core.of_literature : Literature → Core.Statement := by\n  intro L n\n  exact core_closed n\n```\n\nwhere `core_closed` is an unconditional theorem. The build shows no warning for this file. Is the dependency list correct, and how should I check the whole project for this?",
+      "expected_output": "Explains that the proof never uses `L`, so the type claims a dependency on the literature that does not exist and the result should be stated without the hypothesis. Explains that `linter.unusedVariables` misses the `by intro L ...` form (and `_`, `_L`), so the absence of a warning proves nothing, and recommends running `#unused_hypotheses` from `lean4-cli/scripts/unused_hypotheses.lean` on the project namespace. Recommends deleting the hypothesis rather than renaming it to `_L` or disabling the linter, failing the build on `linter.unusedVariables` in proof files with `parse_diagnostics.py --fail-on-linter`, and checking with the option census that no proof file sets `linter.unusedVariables false`.",
+      "files": [],
+      "expectations": [
+        "States that the proof does not use `L`, so the type misreports the dependency",
+        "Explains that `linter.unusedVariables` is silent for the `intro L` form",
+        "Recommends `#unused_hypotheses` from `lean4-cli/scripts/unused_hypotheses.lean`",
+        "Recommends deleting the hypothesis instead of renaming it to `_L` or disabling the linter",
+        "Recommends failing CI on `linter.unusedVariables` in proof files, e.g. with `parse_diagnostics.py --fail-on-linter`"
+      ]
     }
   ]
 }

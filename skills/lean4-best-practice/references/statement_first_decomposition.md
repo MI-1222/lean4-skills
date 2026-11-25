@@ -512,6 +512,76 @@ The formalization of about 175,000 modules mentioned above did this on a large s
 - **Collapse generated glue before merging.** If an agent produces `first | ... | ...` glue while signatures are still moving, replace each one with the single alternative that works, starting with the plain term. Treat any case that needs the `intros; apply ... <;> assumption` branch as a contract mismatch to review.
 - **Keep any remaining glue in the proof file.** A separate glue module that imports the proof adds a module and a second name, and decouples nothing.
 
+### 3.10. Unused Hypotheses Misreport Dependencies
+
+The type of a conditional proof is where reviewers read what a result depends on (§3.1). The type lists what the proof may use, not what it does use. When the proof ignores a hypothesis, the result is stronger than its type says, and the dependency list is wrong: the result is reported as open on a statement or citation it does not need, and a bundle of cited results (§1, "Citing Published Results as Statements") looks as if more work were left than there is.
+
+```lean
+namespace Demo.Unused
+
+/-- A cited result that the development still relies on. -/
+def Published.AddComm : Prop := ∀ a b : Nat, a + b = b + a
+
+structure Literature : Prop where
+  addComm : Published.AddComm
+
+def AddZero.Statement : Prop := ∀ n : Nat, n + 0 = n
+
+-- ❌ The type says "conditional on the literature"; the proof is unconditional.
+theorem AddZero.of_literature (L : Literature) : AddZero.Statement := by
+  intro n
+  rfl
+
+end Demo.Unused
+```
+
+The `linter.unusedVariables` linter reports this case (``Variable name `L` is not explicitly referenced``), but it sees only some of the ways to write the same proof. The `#unused_hypotheses` command from `lean4-cli` (`scripts/unused_hypotheses.lean`) checks the elaborated proof term instead. Measured on Lean `v4.33.1` and `v4.35.0`:
+
+| How the unused hypothesis is written                      | `linter.unusedVariables` | `#unused_hypotheses` |
+| :-------------------------------------------------------- | :----------------------- | :------------------- |
+| `(L : Literature)` in the signature, term or tactic proof | Warns                    | Reports              |
+| `Literature → X := fun L => ...`                          | Warns                    | Reports              |
+| `Literature → X := by intro L ...`                        | **Silent**               | Reports              |
+| `fun _ => ...` or `(_L : Literature)`                     | **Silent**               | Reports              |
+| `have h := L.addComm` with `h` never used                 | Silent                   | Silent               |
+
+The `intro` form is the usual way to start a proof of `A.Statement → B.Statement`, so the linter alone misses most cases in a statement-first development.
+
+In the formalization of about 175,000 modules mentioned above, 195 theorems in one file took the bundle of open cited results as an argument `O`, and 152 of them never used it: their proofs referred to closed theorems instead. Their names (`..._of_literature`) and types reported a dependency on the literature that did not exist. The project also set `linter.unusedVariables false` in 503 files.
+
+**The fix is to delete the hypothesis**, not to silence the warning:
+
+```lean
+-- ✅ The type now says what the proof shows: the result is unconditional.
+theorem AddZero.proof : AddZero.Statement := by
+  intro n
+  rfl
+```
+
+Callers stop passing the argument, and the assembly shows one prerequisite fewer. If the plan expected the argument to use the hypothesis, treat the short proof with suspicion before deleting anything: check that the statement still says what was intended (§3.2) and is not vacuous (§3.8).
+
+**Rules**:
+
+- **Never silence an unused statement hypothesis.** Do not rename it to `_L` or `_`, and do not set `linter.unusedVariables false` in proof files. Each of these hides the misreported dependency instead of removing it.
+- **Run the semantic check.** Run `#unused_hypotheses` on the project namespace before reporting progress, and in CI:
+
+  ```bash
+  { echo "import MyProject.Main"; cat <skills-path>/lean4-cli/scripts/unused_hypotheses.lean
+    echo "#unused_hypotheses MyProject"; } | lake env lean --stdin
+  ```
+
+- **Fail the build on the linter in proof files.** `parse_diagnostics.py` from `lean4-cli` counts warnings per linter and can turn one linter into a failure for some paths only:
+
+  ```bash
+  lake build 2>&1 | python3 <skills-path>/lean4-cli/scripts/parse_diagnostics.py --summary-only \
+    --fail-on-linter linter.unusedVariables --fail-path-prefix MyProject/Proofs
+  ```
+
+  Lake prints the stored warnings of modules that are already up to date again (`⚠ [2/4] Replayed ...`, Lake `v4.35.0`), so this check also works on an incremental build.
+
+- **Count the overrides.** The option census of `scan_risky_constructs.py` lists every `set_option linter.unusedVariables false` with its number of files. In a statement-first development the count for proof files should be zero.
+- **A hypothesis passed on counts as used.** `#unused_hypotheses` cannot see that `core L := other L` depends on `L` only through `other`; it reports `other` if `other` ignores it. Run it on every theorem along the chain, not only on the assembly.
+
 ---
 
 ## 4. Checklist
@@ -523,6 +593,7 @@ The formalization of about 175,000 modules mentioned above did this on a large s
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Does every premise bundle that statements quantify over have a non-degenerate `X.witness : ∃ x, Premises x` that a default build target compiles?
 - [ ] Is every proof connected to its contract by its own header, a plain term, or an explicit adaptation, with no catch-all `first | exact ... | apply ...` glue left?
+- [ ] Does `#unused_hypotheses` report no unused statement hypotheses, with no `_`-renamed hypotheses and no `set_option linter.unusedVariables false` in proof files?
 - [ ] Is the novel argument stated as one core statement in a Mathlib-only statements file, with each top-level claim derived from it by a short reduction that uses only library lemmas?
 - [ ] Is each cited published result a `def Published.X : Prop` with a citation and a satisfiability `example`, collected in a `structure ... : Prop` bundle with descriptive field names, and does the top-level theorem either discharge the bundle or show it in its type?
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?

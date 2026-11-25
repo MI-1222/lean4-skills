@@ -44,6 +44,7 @@ This skill provides operational workflows and automated tools for managing Lean 
 | `lake build --no-build`         | Check targets are up to date, compile none | After fetching a cache; exit code `3` means something needs a build  |
 | `#print axioms <theorem>`       | Audit proof soundness and axioms           | **Final gate** to ensure no `sorryAx` or custom axioms exist         |
 | `scan_risky_constructs.py`      | Static scan for trust-base risks           | Reviewing code written by other agents, contributors or submissions  |
+| `#unused_hypotheses <Prefix>`   | Find `Prop` hypotheses a proof never uses  | Conditional proofs whose types may misreport their dependencies      |
 | `lake env leanchecker <Module>` | Replay compiled declarations in the kernel | High-stakes results; detecting "environment hacking"                 |
 | `elan show`                     | Show current active toolchain and override | When inspecting Lean version consistency or environment issues       |
 
@@ -370,7 +371,7 @@ lake build 2>&1 | python3 <skill-path>/scripts/parse_diagnostics.py --summary-on
   --fail-on-linter linter.unusedVariables --fail-path-prefix MyProject/Proofs
 ```
 
-The linter of a warning is read from the note Lean appends to it (``Note: This linter can be disabled with `set_option linter.unusedVariables false` ``).
+The linter of a warning is read from the note Lean appends to it (``Note: This linter can be disabled with `set_option linter.unusedVariables false` ``). For unused statement hypotheses, see `lean4-best-practice` → `statement_first_decomposition.md` (§3.10), which also explains why the linter must be combined with `scripts/unused_hypotheses.lean`.
 
 ### JSON Output Schema
 
