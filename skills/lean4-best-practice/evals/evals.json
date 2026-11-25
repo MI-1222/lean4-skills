@@ -158,6 +158,19 @@
         "Lists independent or frequent edits and interface boundaries as reasons to split",
         "Recommends reviewing the existing small modules (glue, single importer, interface files) rather than applying a line-count minimum"
       ]
+    },
+    {
+      "id": 15,
+      "prompt": "Our Lean 4 project has five `[[lean_lib]]` blocks in `lakefile.toml` (Core, Algebra, Analysis, Applications, Main) so that the lower ones can be built alone. Lately `lake build Core` compiles hundreds of modules from Applications, although the lake build never complains. Doesn't Lake stop a library from importing a higher one? How do we get the order back and keep it?",
+      "expected_output": "Explains that Lake orders builds by module, not by library: libraries may import each other as long as the modules have no cycle, `lake build Core` also builds whatever Core's modules import from other libraries, and `lean_lib` has no setting that restricts imports; splitting into packages of one workspace does not enforce a direction either. Recommends running `library_dag.py` from `lean4-cli` (reads lakefile.toml and import lines, needs no build): without options it reports the imports between libraries and fails on cycles, and with `--allow` and a JSON file listing for every library the other libraries it may import (not transitive, no cycle) it fails with exit code 1 on each forbidden import and names the importing file. Advises moving declarations that Core needs down into Core or a library below, not adding entries just to make the check pass, noting that the script keeps no list of tolerated imports so existing violations must be removed, and then running the check with `--allow` in CI, since a cycle-only check passes a first reverse import.",
+      "files": [],
+      "expectations": [
+        "States that Lake does not forbid or warn about libraries importing each other, and that building one library builds what it imports from others",
+        "Recommends library_dag.py from lean4-cli with a JSON file of allowed imports passed to --allow",
+        "Explains that a cycle check alone misses a reverse import when nothing imports in the other direction",
+        "Advises moving shared declarations to a lower library rather than extending the allowed list",
+        "Recommends running the check in CI, using its exit code"
+      ]
     }
   ]
 }

@@ -1,7 +1,7 @@
 ---
 name: lean4-cli
-description: Manage Lean 4 and Lake CLI workflows, build targets, fetch pre-built Mathlib caches, execute fast file-level verification, audit proof soundness and axioms via `#print axioms`, scan sources for trust-base risks (`sorry`, custom axioms, `native_decide`, elaborator bypass via direct goal assignment, environment hacking, global notation) with `scan_risky_constructs.py`, replay proofs through the kernel with `leanchecker`, judge untrusted proofs against a Mathlib-only challenge with Comparator, measure the longest import chain with `import_depth.py`, and parse compiler diagnostic logs into structured JSON. Use whenever running `lake build`, `lake env lean`, or `lake exe cache get`, verifying proof soundness without `sorryAx`, reviewing proofs written by other agents or contributors, diagnosing compilation errors, checking Lean/Elan toolchain health, or automating project build pipelines.
-compatibility: Target Lean 4.14.0+ / Lake build system (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for parse_diagnostics.py, scan_risky_constructs.py and import_depth.py.
+description: Manage Lean 4 and Lake CLI workflows, build targets, fetch pre-built Mathlib caches, execute fast file-level verification, audit proof soundness and axioms via `#print axioms`, scan sources for trust-base risks (`sorry`, custom axioms, `native_decide`, elaborator bypass via direct goal assignment, environment hacking, global notation) with `scan_risky_constructs.py`, replay proofs through the kernel with `leanchecker`, judge untrusted proofs against a Mathlib-only challenge with Comparator, measure the longest import chain with `import_depth.py`, check the direction of imports between Lake libraries with `library_dag.py`, and parse compiler diagnostic logs into structured JSON. Use whenever running `lake build`, `lake env lean`, or `lake exe cache get`, verifying proof soundness without `sorryAx`, reviewing proofs written by other agents or contributors, diagnosing compilation errors, checking Lean/Elan toolchain health, or automating project build pipelines.
+compatibility: Target Lean 4.14.0+ / Lake build system (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for parse_diagnostics.py, scan_risky_constructs.py and import_depth.py, and 3.11+ for library_dag.py.
 metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
@@ -21,7 +21,7 @@ This skill provides operational workflows and automated tools for managing Lean 
 | :---------------- | :-------------------------- | :------------------------------------ | :----------------------------------------------- |
 | **Lean 4 / Lake** | `^4.14.0` (4.14.0+)         | `v4.35.0` (Release, commit `eb6cafb`) | Verified via Lake CLI build & single-file check  |
 | **Mathlib**       | Compatible with target Lean | Contemporary with Lean `v4.35.0`      | Uses `lake exe cache get` for pre-built `.olean` |
-| **Python**        | `>=3.10`                    | `3.14.x`                              | Required for `scripts/*.py`                      |
+| **Python**        | `>=3.10`                    | `3.14.x`                              | For `scripts/*.py`; `library_dag.py` needs 3.11+ |
 
 ### Version-Specific CLI & Build Notes
 
@@ -33,24 +33,25 @@ This skill provides operational workflows and automated tools for managing Lean 
 
 ## 1. Quick Reference: Common Commands
 
-| Command                         | Purpose                                    | When to Use                                                               |
-| :------------------------------ | :----------------------------------------- | :------------------------------------------------------------------------ |
-| `lake exe cache get`            | Fetch Mathlib pre-compiled `.olean` cache  | **Mandatory** on fresh workspace setup or after modifying `lakefile`      |
-| `lake exe mathlib/cache get`    | Run Mathlib's own `cache` tool explicitly  | When the project defines its own `cache` executable (§3)                  |
-| `lake exe cache get!`           | Force re-download of Mathlib cache         | When `.olean` files are corrupted or type errors occur in Mathlib         |
-| `lake env lean <file>`          | Fast single-file type checking             | **Primary verification loop** while actively editing Lean code            |
-| `lake build <Module>`           | Build specific library module or target    | After cross-file modifications or adding new imports                      |
-| `lake build`                    | Full project verification                  | Checkpoint gate or before completing the proof task                       |
-| `lake build --no-build`         | Check targets are up to date, compile none | After fetching a cache; exit code `3` means something needs a build       |
-| `#print axioms <theorem>`       | Audit proof soundness and axioms           | **Final gate** to ensure no `sorryAx` or custom axioms exist              |
-| `scan_risky_constructs.py`      | Static scan for trust-base risks           | Reviewing code written by other agents, contributors or submissions       |
-| `#unused_hypotheses <Prefix>`   | Find `Prop` hypotheses a proof never uses  | Conditional proofs whose types may misreport their dependencies           |
-| `#duplicate_fields <Bundle>`    | Find bundle fields with the same type      | Bundles of cited results that may cite one proposition twice              |
-| `#duplicate_decls <Prefix>`     | Find copies of theorems and definitions    | Projects with copied files or retried lemmas (`foo_alt`, `foo_bis`)       |
-| `#long_decls <N> <Prefix>`      | Find declarations longer than `N` lines    | CI limits on proof size; finding monolithic theorems to split             |
-| `import_depth.py --max-depth N` | Measure the longest import chain           | CI limits on the build's critical path; finding proofs that import proofs |
-| `lake env leanchecker <Module>` | Replay compiled declarations in the kernel | High-stakes results; detecting "environment hacking"                      |
-| `elan show`                     | Show current active toolchain and override | When inspecting Lean version consistency or environment issues            |
+| Command                         | Purpose                                    | When to Use                                                                |
+| :------------------------------ | :----------------------------------------- | :------------------------------------------------------------------------- |
+| `lake exe cache get`            | Fetch Mathlib pre-compiled `.olean` cache  | **Mandatory** on fresh workspace setup or after modifying `lakefile`       |
+| `lake exe mathlib/cache get`    | Run Mathlib's own `cache` tool explicitly  | When the project defines its own `cache` executable (§3)                   |
+| `lake exe cache get!`           | Force re-download of Mathlib cache         | When `.olean` files are corrupted or type errors occur in Mathlib          |
+| `lake env lean <file>`          | Fast single-file type checking             | **Primary verification loop** while actively editing Lean code             |
+| `lake build <Module>`           | Build specific library module or target    | After cross-file modifications or adding new imports                       |
+| `lake build`                    | Full project verification                  | Checkpoint gate or before completing the proof task                        |
+| `lake build --no-build`         | Check targets are up to date, compile none | After fetching a cache; exit code `3` means something needs a build        |
+| `#print axioms <theorem>`       | Audit proof soundness and axioms           | **Final gate** to ensure no `sorryAx` or custom axioms exist               |
+| `scan_risky_constructs.py`      | Static scan for trust-base risks           | Reviewing code written by other agents, contributors or submissions        |
+| `#unused_hypotheses <Prefix>`   | Find `Prop` hypotheses a proof never uses  | Conditional proofs whose types may misreport their dependencies            |
+| `#duplicate_fields <Bundle>`    | Find bundle fields with the same type      | Bundles of cited results that may cite one proposition twice               |
+| `#duplicate_decls <Prefix>`     | Find copies of theorems and definitions    | Projects with copied files or retried lemmas (`foo_alt`, `foo_bis`)        |
+| `#long_decls <N> <Prefix>`      | Find declarations longer than `N` lines    | CI limits on proof size; finding monolithic theorems to split              |
+| `import_depth.py --max-depth N` | Measure the longest import chain           | CI limits on the build's critical path; finding proofs that import proofs  |
+| `library_dag.py --allow <FILE>` | Check imports between libraries            | CI limits on which `[[lean_lib]]` may import which; finding library cycles |
+| `lake env leanchecker <Module>` | Replay compiled declarations in the kernel | High-stakes results; detecting "environment hacking"                       |
+| `elan show`                     | Show current active toolchain and override | When inspecting Lean version consistency or environment issues             |
 
 ---
 
@@ -493,3 +494,4 @@ Limits that do not matter for ordinary projects appear at this scale. All of the
 - **Progress and time**: a cold build can take many hours. Fetch a cache, check it with `lake build --no-build`, and avoid full rebuilds triggered by option or toolchain changes.
 - **Many small modules**: each module is built by its own `lean` process, which loads the whole import closure, so a module per short theorem slows the build. Within one module the proofs of different theorems already elaborate in parallel, but the kernel checks declarations one at a time. For when to split a file and how to review small modules, see `lean4-best-practice` → `statement_first_decomposition.md` (§3.6).
 - **Long import chains**: the modules on the longest import chain build one after another, however many cores there are. Measure the chain without building anything (`python3 <skill-path>/scripts/import_depth.py src --to Main`), and cap it in CI with `--max-depth N` (exit code `1` when the chain is longer). The project above had a chain of 203 modules. See `lean4-best-practice` → `statement_first_decomposition.md` (§3.11).
+- **Imports between libraries**: Lake builds libraries that import each other without a warning, so splitting a project into several `[[lean_lib]]` blocks sets no order between them. List the libraries each one may import and check it in CI without a build (`python3 <skill-path>/scripts/library_dag.py . --allow library-dag.json`, exit code `1` on a forbidden import). Without `--allow`, the script fails on cycles between libraries. In the project above, 8 of 12 libraries formed one cycle. See `lean4-best-practice` → `performance_and_heartbeats.md` (§4).

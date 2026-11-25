@@ -1,7 +1,7 @@
 ---
 name: lean4-best-practice
 description: >-
-  Best practices for formal proving in Lean 4 and Mathlib. Use whenever designing, structuring, refactoring, profiling or reviewing Lean 4 proofs: declaration header fence rules (signature immutability, preventing goal drift), docstring scoping (Rules A/B/C for proof, review and authoring), top-down (sorry-driven) decomposition, statement-first decomposition for multi-file or multi-agent formalizations (`def X.Statement : Prop` contracts, `X.proof` conditional on prerequisite statements, assembly theorems, parallel builds), non-terminal `simp` elimination and `simp only`, Mathlib naming reverse lookup, one project root namespace, copied declarations, heartbeats and performance (`set_option maxHeartbeats N in` scoping, `#count_heartbeats`, `synthInstance.maxHeartbeats`, `synthInstance.maxSize`, `maxSynthPendingDepth`, `maxRecDepth`, `--tstack`, lakefile `leanOptions` and where they apply), documentation standards (docstrings, module docstrings, `calc` chains), or proof golfing.
+  Best practices for formal proving in Lean 4 and Mathlib. Use whenever designing, structuring, refactoring, profiling or reviewing Lean 4 proofs: declaration header fence rules (signature immutability, preventing goal drift), docstring scoping (Rules A/B/C for proof, review and authoring), top-down (sorry-driven) decomposition, statement-first decomposition for multi-file or multi-agent formalizations (`def X.Statement : Prop` contracts, `X.proof` conditional on prerequisite statements, assembly theorems, parallel builds), non-terminal `simp` elimination and `simp only`, Mathlib naming reverse lookup, one project root namespace, copied declarations, one-way library imports, heartbeats and performance (`set_option maxHeartbeats N in` scoping, `#count_heartbeats`, `synthInstance.maxHeartbeats`, `synthInstance.maxSize`, `maxSynthPendingDepth`, `maxRecDepth`, `--tstack`, lakefile `leanOptions`), documentation standards (docstrings, module docstrings, `calc` chains), or proof golfing.
 compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib).
 metadata:
   target-lean-version: '>=4.14.0'
@@ -67,6 +67,7 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 - [ ] **Top-Down Decomposition**: Is the main theorem broken down into standalone helper lemmas rather than a monolithic tactic block, with every declaration under 100 lines (checked with `#long_decls` in CI)?
 - [ ] **Hardest Case First**: If doing case analysis or induction, is the most difficult branch solved or planned first before doing routine base cases?
 - [ ] **Statement-First at Scale**: For multi-file or multi-agent work, does each milestone have a `def X.Statement : Prop` contract, and is the soundness audit run on a hypothesis-free assembly theorem rather than on conditional `X.proof` declarations? Does CI cap the longest import chain (`import_depth.py --max-depth`)?
+- [ ] **One-Way Libraries**: With several `[[lean_lib]]` blocks, is it written down which library may import which, with CI checking it (`library_dag.py --allow`)?
 - [ ] **One Project Root**: Are all of the project's declarations under one root namespace and all of its modules under one module root, with nothing declared directly in Mathlib's namespaces?
 
 ### Stage B: Tactic Discipline

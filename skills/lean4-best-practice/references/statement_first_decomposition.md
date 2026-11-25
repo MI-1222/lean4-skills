@@ -376,6 +376,7 @@ So the names described the intent, not the dependency graph. Check the order in 
 - **Put shared lemmas in `Definitions`, not in another proof file.** When two proofs need the same lemma, the "proofs never import proofs" rule leaves two options: move the lemma down to `Definitions` if it is basic API, or make it a milestone with its own `X.Statement`.
 - **Keep witnesses out of the main import closure.** List the `Witnesses` library in `defaultTargets` so that every build checks it (§3.8), but never import it from `Proofs` or `Main.lean`.
 - **Add the layer check before the first proof file.** Fixing the order after the fact means moving declarations between thousands of files.
+- **Fix the order between libraries too.** The table above orders the layers of one development. When it is split into several `[[lean_lib]]` blocks, Lake lets them import each other in both directions, so state which library may import which and check it in CI with `library_dag.py --allow` (`performance_and_heartbeats.md` §4, "Keep the Imports Between Libraries One-Way").
 
 ---
 
@@ -802,6 +803,7 @@ In the formalization of about 175,000 modules mentioned above, the longest chain
 - [ ] Does each `X.proof` take as hypotheses only the prerequisite statements listed in the plan?
 - [ ] Do proof files import statements files only, never other proof files?
 - [ ] In a layered layout, does CI check that `Definitions`, `Statements` and `Published` never import `Proofs`, and that nothing imports `Witnesses`?
+- [ ] If the project has several `[[lean_lib]]` blocks, does CI check the imports between them against a list of allowed imports with `library_dag.py --allow`?
 - [ ] Does CI measure the longest import chain with `import_depth.py` and fail when it exceeds the set `--max-depth`?
 - [ ] Does each separate proof module have a reason (kernel time, independent or frequent work, an interface boundary), with no module added only to check a short theorem in parallel, and have the modules under 25 lines been reviewed (§3.6)?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?

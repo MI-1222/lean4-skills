@@ -141,7 +141,7 @@ In the formalization of about 175,000 modules described in §2, the lakefile set
 A large project gains from several `[[lean_lib]]` blocks instead of one:
 
 - **Per-area limits.** A heavy area gets its own limits, and the rest of the project keeps Lean's defaults.
-- **Partial builds.** `lake build Fields` builds one area, and a challenge or witness library can be built without the development.
+- **Partial builds.** `lake build Fields` builds the modules of one area and everything they import, from any library. It stays partial only while the imports between libraries run one way (see "Keep the Imports Between Libraries One-Way" below). A challenge library that imports only Mathlib can be built without the development.
 - **Explicit defaults.** `defaultTargets` lists what a plain `lake build` builds.
 
 ```toml
@@ -193,6 +193,62 @@ Lake compiles each module with the options of the library whose `globs` or `root
 - **List the directories explicitly** when an area is split. Write `globs = ["Area.X.+", "Area.Y.+"]` for one part and the remaining directories for the other part, not `Area.+` with an exception.
 - **Remember the root file.** If a directory has a root module (`Foo/A.lean` next to `Foo/A/`), use `Foo.A.*` or add it to `roots`. With `Foo.A.+` the root file belongs to no library.
 - **A library-wide raise is still a raise.** The policy in §2 applies: give the reason in a lakefile comment, as in the example above, and keep the area as small as the cause.
+
+### Keep the Imports Between Libraries One-Way
+
+Lake orders a build module by module, not library by library. Measured with Lake from Lean `v4.33.1`, `v4.35.0` and `v4.36.0`:
+
+| Situation                                                               | What Lake did                                                                                           |
+| :---------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------ |
+| Libraries `A` and `B` import each other's modules, with no module cycle | `lake build` succeeded without a warning                                                                |
+| `lake build A`, where a module of `A` imports a module of `B`           | Built that module of `B` and its imports as well                                                        |
+| A module of a path dependency imports a module of the root package      | The workspace build succeeded; only building the dependency on its own failed (`unknown module prefix`) |
+
+These versions have no `lean_lib` setting that restricts what a library may import. Splitting a project into libraries therefore sets no direction, and splitting it into packages sets none for a build of the whole workspace. The direction holds only if something checks it.
+
+In the formalization of about 175,000 modules mentioned in §2, 8 of the 12 libraries in the lakefile formed one cycle: each of them reached every other one through its imports. 14 pairs of libraries imported each other directly, for example:
+
+| Libraries `A` / `B`                                                | Imports of `B` in `A` | Imports of `A` in `B` |
+| :----------------------------------------------------------------- | --------------------: | --------------------: |
+| `Formalism` / `ReciprocityTheory`                                  |                   348 |                   266 |
+| `Lemmata` / `Formalism`                                            |                   634 |                   118 |
+| `GroundTheory` / `GroundTheoryFields` (the split for limits above) |                   279 |                    55 |
+
+Computed from the import lines, building the library `Lemmata`, which has 167 modules, takes 836 modules, 649 of them from `Formalism`. Building `GroundTheory` takes 1,217 modules from other libraries, 423 of them from `ReciprocityTheory`. Both builds were still far smaller than the whole project, but the library names did not tell what they would include.
+
+`library_dag.py` from `lean4-cli` reads the libraries from `lakefile.toml` and the `import` lines of their source files, so it needs no build. Write down which other libraries each library may import, with one entry per library. For the lakefile above:
+
+```json
+{
+  "Core": [],
+  "Fields": ["Core"],
+  "Witnesses": ["Core", "Fields"],
+  "Main": ["Core", "Fields"]
+}
+```
+
+```bash
+python3 <skills-path>/lean4-cli/scripts/library_dag.py . --allow library-dag.json
+```
+
+The lists are not transitive: a library imports only what its own entry names. The script rejects a file whose entries form a cycle, and exits with code `1` on any import that is not allowed:
+
+```text
+  Core -> Fields: 1 import(s) in 1 module(s)  [NOT ALLOWED]
+      ./MyProject/Algebra/Basic.lean imports MyProject.LocalFields.Basic
+```
+
+Without `--allow`, it fails only if libraries depend on each other in a cycle.
+
+**Rules**:
+
+- **Decide the order when the libraries are declared.** Write the file with the lakefile, before the first proof file, and run the check in CI. A new library needs an entry, or the check stops with an error. A library split off for its limits (above) needs a place in the order too.
+- **Check against the file, not only for cycles.** A first import in the wrong direction creates no cycle while nothing leads back, directly or through other libraries, so the check without `--allow` passes it.
+- **Move shared declarations down.** When a lower library needs something from a higher one, move the declaration to the lower library or to a library below both, and update its importers.
+- **Do not add an entry just to make the check pass.** A new allowed import changes the design and needs a review, like raising a limit.
+- **Remove existing cycles before enforcing the order.** The script keeps no list of tolerated imports. The report of the run without `--allow` counts the imports in each direction, which shows how many each possible order would have to remove.
+
+The script checks the libraries of one package, not imports from dependencies or the modules of `lean_exe` targets. It requires Python 3.11+. For a `lakefile.lean`, translate the configuration with `lake translate-config toml <file>` and pass `--lakefile <file>`.
 
 ---
 
