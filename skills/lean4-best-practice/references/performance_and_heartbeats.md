@@ -166,6 +166,44 @@ lemma myComplexTermFrozen_def (x : BigType) :
 
 Using the frozen definition prevents the elaborator from expanding the internals, dropping heartbeat counts from 500k+ to <10k.
 
+#### Freezing an Existing Definition Locally
+
+When the definition that unfolds too far belongs to Mathlib or another module, change its reducibility only where it hurts, inside a `section`:
+
+```lean
+section
+attribute [local irreducible] heavy   -- `seal heavy` has the same effect
+-- `heavy` is not unfolded by `isDefEq` here; `unfold heavy` and `simp only [heavy]` still work
+theorem uses_heavy : ... := by ...
+end
+-- outside the section, `heavy` unfolds as before
+```
+
+What Lean accepts depends on the definition's current status (verified on Lean `v4.33.1`):
+
+| Change                                                               | Accepted?                                                                                                                                    |
+| :------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ordinary `def` → `attribute [local irreducible]` or `seal`           | Yes, also for definitions imported from other modules                                                                                        |
+| Imported `def` → `attribute [irreducible]` (global)                  | No: ``failed to set reducibility status, `heavy` has not been defined in this file, consider using the `local` modifier``                    |
+| `abbrev` / `@[reducible]` → irreducible (`local`, `seal`, any file)  | No: ``failed to set `[local irreducible]`, `X` is currently `[reducible]`, `[semireducible]` ... expected``. Needs `allowUnsafeReducibility` |
+| `@[irreducible] def` → `attribute [local semireducible]` or `unseal` | Yes                                                                                                                                          |
+
+**`abbrev` is reducible on purpose.** Instances and `simp` reach the underlying type through it: with `abbrev Carrier : Type := Nat`, `a + b` for `a b : Carrier` uses `Nat`'s instance. Making `Carrier` irreducible breaks that (`failed to synthesize instance of type class`), which is why Lean demands `set_option allowUnsafeReducibility true`.
+
+- Prefer a frozen wrapper (`@[irreducible] def`, the pattern above) or, for your own code, a `def` with explicit instances instead of an `abbrev`.
+- If a local override of an `abbrev` is still the right tool, scope it tightly and say why:
+
+  ```lean
+  section
+  set_option allowUnsafeReducibility true in
+  -- `Per.Acris` unfolds to a large completion; the lemmas below only need its ring structure
+  attribute [local irreducible] Per.Acris
+  ...
+  end
+  ```
+
+- Expect review tools to flag the option: `lean4-cli`'s `scan_risky_constructs.py` reports `allowUnsafeReducibility` as `unsafe-code`.
+
 ### Cause 3: Typeclass Search Cascades & Missing Type Annotations
 
 - **Problem**: When a term has uninstantiated metavariables or implicit parameters, Lean initiates typeclass synthesis across thousands of potential paths.

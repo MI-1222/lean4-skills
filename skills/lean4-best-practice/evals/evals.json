@@ -55,6 +55,18 @@
         "Mentions that `sizeOf`-based well-founded recursion stops working",
         "Advises against setting the options file-wide or project-wide"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Elaboration is slow because `Carrier` keeps unfolding, so I tried to freeze it locally, but Lean rejects the attribute with: failed to set `[local irreducible]`, `Carrier` is currently `[reducible]`, `[semireducible]`, `[implicit_reducible]` nor `[instance_reducible]` expected. Should I just add `set_option allowUnsafeReducibility true`?\n\n```lean\nabbrev Carrier : Type := Nat\n\nsection\nattribute [local irreducible] Carrier\ntheorem slow_lemma (a b : Carrier) : a + b = b + a := Nat.add_comm a b\nend\n```",
+      "expected_output": "Explanation that `abbrev` is reducible on purpose and that instances reach `Nat` through it, so making it irreducible breaks instance search (`a + b` on `Carrier` fails to synthesize), which is why Lean requires `allowUnsafeReducibility`. Recommends a frozen `@[irreducible] def` wrapper or a `def` with explicit instances; if the option is still used, scope it with `in` inside a section with a comment and note that review tools flag it. Contrasts with ordinary `def`s, which accept `attribute [local irreducible]` or `seal` without the option.",
+      "files": [],
+      "expectations": [
+        "Explains that reducible-to-irreducible changes are rejected because `abbrev` is meant to unfold (e.g. for instances)",
+        "Warns that the statement `a + b` on `Carrier` would fail to find `Nat`'s instance if `Carrier` were irreducible",
+        "Prefers an `@[irreducible]` wrapper definition or a `def` over enabling the option globally",
+        "If the option is used, scopes it with `set_option ... in` inside a `section` and documents why"
+      ]
     }
   ]
 }
