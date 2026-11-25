@@ -26,6 +26,7 @@ This skill provides an authoritative guide for AI agents and human practitioners
 ### Version-Specific Conventions
 
 - **Import Pruning**: Since Lean `v4.28.0`, `lake shake` is a built-in Lake command (lean4#11921). Before that, shake was a separate script (`script/Shake.lean`) and was run as `lake exe shake`.
+- **Module Locations**: On 2026-08-27, Mathlib moved `Mathlib.Data.Real.Basic` and `Mathlib.Data.Complex.Basic` to `Mathlib.Basic.Real.Basic` and `Mathlib.Basic.Complex.Basic`. From then on (Mathlib `v4.35.0` included), the old names are deprecated modules (`deprecated_module`, Lean `v4.31.0`+) that still compile but warn on import. Mathlib `v4.33.1` and older have only the old names.
 - **Classical Scoping**: Use `open scoped Classical in` instead of global `open Classical` to satisfy Mathlib linters.
 - **Instance Management**: Use plain anonymous `have` (Lean 4.14+) rather than `haveI` (deprecated since Lean 4.14), and `omit [...] in` (Lean 4.11+) to control instance scope.
 

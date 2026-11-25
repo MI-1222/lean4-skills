@@ -53,12 +53,15 @@ Mathlib modules follow a hierarchical structure:
 | Mathematical Domain                        | Recommended Submodules                                                                               | Key Concepts & Solvers Provided                                          |
 | :----------------------------------------- | :--------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- |
 | **Elementary Algebra (Groups, Rings)**     | `Mathlib.Algebra.Group.Defs`<br>`Mathlib.Algebra.Group.Basic`<br>`Mathlib.Algebra.Ring.Basic`        | Semigroups, monoids, groups, rings, basic algebraic operations           |
-| **Order & Lattice Theory**                 | `Mathlib.Order.Bounds`<br>`Mathlib.Order.Monotone.Basic`<br>`Mathlib.Order.Lattice`                  | Partial orders, bounds (`sSup`, `sInf`), monotone maps, lattices         |
-| **Real & Complex Numbers**                 | `Mathlib.Basic.Real.Basic`<br>`Mathlib.Data.Complex.Basic`                                           | Complete ordered field structure of `ℝ`, complex arithmetic              |
+| **Order & Lattice Theory**                 | `Mathlib.Order.Bounds.Basic`<br>`Mathlib.Order.Monotone.Basic`<br>`Mathlib.Order.Lattice`            | Partial orders, bounds (`sSup`, `sInf`), monotone maps, lattices         |
+| **Real & Complex Numbers**                 | `Mathlib.Basic.Real.Basic`<br>`Mathlib.Basic.Complex.Basic`                                          | Complete ordered field structure of `ℝ`, complex arithmetic              |
 | **Elementary Calculus / Analysis**         | `Mathlib.Analysis.Calculus.Deriv.Basic`<br>`Mathlib.Analysis.SpecialFunctions.Pow.Real`              | Single-variable derivatives (`deriv`), real powers, exp, log             |
 | **Topology**                               | `Mathlib.Topology.Basic`<br>`Mathlib.Topology.Constructions`<br>`Mathlib.Topology.MetricSpace.Basic` | Open sets, neighborhoods, continuity, metric spaces                      |
 | **Linear Arithmetic & Inequality Tactics** | `Mathlib.Tactic.Linarith`<br>`Mathlib.Tactic.Ring`<br>`Mathlib.Tactic.Positivity`                    | `linarith`, `nlinarith`, `ring`, `positivity` tactics                    |
-| **Integer / Natural Arithmetic**           | `Mathlib.Tactic.Omega`<br>`Mathlib.Data.Nat.Basic`                                                   | `omega` tactic (Lean 4.7+ Core) for Presburger arithmetic on `ℕ` and `ℤ` |
+| **Integer / Natural Arithmetic**           | `Mathlib.Data.Nat.Basic` (no import needed for `omega`)                                              | `omega` tactic (Lean 4.7+ Core) for Presburger arithmetic on `ℕ` and `ℤ` |
+
+> [!NOTE]
+> **Module names change between Mathlib versions.** On 2026-08-27, Mathlib moved `Mathlib.Data.Real.Basic` and `Mathlib.Data.Complex.Basic` to `Mathlib.Basic.Real.Basic` and `Mathlib.Basic.Complex.Basic`. In Mathlib `v4.35.0`, the old names still exist as deprecated modules (`deprecated_module`, available since Lean `v4.31.0`), and importing one warns: `'Mathlib.Data.Real.Basic' has been deprecated: please replace this import by import Mathlib.Basic.Real.Basic`. Mathlib `v4.33.1` has only the old names. Before copying a module name from any guide, check that the file exists in the Mathlib your project pins (`.lake/packages/mathlib/Mathlib/...`).
 
 ---
 
