@@ -196,33 +196,34 @@ python3 <skill-path>/scripts/scan_risky_constructs.py --list-rules
 | `--json`             | Print the full report as JSON.                                                           |
 | `--list-rules`       | Print the rule catalog and exit.                                                         |
 
-**Scale**: a project of 175,187 files (about 1 GB of source) is scanned in 10 to 20 seconds with automatic parallelism on 12 cores, using about 130 MB of memory. The report does not depend on `--jobs`.
+**Scale**: a project of 175,187 files (about 1 GB of source) is scanned in about 10 seconds with automatic parallelism on 12 cores, using about 160 MB of memory. The report does not depend on `--jobs`.
 
 **Exit codes**: `0` = no finding at or above `--fail-on`; `1` = at least one such finding; `2` = usage error (unknown rule, missing path, no `.lean` files).
 
 ### Rule Catalog
 
-| Severity     | Rule ID                    | Detects                                                                                                          |
-| :----------- | :------------------------- | :--------------------------------------------------------------------------------------------------------------- |
-| **critical** | `sorry`, `admit`           | Unproven placeholders (`sorryAx`)                                                                                |
-| **critical** | `sorry-internals`          | `sorryAx`, `mkSorry`, `admitGoal` used directly (e.g. hidden inside a custom tactic)                             |
-| **critical** | `axiom-declaration`        | User-declared `axiom`                                                                                            |
-| **critical** | `native-evaluation`        | `native_decide`, `decide +native`, `Lean.ofReduceBool`, `Lean.ofReduceNat`, `Lean.trustCompiler`                 |
-| **critical** | `kernel-check-bypass`      | `set_option debug.*` (e.g. `debug.skipKernelTC`), `addDeclWithoutChecking`                                       |
-| **warning**  | `goal-assignment`          | `.assign`, `.checkedAssign`, `assignExprMVar`, `closeMainGoal`, `closeMainGoalUsing`: possible elaborator bypass |
-| **warning**  | `metaprogram-evaluation`   | `run_tac`, `run_cmd`, `run_elab`, `run_meta`, `#eval`                                                            |
-| **warning**  | `environment-modification` | `addDecl`, `addAndCompile`, `modifyEnv`, `setEnv`                                                                |
-| **warning**  | `initializer`              | `initialize` / `builtin_initialize` (runs on import)                                                             |
-| **warning**  | `unsafe-code`              | `unsafe`, `unsafeCast`, `unsafeIO`, `allowUnsafeReducibility`                                                    |
-| **warning**  | `compiler-trust`           | `implemented_by`, `extern`                                                                                       |
-| **warning**  | `sat-certificate`          | `bv_decide`, `bv_check` (confirm the axiom list; reliance on native evaluation depends on the version)           |
-| **warning**  | `global-notation`          | `notation` / `infix` / `prefix` / `postfix` without `local` or `scoped`                                          |
-| **warning**  | `io-side-effect`           | `IO.Process`, `IO.FS`, `IO.getEnv` (processes, files, environment variables during elaboration)                  |
-| **info**     | `lean-meta-import`         | `import Lean` / `import Lean.*` (metaprogramming API available)                                                  |
-| **info**     | `syntax-extension`         | `macro`, `macro_rules`, `syntax`, `elab`, `elab_rules`, `declare_syntax_cat`                                     |
-| **info**     | `kernel-defeq-call`        | `Kernel.isDefEq`, `Kernel.whnf` called from a metaprogram (often decides whether to assign a goal)               |
-| **info**     | `opaque-declaration`       | `opaque` constants                                                                                               |
-| _as source_  | `<rule>-via-syntax`        | A use of custom syntax whose definition contains `<rule>` (see below)                                            |
+| Severity     | Rule ID                      | Detects                                                                                                                          |
+| :----------- | :--------------------------- | :------------------------------------------------------------------------------------------------------------------------------- |
+| **critical** | `sorry`, `admit`             | Unproven placeholders (`sorryAx`)                                                                                                |
+| **critical** | `sorry-internals`            | `sorryAx`, `mkSorry`, `admitGoal` used directly (e.g. hidden inside a custom tactic)                                             |
+| **critical** | `axiom-declaration`          | User-declared `axiom`                                                                                                            |
+| **critical** | `native-evaluation`          | `native_decide`, `decide +native`, `Lean.ofReduceBool`, `Lean.ofReduceNat`, `Lean.trustCompiler`                                 |
+| **critical** | `kernel-check-bypass`        | `set_option debug.*` (e.g. `debug.skipKernelTC`), `addDeclWithoutChecking`                                                       |
+| **warning**  | `goal-assignment`            | `.assign`, `.checkedAssign`, `assignExprMVar`, `closeMainGoal`, `closeMainGoalUsing`: possible elaborator bypass                 |
+| **warning**  | `metaprogram-evaluation`     | `run_tac`, `run_cmd`, `run_elab`, `run_meta`, `#eval`                                                                            |
+| **warning**  | `environment-modification`   | `addDecl`, `addAndCompile`, `modifyEnv`, `setEnv`                                                                                |
+| **warning**  | `initializer`                | `initialize` / `builtin_initialize` (runs on import)                                                                             |
+| **warning**  | `unsafe-code`                | `unsafe`, `unsafeCast`, `unsafeIO`, `allowUnsafeReducibility`                                                                    |
+| **warning**  | `compiler-trust`             | `implemented_by`, `extern`                                                                                                       |
+| **warning**  | `sat-certificate`            | `bv_decide`, `bv_check` (confirm the axiom list; reliance on native evaluation depends on the version)                           |
+| **warning**  | `global-notation`            | `notation` / `infix` / `prefix` / `postfix` without `local` or `scoped`                                                          |
+| **warning**  | `statement-affecting-option` | `set_option autoImplicit true`, `set_option relaxedAutoImplicit true`, `set_option hygiene false` (see "Local Option Overrides") |
+| **warning**  | `io-side-effect`             | `IO.Process`, `IO.FS`, `IO.getEnv` (processes, files, environment variables during elaboration)                                  |
+| **info**     | `lean-meta-import`           | `import Lean` / `import Lean.*` (metaprogramming API available)                                                                  |
+| **info**     | `syntax-extension`           | `macro`, `macro_rules`, `syntax`, `elab`, `elab_rules`, `declare_syntax_cat`                                                     |
+| **info**     | `kernel-defeq-call`          | `Kernel.isDefEq`, `Kernel.whnf` called from a metaprogram (often decides whether to assign a goal)                               |
+| **info**     | `opaque-declaration`         | `opaque` constants                                                                                                               |
+| _as source_  | `<rule>-via-syntax`          | A use of custom syntax whose definition contains `<rule>` (see below)                                                            |
 
 The `<rule>-via-syntax` rules exist for `sorry`, `admit`, `sorry-internals`, `native-evaluation`, `kernel-check-bypass` (all **critical**), `goal-assignment` and `environment-modification` (**warning**). Each has the severity of its source rule.
 
@@ -266,6 +267,37 @@ Findings:
 - **Overriding existing syntax is caught too.** `macro_rules | `(tactic| decide) => `(tactic| sorry)` makes every later `decide` a `sorry`; each such `decide` is reported as `sorry-via-syntax` (critical).
 - **Limits**: atoms are matched by name across all scanned files, so a harmless `local` macro that reuses the name of a tainted one is reported as well (a false positive, never a miss). Helpers are followed only within the same file, and syntax produced by code generation or by syntax defined outside the scanned paths (e.g. in a dependency) is not traced.
 
+### Local Option Overrides
+
+The lakefile's `leanOptions` set the project's policy, but any file can change an option with `set_option`. The scanner counts every `set_option` by option and value, with how many are limited by `in` and how many files contain them:
+
+```text
+Local option settings (option value: occurrences / with `in` / files):
+  autoImplicit false                                        11203 / 458 / 10743
+  maxSynthPendingDepth 1                                     7477 / 1 / 7477
+  backward.isDefEq.respectTransparency false                 1877 / 350 / 1727
+  hygiene false                                                31 / 31 / 15
+```
+
+Compare each row with the lakefile. The rows above come from one formalization of about 175,000 files whose lakefile sets `autoImplicit = false` and `maxSynthPendingDepth = 3`:
+
+- **The same value as the lakefile** (`autoImplicit false`) is redundant and changes nothing. Counting options without their values would have shown 11,203 `autoImplicit` overrides that are in fact harmless.
+- **A different value** (`maxSynthPendingDepth 1`, Lean's default) means those files are elaborated under a different policy. Find out why before relying on the lakefile setting.
+- **A setting without `in`** applies to the rest of the file, or of the enclosing `section` or `namespace`.
+- **`backward.*` options** restore an older elaborator behavior, typically to keep old proofs working after a toolchain upgrade. They do not affect soundness, but each one is a candidate for removal.
+
+Three values can change what a statement or notation means; they are also reported as `statement-affecting-option` (warning). Verified on Lean `v4.35.0`, in a file whose project setting is `autoImplicit false`:
+
+| Setting                    | Effect                                                                                                                                                                                                                    |
+| :------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `autoImplicit true`        | An unbound single-letter name (`n`, `α`, `x1`) becomes an implicit argument: `theorem t : n ≤ n + 1` is elaborated as `∀ {n : Nat}, n ≤ n + 1`                                                                            |
+| `relaxedAutoImplicit true` | Together with `autoImplicit true`, any unbound name qualifies, so a misspelling such as `limt` for `limit` turns the statement into a claim about every `limt`                                                            |
+| `hygiene false`            | Identifiers in a macro or notation are resolved where it is used. With `notation "Ψ" => bound + 1` and `def bound := 41`, `Ψ` evaluates to `42` at top level but to `1` in `def shadow (bound : Nat) := Ψ` applied to `0` |
+
+`quotPrecheck false` appears only in the option census. On its own, it only postpones an unknown-identifier error in a notation from the definition to the place of use; together with `hygiene false`, a notation can also name identifiers that do not exist yet where it is defined (`bound` in the example above was defined after the notation). The `hygiene false` finding already covers that case.
+
+For each `statement-affecting-option` finding, read the statements and notations it covers: with `in`, the next command; without `in`, the rest of the scope.
+
 ### JSON Output Schema
 
 ```json
@@ -282,6 +314,15 @@ Findings:
       "count": 1,
       "file_count": 1,
       "description": "Assigns a metavariable directly. ..."
+    }
+  ],
+  "option_census": [
+    {
+      "option": "maxHeartbeats",
+      "value": "400000",
+      "count": 3,
+      "scoped_count": 3,
+      "file_count": 2
     }
   ],
   "traced_syntax": [
@@ -317,6 +358,7 @@ Findings:
 ```
 
 - `census` lists **every** rule, including zero counts, so the report doubles as a reproducible "nothing found" record.
+- `option_census` lists every `set_option` value found, most frequent first; `scoped_count` counts the settings followed by `in`. Text mode prints the first 40 rows.
 - `traced_syntax` lists each tainted atom with the constructs it hides, its definitions and its number of uses.
 - `findings[].text` is the trimmed source line (up to 200 characters). `via` and `defined_at` are present only on `<rule>-via-syntax` findings.
 
@@ -336,6 +378,8 @@ Typical `warning` findings and how to read them:
 | `elab ... => ... g.assign ...` and its `goal-assignment-via-syntax` uses                     | Elaborator bypass              | The tactic's name, the number of uses (`traced_syntax`), and that the affected theorems pass kernel replay |
 | `kernel-defeq-call` next to a goal assignment                                                | Bypass with a kernel pre-check | The tactic accepts a term when the kernel finds it defeq; the elaborator's own check is still skipped      |
 | `addDecl` in a custom command and its `environment-modification-via-syntax` uses             | Declarations copied or built   | Which declarations are added under which names, at each use; the kernel checks each added declaration      |
+| `set_option autoImplicit true` (with or without `relaxedAutoImplicit true`)                  | Statement meaning may change   | The auto-bound implicits of each covered theorem (`#check @t`); each must be intended, not a misspelling   |
+| `set_option hygiene false in` before a `notation` or `macro`                                 | Statement meaning may change   | The notations or macros it covers, and what each name in them resolves to where statements use them        |
 
 > [!WARNING]
 > **A text scan is not a proof.** The scanner works on text, so it can miss constructs produced by macros or code generation, and it can flag harmless identifiers. A clean scan narrows the review; only the kernel checks in §7–§8 establish correctness.

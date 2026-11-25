@@ -12,6 +12,10 @@ Custom syntax (tactics, terms and commands defined with `elab`, `macro`, `syntax
 to every place that uses it, including through other macros and same-file helper `def`s,
 so that a construct hidden behind a new name is reported where it takes effect.
 
+Every `set_option` is also counted by option and value, so local overrides of project-wide
+settings (e.g. `autoImplicit true` in a project whose lakefile sets it to `false`) can be
+compared with the lakefile.
+
 A text search is not a proof. The results do not replace kernel replay
 (`leanchecker`, Comparator, ...); treat them as a first-pass filter that narrows
 down what a human reviewer must read.
@@ -94,6 +98,18 @@ TRACED_RULE_IDS = (
 
 # Suffix of the derived rule that reports a use of custom syntax hiding a traced construct.
 VIA_SYNTAX_SUFFIX = "-via-syntax"
+
+# `set_option` command or tactic and its option name; matched on the masked text.
+SET_OPTION_RE = re.compile(r"\bset_option\s+(?P<name>[A-Za-z_][\w.']*)(?=\s)")
+
+# Value of a `set_option`, read from the original text so that string values are kept.
+OPTION_VALUE_RE = re.compile(r'"(?:[^"\\\n]|\\.)*"|[^\s()\[\]{},]+')
+
+# `in` after a `set_option` value: the setting is limited to the next command or tactic.
+SCOPED_SUFFIX_RE = re.compile(r"\s+in(?![\w'!?])")
+
+# Rows of the option census printed in text mode; JSON output always lists all.
+TEXT_OPTION_ROWS = 40
 
 
 @dataclass(frozen=True)
@@ -257,6 +273,18 @@ RULES: list[Rule] = [
         "Global notation (not `local` / `scoped`); can change how a theorem statement reads.",
         accept=_is_unscoped,
         keywords=("notation", "infix", "prefix", "postfix"),
+    ),
+    Rule(
+        "statement-affecting-option",
+        "warning",
+        _compile(
+            r"\bset_option\s+(?:autoImplicit|relaxedAutoImplicit)\s+true(?![\w'])"
+            r"|\bset_option\s+hygiene\s+false(?![\w'])"
+        ),
+        "Turns automatic implicit arguments back on, or turns hygiene off. A misspelled name can "
+        "become a universally quantified variable, and a macro or notation can pick up names "
+        "where it is used; read the statements in scope.",
+        keywords=("autoImplicit", "AutoImplicit", "hygiene"),
     ),
     Rule(
         "io-side-effect",
@@ -541,6 +569,36 @@ def scan_source(source: str, rules: list[Rule]) -> list[dict[str, Any]]:
     return scan_masked(source, mask_comments_and_strings(source), rules)
 
 
+def collect_option_settings(source: str, masked: str) -> list[tuple[str, str, bool]]:
+    """
+    List the `set_option` commands and tactics of one file.
+
+    The option name is read from the masked text, so settings inside comments and strings are
+    skipped. The value is read from the original text, so a string value is kept as written;
+    comments between the name and the value are skipped.
+
+    :param source: Full Lean source text.
+    :param masked: Output of `mask_comments_and_strings(source)`.
+    :return: One `(option, value, scoped)` tuple per setting, where `scoped` is `True` when the
+        value is followed by `in`.
+    """
+    if "set_option" not in masked:
+        return []
+    settings = []
+    length = len(masked)
+    for match in SET_OPTION_RE.finditer(masked):
+        # Blank masked text is whitespace or a comment, except where a string value begins.
+        start = match.end()
+        while start < length and masked[start].isspace() and source[start] != '"':
+            start += 1
+        value_match = OPTION_VALUE_RE.match(source, start)
+        if value_match is None:
+            continue
+        scoped = SCOPED_SUFFIX_RE.match(masked, value_match.end()) is not None
+        settings.append((match.group("name"), value_match.group(0), scoped))
+    return settings
+
+
 def _command_end(masked: str, start: int, indent_width: int) -> int:
     """
     Return the end of the command that starts at `start`.
@@ -749,22 +807,31 @@ def _read_source(file_path: str) -> str:
 
 def _analyze_file(
     task: tuple[str, tuple[str, ...]],
-) -> tuple[str, list[dict[str, Any]], list[SyntaxUnit], str | None]:
+) -> tuple[
+    str, list[dict[str, Any]], list[SyntaxUnit], list[tuple[str, str, bool]], str | None
+]:
     """
-    First pass over one file: pattern findings and syntax definitions.
+    First pass over one file: pattern findings, syntax definitions and option settings.
 
     :param task: File path and the IDs of the rules to apply.
-    :return: File path, findings, syntax definitions, and an error message if the file is unreadable.
+    :return: File path, findings, syntax definitions, `set_option` settings, and an error
+        message if the file is unreadable.
     """
     file_path, rule_ids = task
     try:
         source = _read_source(file_path)
     except OSError as error:
-        return file_path, [], [], str(error)
+        return file_path, [], [], [], str(error)
     masked = mask_comments_and_strings(source)
     rules = [RULES_BY_ID[rule_id] for rule_id in rule_ids]
     findings = [{"file": file_path, **f} for f in scan_masked(source, masked, rules)]
-    return file_path, findings, collect_syntax_units(file_path, source, masked), None
+    return (
+        file_path,
+        findings,
+        collect_syntax_units(file_path, source, masked),
+        collect_option_settings(source, masked),
+        None,
+    )
 
 
 def _find_atom_uses(
@@ -836,7 +903,9 @@ def build_report(
     findings: list[dict[str, Any]] = []
     unreadable: list[dict[str, str]] = []
     units: list[SyntaxUnit] = []
-    for file_path, file_findings, file_units, error in _map_tasks(
+    # Per (option, value): occurrences, occurrences followed by `in`, and the files.
+    option_totals: dict[tuple[str, str], list[Any]] = {}
+    for file_path, file_findings, file_units, file_options, error in _map_tasks(
         _analyze_file, [(f, rule_ids) for f in files], jobs
     ):
         if error is not None:
@@ -844,6 +913,23 @@ def build_report(
             continue
         findings.extend(file_findings)
         units.extend(file_units)
+        for option, value, scoped in file_options:
+            total = option_totals.setdefault((option, value), [0, 0, set()])
+            total[0] += 1
+            total[1] += int(scoped)
+            total[2].add(file_path)
+    option_census = [
+        {
+            "option": option,
+            "value": value,
+            "count": count,
+            "scoped_count": scoped_count,
+            "file_count": len(option_files),
+        }
+        for (option, value), (count, scoped_count, option_files) in sorted(
+            option_totals.items(), key=lambda item: (-item[1][0], item[0])
+        )
+    ]
 
     tainted = trace_syntax(units)
     traced_syntax = []
@@ -925,6 +1011,7 @@ def build_report(
             f"{counts['warning']} warning(s), {counts['info']} info(s)"
         ),
         "census": census,
+        "option_census": option_census,
         "traced_syntax": traced_syntax,
         "findings": findings,
         "unreadable_files": unreadable,
@@ -948,6 +1035,20 @@ def format_text_report(report: dict[str, Any], max_findings: int) -> str:
         lines.append(
             f"  [{entry['severity']:<8}] {entry['rule']:<35} {entry['count']:>7} / {entry['file_count']}"
         )
+
+    option_census = report["option_census"]
+    if option_census:
+        lines.append("")
+        lines.append("Local option settings (option value: occurrences / with `in` / files):")
+        for entry in option_census[:TEXT_OPTION_ROWS]:
+            setting = f"{entry['option']} {entry['value']}"
+            lines.append(
+                f"  {setting:<55} {entry['count']:>7} / {entry['scoped_count']} / {entry['file_count']}"
+            )
+        if len(option_census) > TEXT_OPTION_ROWS:
+            lines.append(
+                f"  ... {len(option_census) - TEXT_OPTION_ROWS} more (use --json to list all)"
+            )
 
     if report["traced_syntax"]:
         lines.append("")
@@ -994,7 +1095,8 @@ def main() -> None:
         description=(
             "Scan Lean 4 sources for constructs that need a soundness review "
             "(sorry, axioms, native evaluation, elaborator bypass, environment hacking, global notation), "
-            "and follow custom syntax that hides them to the places that use it."
+            "follow custom syntax that hides them to the places that use it, "
+            "and count every `set_option` by option and value."
         ),
     )
     parser.add_argument(
