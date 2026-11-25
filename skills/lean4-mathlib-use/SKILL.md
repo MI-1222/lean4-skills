@@ -25,7 +25,7 @@ This skill provides an authoritative guide for AI agents and human practitioners
 
 ### Version-Specific Conventions
 
-- **Import Pruning**: Prune targeted imports via `lake exe shake`.
+- **Import Pruning**: Since Lean `v4.28.0`, `lake shake` is a built-in Lake command (lean4#11921). Before that, shake was a separate script (`script/Shake.lean`) and was run as `lake exe shake`.
 - **Classical Scoping**: Use `open scoped Classical in` instead of global `open Classical` to satisfy Mathlib linters.
 - **Instance Management**: Use plain anonymous `have` (Lean 4.14+) rather than `haveI` (deprecated since Lean 4.14), and `omit [...] in` (Lean 4.11+) to control instance scope.
 

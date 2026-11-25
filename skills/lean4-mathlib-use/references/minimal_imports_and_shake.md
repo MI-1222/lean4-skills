@@ -81,6 +81,8 @@ Mathlib provides a dedicated static analysis tool called `shake` to detect and r
 
 ### Running `shake`
 
+`lake shake` is a built-in Lake command since Lean `v4.28.0` (lean4#11921). On older toolchains, shake was a separate script and was run as `lake exe shake`.
+
 1. **Audit Unused Imports**:
 
    ```bash
