@@ -1,0 +1,185 @@
+# Statement-First Decomposition (Scaling Top-Down Proofs)
+
+[Sorry-driven development](sorry_driven_development.md) works well inside one file: the skeleton lives in a single theorem, and each `have ... := by sorry` is a milestone. When a formalization grows to many files, several agents, or a long-running effort, two problems appear:
+
+1. **Sorries leak into every audit.** While any milestone is open, `#print axioms` on everything downstream reports `sorryAx`, so you cannot tell finished parts from unfinished ones.
+2. **Proof files import each other.** Downstream files must import the files that _prove_ their prerequisites, so the build graph becomes a long chain and nothing can be built or worked on in parallel.
+
+**Statement-first decomposition** solves both by splitting every milestone into a **statement** (a `Prop`-valued definition) and a **proof** that takes the statements of its prerequisites as hypotheses. The pattern has been used at very large scale (thousands of `X.Statement` definitions in a single formalization).
+
+---
+
+## 1. The Pattern
+
+Each milestone `X` gets two declarations:
+
+| Declaration   | Kind                     | Lives in           | Depends on                           |
+| :------------ | :----------------------- | :----------------- | :----------------------------------- |
+| `X.Statement` | `def X.Statement : Prop` | a statements file  | definitions only, never proofs       |
+| `X.proof`     | `theorem`                | its own proof file | statements of its prerequisites only |
+
+A final **assembly** theorem plugs the proofs into each other and has no hypotheses.
+
+```lean
+namespace Demo
+
+/-- Contract for the first milestone. -/
+def AddZero.Statement : Prop := ∀ n : Nat, n + 0 = n
+
+/-- Contract for the second milestone. -/
+def ZeroAdd.Statement : Prop := ∀ n : Nat, 0 + n = n
+
+/-- Contract for the main result. -/
+def Main.Statement : Prop := ∀ n : Nat, n + 0 = 0 + n
+
+theorem AddZero.proof : AddZero.Statement := by
+  intro n
+  rfl
+
+theorem ZeroAdd.proof : ZeroAdd.Statement := by
+  intro n
+  exact Nat.zero_add n
+
+/-- The main argument, conditional on its two prerequisites. -/
+theorem Main.proof (hAddZero : AddZero.Statement) (hZeroAdd : ZeroAdd.Statement) :
+    Main.Statement := by
+  intro n
+  rw [hAddZero n, hZeroAdd n]
+
+/-- Assembly: no hypotheses remain. -/
+theorem main : Main.Statement := Main.proof AddZero.proof ZeroAdd.proof
+
+end Demo
+```
+
+- `intro` unfolds `X.Statement` to reach its binders, so a proof starts exactly as if the statement were written inline.
+- A hypothesis `h : X.Statement` can be applied directly (`h n`) because application also unfolds the definition.
+
+### File Layout
+
+```text
+MyProject/
+├── Statements/Analysis.lean     -- def AddZero.Statement, def ZeroAdd.Statement, ...
+├── Statements/Main.lean         -- def Main.Statement
+├── Proofs/AddZero.lean          -- import Statements.Analysis;              theorem AddZero.proof
+├── Proofs/ZeroAdd.lean          -- import Statements.Analysis;              theorem ZeroAdd.proof
+├── Proofs/Main.lean             -- import Statements.Analysis, Statements.Main; theorem Main.proof
+└── Main.lean                    -- imports all Proofs/*;                     theorem main
+```
+
+Proof files import **only statements files** (and the definitions those need). They never import each other, so Lake can build them in parallel, and editing one proof does not rebuild the others.
+
+---
+
+## 2. Why It Helps
+
+1. **The statement is the header fence.** `X.Statement` is the immutable contract from [header_fence_and_docstrings.md](header_fence_and_docstrings.md), written down once in a file that contains no proofs. Whoever proves `X` must produce exactly `theorem X.proof ... : X.Statement`.
+2. **No `sorry` in intermediate states.** An unfinished milestone is simply an unproven statement, not a `sorryAx` that contaminates everything downstream. Finished parts can be built, checked and reviewed while others are still open.
+3. **Parallel work and parallel builds.** Each `X.proof` can be handed to a different agent or person, and the files build concurrently.
+4. **Progress is explicit.** The open work is exactly the set of statements that no assembly yet discharges, visible from the assembly theorem's dependencies.
+
+### When to Use It
+
+| Situation                                                      | Recommended structure                                 |
+| :------------------------------------------------------------- | :---------------------------------------------------- |
+| One theorem, a handful of milestones, one session              | `have ... := by sorry` in one file (sorry-driven)     |
+| Several helper lemmas in one file                              | Standalone lemmas with `sorry` (sorry-driven, Step 4) |
+| Many files, multiple agents or contributors, long-running work | Statement-first decomposition                         |
+
+---
+
+## 3. Pitfalls and Rules
+
+### 3.1. Conditional Proofs Look Clean to `#print axioms` (Critical)
+
+A proof that takes statements as hypotheses reports **no axioms at all**, even if those statements are never proved:
+
+```lean
+#print axioms Demo.Main.proof
+-- 'Demo.Main.proof' does not depend on any axioms
+```
+
+`Main.proof` is only a conditional result. Its type, `AddZero.Statement → ZeroAdd.Statement → Main.Statement`, shows the open prerequisites, but the axiom list does not.
+
+**Rules**:
+
+- Run the soundness audit (`#print axioms`) **only on assembly theorems**, never on `X.proof` declarations.
+- Confirm that the assembly theorem has **no statement hypotheses left**: `#check @Demo.main` must print `Demo.main : Demo.Main.Statement` with no arrows in front.
+- Never report a milestone as done because its `X.proof` compiles; it is done when an assembly that depends on it compiles without hypotheses.
+
+### 3.2. A False Statement Poisons Everything Downstream
+
+A conditional proof from a false statement is valid Lean and proves anything:
+
+```lean
+def Bogus.Statement : Prop := ∀ n : Nat, n = n + 1
+
+theorem zero_eq_one_of_bogus (h : Bogus.Statement) : (0 : Nat) = 1 := h 0
+-- 'zero_eq_one_of_bogus' does not depend on any axioms
+```
+
+Downstream work built on a wrong statement is wasted, and nothing fails until someone tries to prove the statement itself.
+
+**Rules**:
+
+- Before handing out or building on a statement, sanity-check it: probe boundary values and try to refute it (see `lean4-proof-repair` → `falsification_and_disproof.md`).
+- Prefer proving the riskiest statements first (the statement-level version of "hardest case first").
+
+### 3.3. Adding a Hypothesis Is a Contract Change
+
+An agent stuck on `X.proof` may be tempted to add a new hypothesis `(hY : Y.Statement)` for some convenient `Y`. That is exactly the goal drift the header fence forbids, in a new form: it moves the difficulty into an unproven statement.
+
+**Rules**:
+
+- The prerequisite list of `X.proof` is part of the plan. Adding a prerequisite requires the same approval as changing a theorem statement.
+- Every new statement must itself be scheduled for a proof and pass the falsification check in §3.2.
+
+### 3.4. Unfold Before Rewriting with a Statement
+
+`intro` and function application see through `X.Statement`, but `simp` and `rw` do not use a hypothesis `h : X.Statement` as a rewrite rule until the definition is unfolded:
+
+```lean
+def Foo (n : Nat) : Nat := n + 0
+
+-- ❌ Fails: simp reports "This simp argument is unused: h"
+example (h : AddZero.Statement) (m : Nat) : Foo m = m := by
+  simp only [Foo, h]
+
+-- ✅ Works: unfold the statement first
+example (h : AddZero.Statement) (m : Nat) : Foo m = m := by
+  unfold AddZero.Statement at h
+  simp only [Foo, h]
+
+-- ✅ Works: instantiate the hypothesis and rewrite with the result
+example (h : AddZero.Statement) (m : Nat) : Foo m = m := by
+  rw [Foo, h m]
+```
+
+Use `unfold X.Statement at h` (or `simp only [X.Statement] at h`), or apply the hypothesis to its arguments (`h m`) and rewrite with the result.
+
+### 3.5. Keep Statements Readable
+
+Statements written as one long `∀` over dozens of binders are hard to review, and reviewing them is the whole point (§3.2).
+
+- Bundle recurring data and hypotheses into a `structure` and quantify over that.
+- Give every `X.Statement` a docstring that states the claim in mathematical language.
+- Keep each statement close to the informal milestone it formalizes; split a statement rather than letting it grow.
+
+### 3.6. Choose the Granularity Deliberately
+
+One file per milestone maximizes parallelism, but every module has a fixed cost: Lean loads its imports, and Lake writes per-module build metadata. In a formalization with about 175,000 single-milestone modules, the per-module setup files Lake writes averaged about 6 MB each (around a terabyte in total) and had to be deleted during the build.
+
+- Group closely related milestones into one statements file and, where they are proved together, one proof file.
+- Split a proof into its own file when it is slow to elaborate, worked on independently, or frequently edited.
+- Statements files should import only what the definitions need. Importing proof files from a statements file brings back the long build chain.
+
+---
+
+## 4. Checklist
+
+- [ ] Does every milestone have a `def X.Statement : Prop` with a docstring, in a file that contains no proofs?
+- [ ] Does each `X.proof` take as hypotheses only the prerequisite statements listed in the plan?
+- [ ] Do proof files import statements files only, never other proof files?
+- [ ] Has each statement been sanity-checked against boundary values before others build on it?
+- [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
+- [ ] Was `#print axioms` run on the assembly theorem, not on conditional `X.proof` declarations?

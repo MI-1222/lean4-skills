@@ -26,7 +26,7 @@ A suite of skills designed for AI coding agents to autonomously perform formal m
 | [`lean4-proof-repair`](skills/lean4-proof-repair)           | Diagnoses and repairs common compiler errors (type mismatch, timeouts, etc.)                          | `references/*.md` (7 diagnostic guides)                    |
 | [`lean4-syntax`](skills/lean4-syntax)                       | Fast syntax checking and proof syntax reference (prevents Lean 3 contamination)                       | `scripts/check_syntax.py`, `references/*.md`               |
 | [`lean4-cli`](skills/lean4-cli)                             | Automates `lake`/`lean` commands, parses build logs into JSON, and audits proof soundness             | `scripts/parse_diagnostics.py`, `scan_risky_constructs.py` |
-| [`lean4-best-practice`](skills/lean4-best-practice)         | Top-down proof workflow (sorry-driven), `simp` discipline, and naming rules                           | `references/*.md` (6 practice guides)                      |
+| [`lean4-best-practice`](skills/lean4-best-practice)         | Top-down proof workflow (sorry-driven, statement-first), `simp` discipline, and naming rules          | `references/*.md` (8 practice guides)                      |
 | [`lean4-mathlib-search`](skills/lean4-mathlib-search)       | Searches Mathlib lemmas via Loogle (type signature), LeanSearch (semantic search), and inline tactics | `scripts/search_loogle.py`, `scripts/search_leansearch.py` |
 | [`lean4-mathlib-use`](skills/lean4-mathlib-use)             | Minimal imports, typeclass hierarchy guidance, junk values, and classical logic                       | `references/*.md` (4 usage guides)                         |
 

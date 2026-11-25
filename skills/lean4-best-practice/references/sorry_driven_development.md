@@ -121,3 +121,11 @@ When managing a project with numerous sorries:
    lake env lean path/to/File.lean
    ```
    Confirm that closing the sorry did not alter variable names or types relied upon downstream.
+
+---
+
+## 4. Scaling Beyond One File
+
+When the skeleton spans many files, several agents, or a long-running effort, open sorries start to contaminate every `#print axioms` audit downstream, and proof files end up importing each other in a long chain. At that point, switch from `sorry` placeholders to **statement-first decomposition**: write each milestone as a `def X.Statement : Prop` contract, prove it as `X.proof` conditional on its prerequisite statements, and discharge everything in a hypothesis-free assembly theorem.
+
+See [statement_first_decomposition.md](statement_first_decomposition.md) for the pattern, file layout, and its pitfalls (in particular: conditional proofs report no axioms, so audit only the assembly theorem).
