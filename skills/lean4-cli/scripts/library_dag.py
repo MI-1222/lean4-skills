@@ -52,7 +52,7 @@ except ModuleNotFoundError:
 # `python3 -I` and `-P` leave the script's directory out of the search path.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import import_depth  # noqa: E402
+import import_depth
 
 # Number of modules named in a warning.
 WARNING_EXAMPLES = 5
@@ -281,9 +281,9 @@ def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
         order of the keys of `graph`.
     """
     reachable: dict[str, set[str]] = {}
-    for start in graph:
+    for start, dependencies in graph.items():
         seen: set[str] = set()
-        stack = list(graph[start])
+        stack = list(dependencies)
         while stack:
             node = stack.pop()
             if node not in seen:
