@@ -378,3 +378,180 @@ Since Lean `v4.29.0`, unification no longer unfolds ordinary definitions automat
 - **One choice, one scope.** Name the scope after the choice it makes (`Matrix.Norms.Elementwise`, `MyProject.CMConjugation`), not after the file that first needed it. Reuse Mathlib's scope when one exists.
 - **Keep `attribute [local instance]` local.** Use it for a structure needed in one file or one section. Mathlib itself does this for a single section of `Mathlib/Analysis/Matrix/Normed.lean` (`attribute [local instance] Matrix.seminormedAddCommGroup`). A definition registered locally in more than a few files is a design decision and belongs in one place.
 - **Do not silence `warn.classDefReducibility`.** Add `@[instance_reducible]` to the definition instead.
+
+---
+
+## 8. Large Context Structures: Choose Type Indices Before Building on Them
+
+A formalization often collects its running data and assumptions in one structure (`Base` below) and defines further structures and types over it (`Frame (D : Base)`). The cost appears when a **variant** of that structure is needed, such as another level or a finer subdivision, and everything built over the old value has to be used for the new one.
+
+### 8.1. Index on the Components Used, Not on the Whole Structure
+
+```lean
+namespace Demo.Index
+
+structure Base where
+  dim : ℕ
+  level : ℕ
+
+def Base.relevel (D : Base) (l : ℕ) : Base := { D with level := l }
+
+/-- Indexed on the whole structure, although only `dim` is used. -/
+structure Frame (D : Base) where
+  basis : Fin D.dim → ℕ
+
+structure Atlas (D : Base) where
+  first : Frame D
+  count : ℕ
+
+-- ❌ Fails with "Type mismatch": `Frame D` and `Frame (D.relevel l)` are different types.
+example (D : Base) (l : ℕ) (F : Frame D) : Frame (D.relevel l) := F
+
+-- ⚠️ So each structure over `Base` needs its own conversion,
+def Frame.relevel {D : Base} (l : ℕ) (F : Frame D) : Frame (D.relevel l) := { F with }
+
+-- ❌ Fails on the field `first`: `{ A with }` copies one level only,
+example (D : Base) (l : ℕ) (A : Atlas D) : Atlas (D.relevel l) := { A with }
+
+-- ⚠️ and each nested structure has to be converted by hand.
+def Atlas.relevel {D : Base} (l : ℕ) (A : Atlas D) : Atlas (D.relevel l) :=
+  { A with first := A.first.relevel l }
+
+/-- Indexed on the component it uses. -/
+structure Frame' (dim : ℕ) where
+  basis : Fin dim → ℕ
+
+-- ✅ No conversion: `(D.relevel l).dim` reduces to `D.dim`.
+example (D : Base) (l : ℕ) (F : Frame' D.dim) : Frame' (D.relevel l).dim := F
+
+end Demo.Index
+```
+
+- `{ F with }` rebuilds the same fields at the new index. It succeeds only where the old field values still type-check there.
+- `F.relevel l = F` does not even type-check, because the two sides have different types. No `simp` lemma can rewrite a converted value back into the original.
+
+### 8.2. Group Fields by What Variants Change
+
+```lean
+namespace Demo.Groups
+
+structure Flat where
+  rank : ℕ
+  weight : Fin rank → ℕ
+  level : ℕ
+
+/-- The part that a change of level leaves alone. -/
+structure Shape where
+  rank : ℕ
+  weight : Fin rank → ℕ
+
+/-- Properties of that part, as a separate `Prop` structure. -/
+structure Shape.Laws (s : Shape) : Prop where
+  rank_pos : 0 < s.rank
+  weight_pos : ∀ i, 0 < s.weight i
+
+structure Grouped where
+  shape : Shape
+  laws : shape.Laws
+  level : ℕ
+
+def Flat.relevel (D : Flat) (l : ℕ) : Flat := { D with level := l }
+
+def Grouped.relevel (D : Grouped) (l : ℕ) : Grouped := { D with level := l }
+
+-- `{ rank := D.rank, weight := D.weight, level := l }`: every field is listed again.
+#print Demo.Groups.Flat.relevel
+
+-- `{ shape := D.shape, laws := ⋯, level := l }`: the untouched parts are passed on whole.
+#print Demo.Groups.Grouped.relevel
+
+def Vec (s : Shape) : Type := Fin s.rank → ℤ
+
+-- ✅ Everything defined over `Shape` applies to the new value as it is.
+example (D : Grouped) (l : ℕ) (v : Vec D.shape) : Vec (D.relevel l).shape := v
+
+end Demo.Groups
+```
+
+- Make one sub-structure per mathematical area, and keep what variants replace apart from what they keep. Definitions then take the sub-structure (`Shape`) as their index.
+- Put properties of a data part into a `Prop` structure over it (`Shape.Laws s`). Types and instances indexed on the data do not mention the properties.
+- A field type that starts with `letI := ...;` over and over points to a missing instance. Within one `structure`, an earlier field whose type is a class is already available to later field types. For a class stored inside another structure, register it once there (§7.1).
+
+### 8.3. Transport Along Equations Between the Data
+
+When the new data is only propositionally equal to the old, `refl` and `exact` fail. State the transport once, while the data are still variables, and prove it with `subst`:
+
+```lean
+import Mathlib.Analysis.InnerProductSpace.PiL2
+
+namespace Demo.Transport
+
+noncomputable section
+
+variable {V W : Type} [AddCommGroup V] [Module ℂ V] [NormedAddCommGroup W] [NormedSpace ℂ W]
+
+/-- `V` with the norm pulled back along `f`. The indices are what the instances use. -/
+def Pulled (f : V →ₗ[ℂ] W) (_hf : Function.Injective f) : Type := V
+
+variable (f : V →ₗ[ℂ] W) (hf : Function.Injective f)
+
+instance : AddCommGroup (Pulled f hf) := inferInstanceAs (AddCommGroup V)
+instance : Module ℂ (Pulled f hf) := inferInstanceAs (Module ℂ V)
+instance : NormedAddCommGroup (Pulled f hf) :=
+  NormedAddCommGroup.induced (Pulled f hf) W (show Pulled f hf →ₗ[ℂ] W from f) hf
+instance : NormedSpace ℂ (Pulled f hf) :=
+  NormedSpace.induced ℂ (Pulled f hf) W (show Pulled f hf →ₗ[ℂ] W from f)
+
+/-- Transport along an equation of the data, proved while `f` and `g` are variables. -/
+def Pulled.congr {f g : V →ₗ[ℂ] W} {hf : Function.Injective f} {hg : Function.Injective g}
+    (h : f = g) : Pulled f hf ≃ₗᵢ[ℂ] Pulled g hg := by
+  subst h
+  exact LinearIsometryEquiv.refl ℂ (Pulled f hf)
+
+structure Setting where
+  embed : ℂ →ₗ[ℂ] ℂ
+  embed_inj : Function.Injective embed
+
+def Setting.normalize (S : Setting) : Setting where
+  embed := (1 : ℂ) • S.embed
+  embed_inj := by simpa using S.embed_inj
+
+/-- What the conversion does to a component, stated next to its definition. -/
+@[simp] theorem Setting.normalize_embed (S : Setting) : S.normalize.embed = S.embed :=
+  one_smul ℂ S.embed
+
+-- ❌ Fails with "Type mismatch": the instances over the two maps are not definitionally equal.
+example (S : Setting) :
+    Pulled S.embed S.embed_inj ≃ₗᵢ[ℂ] Pulled S.normalize.embed S.normalize.embed_inj :=
+  LinearIsometryEquiv.refl ℂ (Pulled S.embed S.embed_inj)
+
+-- ✅ Only the equation between the maps has to be proved.
+def Setting.pulledNormalize (S : Setting) :
+    Pulled S.embed S.embed_inj ≃ₗᵢ[ℂ] Pulled S.normalize.embed S.normalize.embed_inj :=
+  Pulled.congr S.normalize_embed.symm
+
+end
+
+end Demo.Transport
+```
+
+- `Pulled` takes the map and its injectivity, not a `Setting`. One transport lemma then serves every conversion of every structure that supplies such a map.
+- The transport relates two spaces over the same `V` and `W`. If a conversion changes the types themselves, change the indices first (§8.1).
+
+The examples in §8.1–§8.3 were verified on Lean `v4.33.1` and `v4.35.0` with the matching Mathlib.
+
+### 8.4. What It Costs at Scale
+
+In the formalization of about 175,000 modules mentioned above (Lean `v4.33.1`), one context structure has 141 fields. A setting structure of 97 fields and further structures over it are indexed on a value of it, and conversions rebuild them for a refined value.
+
+- An isometry between a space before and after such a conversion is the identity as far as the kernel is concerned: it accepts `LinearIsometryEquiv.refl` at that type. `exact` with the same term still exhausted `maxHeartbeats 4000000`. With a limit of `1000000`, `with_unfolding_all`, `set_option smartUnfolding false` and writing the equivalence field by field with identity maps timed out too.
+- In the diagnostics of an attempt at the default limit, one parent projection reached through a field of the large structure was unfolded 231,068 times, and the main conversion functions thousands of times.
+- The project writes this isometry with a tactic that assigns the term to the goal without the elaborator's type check and leaves the check to the kernel. 49 files use that tactic.
+- For a converted structure with nested structures, `{ H with }` fails at the first nested field, whose type still mentions the old value. The project copies such structures with a second custom tactic that recurses through the fields.
+
+### Rules
+
+- **Decide the indices before building on them.** A definition should take the components it uses as parameters. Taking the whole structure ties it to that one value.
+- **Group by what changes.** A part that every variant keeps is one field with its own type, not a run of fields in a flat structure.
+- **Transport over variables.** Prove the transport with `subst` for arbitrary data, and give each conversion `@[simp]` lemmas for the components it produces.
+- **Treat repeated conversions as a design signal.** A chain of `{ x with }` copies that follows every new variant means the indices carry too much.
