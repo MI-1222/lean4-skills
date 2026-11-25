@@ -496,6 +496,55 @@ A reflexive inductive **outside** a `mutual` block is accepted by all of them.
 - **Run checkers that read `.olean` files separately**, built with the project's toolchain: `lake env lean4lean --fresh Main` replays the build output instead of the export, so the cross-version refusal above does not apply.
 - **Limits**: Comparator compares challenge and solution against the same dependency versions, so it cannot detect a modified dependency. Pin Mathlib to an official tag and verify `lake-manifest.json` against upstream. A passing run still trusts the checkers, Mathlib's definitions, the exporter and the sandbox.
 
+### Designing for Independent Checkers
+
+A refusal found after a long build can only be worked around by leaving a checker out. Decide at the start which checkers must accept the project, and keep the features they refuse out of the design.
+
+Measured with the tools of Lean `v4.36.0` on small exports (exit `0` = accepted):
+
+| Inductive declaration                               | `con-leche` | `con-ron` | `nanoda` | `leanchecker-paranoid` | `lean4lean` |
+| :-------------------------------------------------- | :---------- | :-------- | :------- | :--------------------- | :---------- |
+| `mutual` block with a reflexive member, in `Type`   | Exit `2`    | Exit `2`  | `0`      | `0`                    | `0`         |
+| The same in `Prop` (`∀ m, m < n → Good m` as field) | Exit `2`    | Exit `2`  | `0`      | `0`                    | `0`         |
+| `mutual` block without a reflexive member           | `0`         | `0`       | `0`      | `0`                    | `0`         |
+| Reflexive inductive outside `mutual`                | `0`         | `0`       | `0`      | `0`                    | `0`         |
+| The reflexive `mutual` block as one indexed family  | `0`         | `0`       | `0`      | `0`                    | `0`         |
+| Nested inductive (`node : List Tree → Tree`)        | `0`         | `0`       | `0`      | `0`                    | `0`         |
+
+A `Prop`-valued certificate whose constructor quantifies over smaller instances of itself is reflexive, so it is affected as well.
+
+- **Write a reflexive `mutual` block as one family indexed by a tag.** Each former member becomes an index value, and an `abbrev` keeps its name. Structural recursion still works through the function argument and across the former members (checked on Lean `v4.35.0` and `v4.36.0`):
+
+  ```lean
+  -- Instead of `mutual inductive A | lim : (Nat → A) → B → A ... inductive B ... end`
+  inductive AB : Bool → Type where
+    | base : AB true
+    | lim : (Nat → AB true) → AB false → AB true
+    | leaf : AB false
+    | wrap : AB true → AB false
+
+  abbrev A := AB true
+  abbrev B := AB false
+
+  def AB.depthAt (k : Nat) : AB t → Nat
+    | .base => 0
+    | .lim f b => max ((f k).depthAt k) (b.depthAt k) + 1
+    | .leaf => 0
+    | .wrap a => a.depthAt k + 1
+  ```
+
+- **Try each new kind of inductive on the checkers early.** Exporting only the declarations of interest keeps the file small (a few kilobytes here, against about 350 MB for the whole environment of the same module):
+
+  ```bash
+  lake env leanexport MyProject.Defs -- MyProject.A MyProject.B > defs.ndjson
+  con-leche defs.ndjson
+  con-ron defs.ndjson
+  lean4lean --import defs.ndjson
+  nanoda_bin nanoda.json   # "export_file_path": "defs.ndjson"
+  ```
+
+- **Build with the toolchain that will judge, or plan for the difference.** An export made by one Lean version is read by checkers built for another. `lean4lean` from Lean `v4.36.0` is reported to reject every export made by Lean `v4.33.1` (`unknown constant 'Decidable.intro'`), so a project pinned to an older toolchain loses that checker unless it is run separately against the build (above).
+
 ---
 
 ## 9. Axiom Elimination Workflow
