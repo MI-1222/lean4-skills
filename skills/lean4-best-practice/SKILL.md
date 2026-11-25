@@ -1,7 +1,7 @@
 ---
 name: lean4-best-practice
 description: >-
-  Best practices for formal proving in Lean 4 and Mathlib. Use whenever designing, structuring, refactoring, profiling or reviewing Lean 4 proofs: declaration header fence rules (signature immutability, preventing goal drift), docstring scoping (Rules A/B/C for proof, review and authoring), top-down (sorry-driven) decomposition, statement-first decomposition for multi-file or multi-agent formalizations (`def X.Statement : Prop` contracts, `X.proof` conditional on prerequisite statements, assembly theorems, parallel builds), non-terminal `simp` elimination and `simp only`, Mathlib naming reverse lookup, one project root namespace, heartbeats and performance (`set_option maxHeartbeats N in` scoping, `#count_heartbeats`, `synthInstance.maxHeartbeats`, `synthInstance.maxSize`, `maxSynthPendingDepth`, `maxRecDepth`, `--tstack`, lakefile `leanOptions` and where they apply), documentation standards (docstrings, module docstrings, `calc` chains), or proof golfing.
+  Best practices for formal proving in Lean 4 and Mathlib. Use whenever designing, structuring, refactoring, profiling or reviewing Lean 4 proofs: declaration header fence rules (signature immutability, preventing goal drift), docstring scoping (Rules A/B/C for proof, review and authoring), top-down (sorry-driven) decomposition, statement-first decomposition for multi-file or multi-agent formalizations (`def X.Statement : Prop` contracts, `X.proof` conditional on prerequisite statements, assembly theorems, parallel builds), non-terminal `simp` elimination and `simp only`, Mathlib naming reverse lookup, one project root namespace, copied declarations, heartbeats and performance (`set_option maxHeartbeats N in` scoping, `#count_heartbeats`, `synthInstance.maxHeartbeats`, `synthInstance.maxSize`, `maxSynthPendingDepth`, `maxRecDepth`, `--tstack`, lakefile `leanOptions` and where they apply), documentation standards (docstrings, module docstrings, `calc` chains), or proof golfing.
 compatibility: Target Lean 4.14.0+ (Verified on Lean v4.35.0 and contemporary Mathlib).
 metadata:
   target-lean-version: '>=4.14.0'
@@ -88,6 +88,7 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 
 - [ ] **No Artificial Heartbeat Inflation**: Does the proof build cleanly without increased `maxHeartbeats`? If a raise remains, is it scoped with `in` to one declaration and followed by a comment explaining why?
 - [ ] **Clean Hygiene**: Are there any leftover debugging traces, `#check`, `#eval`, or unused variables?
+- [ ] **No Copies or Attempt Suffixes**: Does `#duplicate_decls` report no two theorems with the same statement, and is every variant named by how its statement differs rather than by `_alt`, `_bis`, `_new` or `V2`?
 - [ ] **Soundness & Axiom Check**: Has `#print axioms <Theorem>` been checked to confirm the proof depends strictly on standard axioms (`propext`, `Classical.choice`, `Quot.sound`) with no residual `sorryAx` or custom axioms?
 
 ---
@@ -102,7 +103,7 @@ For in-depth explanations, code templates, and antipattern corrections, consult 
 | **Top-Down Proving**          | Sorry-driven development, helper extraction, hardest-case-first      | [sorry_driven_development.md](references/sorry_driven_development.md)                 |
 | **Statement-First at Scale**  | `X.Statement` / `X.proof` split, assembly, universes, challenge file | [statement_first_decomposition.md](references/statement_first_decomposition.md)       |
 | **`simp` Hygiene**            | Non-terminal `simp` hazards, `simp only`, `dsimp`, `simp_rw`, simpNF | [simp_discipline.md](references/simp_discipline.md)                                   |
-| **Mathlib Naming**            | Naming formula, head-symbol rules, dot notation, project root        | [mathlib_naming_conventions.md](references/mathlib_naming_conventions.md)             |
+| **Mathlib Naming**            | Naming formula, head-symbol rules, project root, variant names       | [mathlib_naming_conventions.md](references/mathlib_naming_conventions.md)             |
 | **Performance**               | Limits, scoping, lakefile options, irreducibility, generated lemmas  | [performance_and_heartbeats.md](references/performance_and_heartbeats.md)             |
 | **Documentation & Style**     | File headers, docstrings, `calc` layout, line length, formatting     | [documentation_and_style.md](references/documentation_and_style.md)                   |
 | **Proof Simplification**      | Redundant step fusion, term vs tactic mode, automation solvers       | [proof_simplification_and_golfing.md](references/proof_simplification_and_golfing.md) |

@@ -78,6 +78,19 @@
         "Explains that a match sets `success` to false and the exit code to 1",
         "Notes that replayed warnings of up-to-date modules are also checked"
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "Several agents work on my Lean project. When a proof gets stuck they often start over under a new name, so I now have `exists_lift`, `exists_lift_alt` and `exists_lift_alt_bis`, and some files were copied to new folders with the declarations renamed. The proofs and `open` lines differ between the copies, so `diff` and text search do not line them up. How can I find which declarations are really the same, from the command line?",
+      "expected_output": "Recommends running `#duplicate_decls` from `lean4-cli/scripts/duplicate_decls.lean` with `lake env lean --stdin`, prepending an import that brings the declarations into scope and passing the project namespace as the prefix. Explains that it compares elaborated declarations rather than source text: theorems are duplicates when their statements are the same expression up to bound variable names, whatever their proofs, and definitions when their types and values match; binder annotations are ignored and private declarations are included. Explains that each group of duplicates is a warning listing names and modules, followed by an info summary. Mentions the limits: statements equal only after unfolding a definition are not reported, and copies of definitions by pattern matching are missed across modules. Advises keeping one copy and deleting or deprecating the others, and naming real variants by how their statements differ instead of `_alt` or `_bis`.",
+      "files": [],
+      "expectations": [
+        "Recommends #duplicate_decls from lean4-cli/scripts/duplicate_decls.lean run with lake env lean --stdin and a prefix",
+        "Explains that theorems are compared by elaborated statement, regardless of proof, and definitions by type and value",
+        "Mentions that statements equal only after unfolding a definition are not reported",
+        "Advises keeping one copy and deleting or deprecating the others",
+        "Advises naming real variants by how their statements differ rather than _alt or _bis"
+      ]
     }
   ]
 }
