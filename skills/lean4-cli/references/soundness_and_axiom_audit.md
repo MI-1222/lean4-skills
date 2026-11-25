@@ -432,8 +432,24 @@ lake comparator --config "$CLEAN/comparator.json" \
 - **`lake comparator`** is available in recent Lean releases (4.35+); for older projects, export with the project's toolchain and judge with a newer one, or use the standalone Comparator. The exporter ([lean4export](https://github.com/leanprover/lean4export)) must be built with exactly the project's toolchain, because Lean refuses `.olean` files written by a different Lean build.
 - **Compiling untrusted code runs it.** `initialize`, `run_cmd`, `elab` and `#eval` execute during the build. Build untrusted solutions in a sandbox with no network, export the challenge where no solution code was ever compiled, and treat everything the build wrote (including the solution export) as untrusted input.
 - **Do not trust shared build caches for verification.** Integrity checks on downloaded `.olean` files prove which bytes were published, not that the proofs are valid. Use a fresh build when the result must be trusted.
-- **Independent kernels** listed under `external_kernels` each judge the export; any non-zero exit is a rejection. Some checkers reject valid exports for reasons unrelated to correctness (unsupported inductive shapes, core-library changes between Lean versions), so test each checker on a small project with the same toolchain before relying on it.
+- **Independent kernels** listed under `external_kernels` each judge the export; any non-zero exit is a rejection. Some checkers reject valid exports for reasons unrelated to correctness, so test each checker on a small project with the same toolchain before relying on it (see "Checker Compatibility" below).
 
+### Checker Compatibility
+
+`lake comparator --paranoid` runs five external checkers besides Lean's kernel: `leanchecker-paranoid`, `lean4lean`, `nanoda`, `con-leche` and `con-ron`. A non-zero exit from any of them fails the whole run, including a refusal that says nothing about whether the proof is right.
+
+| Checker (Lean `v4.36.0`)         | Known refusal of a valid export                                                                                                                                                                         | Source                                 |
+| :------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------- |
+| `con-leche`, `con-ron`           | A `mutual` block with a **reflexive** member (a constructor argument that is a function into the type, e.g. `lim : (Nat → A) → B → A`). Exit `2`, `declined: in-process model of A: reflexive member A` | Reproduced (`--verified`, 4.36 export) |
+| `lean4lean`                      | Every export made by Lean `v4.33.1`: `unknown constant 'Decidable.intro'`, because 4.36 redefined `Decidable` in the core library                                                                       | Reported, not reproduced               |
+| `leanchecker-paranoid`, `nanoda` | None known; both accept the reflexive mutual block above                                                                                                                                                | Reproduced                             |
+
+A reflexive inductive **outside** a `mutual` block is accepted by all of them.
+
+- **Find the cause before dropping a checker.** Reproduce the refusal on a small project that has the same feature (here, a mutual reflexive inductive), and confirm that the other kernels accept it.
+- **Name the checkers explicitly** in `external_kernels` instead of using `--paranoid` when one checker cannot handle the project, and record in the verification notes which checker was left out and why.
+- **Keep at least one independent design.** `leanchecker-paranoid` is a hardened build of Lean's own kernel, so it is not independent of it. Keep `nanoda` (or another independent checker) in the list.
+- **Run checkers that read `.olean` files separately**, built with the project's toolchain: `lake env lean4lean --fresh Main` replays the build output instead of the export, so the cross-version refusal above does not apply.
 - **Limits**: Comparator compares challenge and solution against the same dependency versions, so it cannot detect a modified dependency. Pin Mathlib to an official tag and verify `lake-manifest.json` against upstream. A passing run still trusts the checkers, Mathlib's definitions, the exporter and the sandbox.
 
 ---

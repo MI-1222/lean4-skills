@@ -54,6 +54,18 @@
         "Does not report `my_trivial` or the comment mentioning `kexact` as risks",
         "Recommends `#print axioms` and kernel replay rather than treating the scan as proof"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "`lake comparator --paranoid` (Lean v4.36.0) on our export exits 1. Lean's kernel, leanchecker-paranoid and nanoda accept, but con-leche and con-ron both exit 2 with `declined: in-process model of A: reflexive member A`. Our project has a mutual inductive block in which `A` has a constructor `lim : (Nat → A) → B → A`. Is our proof wrong? What should we do?",
+      "expected_output": "Explanation that con-leche and con-ron decline mutual blocks with a reflexive member, which says nothing about correctness, while a non-mutual reflexive inductive is accepted. Recommends reproducing the refusal on a small project with the same feature, listing the checkers explicitly in `external_kernels` instead of `--paranoid` (keeping an independent design such as nanoda, since leanchecker-paranoid is a hardened build of Lean's own kernel), and recording which checker was left out and why.",
+      "files": [],
+      "expectations": [
+        "States that the refusal comes from an unsupported feature (mutual block with a reflexive member), not from an invalid proof",
+        "Recommends reproducing the refusal on a minimal example before dropping the checkers",
+        "Recommends naming checkers explicitly in `external_kernels` and keeping at least one independent kernel such as nanoda",
+        "Recommends documenting which checker was excluded and why"
+      ]
     }
   ]
 }
