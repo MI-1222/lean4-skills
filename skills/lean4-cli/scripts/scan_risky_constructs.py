@@ -287,6 +287,14 @@ RULES: list[Rule] = [
         keywords=("macro", "syntax", "elab"),
     ),
     Rule(
+        "kernel-defeq-call",
+        "info",
+        _compile(r"\bKernel\.(?:isDefEq|whnf)\b"),
+        "Calls the kernel's definitional equality or reduction from a metaprogram, typically to decide "
+        "whether a term may be assigned without the elaborator's check; read the surrounding tactic.",
+        keywords=("Kernel.",),
+    ),
+    Rule(
         "opaque-declaration",
         "info",
         _compile(DECL_PREFIX + r"opaque\b"),

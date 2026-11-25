@@ -220,6 +220,7 @@ python3 <skill-path>/scripts/scan_risky_constructs.py --list-rules
 | **warning**  | `io-side-effect`           | `IO.Process`, `IO.FS`, `IO.getEnv` (processes, files, environment variables during elaboration)                  |
 | **info**     | `lean-meta-import`         | `import Lean` / `import Lean.*` (metaprogramming API available)                                                  |
 | **info**     | `syntax-extension`         | `macro`, `macro_rules`, `syntax`, `elab`, `elab_rules`, `declare_syntax_cat`                                     |
+| **info**     | `kernel-defeq-call`        | `Kernel.isDefEq`, `Kernel.whnf` called from a metaprogram (often decides whether to assign a goal)               |
 | **info**     | `opaque-declaration`       | `opaque` constants                                                                                               |
 | _as source_  | `<rule>-via-syntax`        | A use of custom syntax whose definition contains `<rule>` (see below)                                            |
 
@@ -327,13 +328,14 @@ Findings:
 
 Typical `warning` findings and how to read them:
 
-| Finding                                                                                      | Usually                      | What to record                                                                                             |
-| :------------------------------------------------------------------------------------------- | :--------------------------- | :--------------------------------------------------------------------------------------------------------- |
-| `run_cmd Lean.modifyEnv fun env => Lean.LibrarySuggestions.nameDenyListExt.addEntry env "X"` | Harmless                     | Hides every theorem with a name component `X` from `+suggestions` tactics; adds no declaration             |
-| `run_tac ... (fun g => do pure [← g.revertAll])); exact foo`                                 | Harmless                     | Reverts hypotheses, then a normal `exact` checks the term                                                  |
-| `run_tac` block that calls `assign` itself                                                   | Elaborator bypass            | Which goal is closed with which term; confirm with kernel replay                                           |
-| `elab ... => ... g.assign ...` and its `goal-assignment-via-syntax` uses                     | Elaborator bypass            | The tactic's name, the number of uses (`traced_syntax`), and that the affected theorems pass kernel replay |
-| `addDecl` in a custom command and its `environment-modification-via-syntax` uses             | Declarations copied or built | Which declarations are added under which names, at each use; the kernel checks each added declaration      |
+| Finding                                                                                      | Usually                        | What to record                                                                                             |
+| :------------------------------------------------------------------------------------------- | :----------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| `run_cmd Lean.modifyEnv fun env => Lean.LibrarySuggestions.nameDenyListExt.addEntry env "X"` | Harmless                       | Hides every theorem with a name component `X` from `+suggestions` tactics; adds no declaration             |
+| `run_tac ... (fun g => do pure [← g.revertAll])); exact foo`                                 | Harmless                       | Reverts hypotheses, then a normal `exact` checks the term                                                  |
+| `run_tac` block that calls `assign` itself                                                   | Elaborator bypass              | Which goal is closed with which term; confirm with kernel replay                                           |
+| `elab ... => ... g.assign ...` and its `goal-assignment-via-syntax` uses                     | Elaborator bypass              | The tactic's name, the number of uses (`traced_syntax`), and that the affected theorems pass kernel replay |
+| `kernel-defeq-call` next to a goal assignment                                                | Bypass with a kernel pre-check | The tactic accepts a term when the kernel finds it defeq; the elaborator's own check is still skipped      |
+| `addDecl` in a custom command and its `environment-modification-via-syntax` uses             | Declarations copied or built   | Which declarations are added under which names, at each use; the kernel checks each added declaration      |
 
 > [!WARNING]
 > **A text scan is not a proof.** The scanner works on text, so it can miss constructs produced by macros or code generation, and it can flag harmless identifiers. A clean scan narrows the review; only the kernel checks in §7–§8 establish correctness.
