@@ -87,6 +87,57 @@ src/
 - **`Main.lean` contains nothing but the claimed theorems**, with the challenge's exact names and types, each a one-line reference to an assembly theorem. Reviewers then read `Statements.lean` and `Challenge.lean` to know what is claimed, and never have to read the proof for that. In one formalization of about 175,000 modules, `Main.lean` was five one-line theorems.
 - **Check the copy mechanically**: in CI, build `Challenge` alone in a clean clone with only Mathlib's cache (`lake exe mathlib/cache get`, then `lake build Challenge`), and compare its definition block with `Statements.lean`.
 
+### Isolating the Novel Core
+
+A large formalization usually contains one genuinely new argument and a layer of standard mathematics that connects it to the published claims (symmetry, a functional equation, a passage from primitive to all characters, a change of number system). Keep the two apart: state the new argument as a single **core statement**, and derive every top-level claim from it by a short **reduction** that uses only library lemmas.
+
+```text
+Main claims  ←  reductions (short, library only)  ←  Core.Statement  ←  the long development
+```
+
+```lean
+namespace Demo
+
+/-- Core claim, the novel part: no natural number squares to 2. -/
+def Core.Statement : Prop := ∀ n : Nat, n * n ≠ 2
+
+/-- Published claim: no integer squares to 2. -/
+def Main.Statement : Prop := ∀ z : Int, z * z ≠ 2
+
+/-- Standard reduction: pass from `z` to `z.natAbs`, using library lemmas only. -/
+theorem Main.of_core (h : Core.Statement) : Main.Statement := by
+  intro z hz
+  apply h z.natAbs
+  have e : ((z.natAbs * z.natAbs : Nat) : Int) = z * z := Int.natAbs_mul_self
+  omega
+
+/-- The long development, in its own files. -/
+theorem Core.proof : Core.Statement := by
+  intro n h
+  match n, h with
+  | 0, h => simp at h
+  | 1, h => simp at h
+  | n + 2, h =>
+    have : 4 ≤ (n + 2) * (n + 2) :=
+      Nat.mul_le_mul (show 2 ≤ n + 2 by omega) (show 2 ≤ n + 2 by omega)
+    omega
+
+/-- Assembly. -/
+theorem main : Main.Statement := Main.of_core Core.proof
+
+end Demo
+```
+
+In one formalization of about 175,000 modules, five top-level claims reduced to a single core statement through two files of about 90 lines in total, built from Mathlib's functional-equation lemmas. Reviewers could check the step from the core to every claim without reading the development.
+
+**Rules**:
+
+- **Write the reduction first.** `Main.of_core` is small, and once it compiles it shows that the core statement is enough for every claim. Do this before investing in `Core.proof`, and run the falsification check from §3.2 on the core statement itself.
+- **Put the core statement in a statements file that imports only Mathlib**, like `Statements.lean`, and state it in Mathlib's vocabulary. Reduction files then import Mathlib and that file, and build in minutes in a clean clone. In the formalization above, the core definition sat in a file that also held proofs and imported the development. A reduction that needed the definition therefore imported the whole development, and could not be built on its own.
+- **One reduction per claim.** Each top-level claim gets its own `X.of_core`, and `Main.lean` stays a list of one-line references (`theorem x : X := X.of_core Core.proof`).
+- **Keep reductions on the library.** A reduction that needs project definitions or lemmas is part of the development, not a reduction. Move that work behind the core statement, or change the core statement.
+- **Do not let reductions carry hypotheses beyond the core.** An extra statement hypothesis on `X.of_core` is an open prerequisite of the top-level claim, and §3.3 applies to it.
+
 ---
 
 ## 2. Why It Helps
@@ -250,6 +301,7 @@ theorem small : Small.Statement := Small.proof.{0} Pointed.proof.{0}
 - [ ] Does each `X.proof` take as hypotheses only the prerequisite statements listed in the plan?
 - [ ] Do proof files import statements files only, never other proof files?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
+- [ ] Is the novel argument stated as one core statement in a Mathlib-only statements file, with each top-level claim derived from it by a short reduction that uses only library lemmas?
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
 - [ ] Was `#print axioms` run on the assembly theorem, not on conditional `X.proof` declarations?
 - [ ] Does every `X.proof` header give explicit universe arguments (`.{0}`, `.{u}`) to each universe-polymorphic statement it mentions?
