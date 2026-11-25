@@ -279,11 +279,12 @@ A proof that compiles cleanly can still be mathematically unsound if it inadvert
 
 ### Standard vs. Illicit Axioms
 
-| Axiom Class                | Specific Axioms                                                                         | Assessment                                                        |
-| :------------------------- | :-------------------------------------------------------------------------------------- | :---------------------------------------------------------------- |
-| **Standard Mathlib Found** | `propext`<br/>`Classical.choice`<br/>`Quot.sound` / `quot.sound`                        | **ACCEPTABLE**: Foundation of classical mathematics in Lean 4.    |
-| **Residual Sorry**         | `sorryAx`                                                                               | **STRICTLY FORBIDDEN**: An unproven `sorry` remains in the proof. |
-| **Custom / Synthetic**     | Any identifier declared via `axiom ...` (e.g. `my_axiom`, `unproved_helper_hypothesis`) | **STRICTLY FORBIDDEN**: Proof cheats by postulating claims.       |
+| Axiom Class                | Specific Axioms                                                                         | Assessment                                                                                      |
+| :------------------------- | :-------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
+| **Standard Mathlib Found** | `propext`<br/>`Classical.choice`<br/>`Quot.sound` / `quot.sound`                        | **ACCEPTABLE**: Foundation of classical mathematics in Lean 4.                                  |
+| **Native Evaluation**      | `*._native.*` (Lean `v4.29.0`+)<br/>`Lean.ofReduceBool` (older)                         | **RESTRICTED**: `native_decide` / `bv_decide` trust compiled code; needs explicit user consent. |
+| **Residual Sorry**         | `sorryAx`                                                                               | **STRICTLY FORBIDDEN**: An unproven `sorry` remains in the proof.                               |
+| **Custom / Synthetic**     | Any identifier declared via `axiom ...` (e.g. `my_axiom`, `unproved_helper_hypothesis`) | **STRICTLY FORBIDDEN**: Proof cheats by postulating claims.                                     |
 
 ### How to Run Axiom Audits
 
@@ -333,7 +334,7 @@ A clean axiom list does **not** show that the statement means the intended mathe
 > [!WARNING]
 > Compiling untrusted Lean code runs its metaprograms (`initialize`, `run_cmd`, `elab`, `#eval`). Build untrusted projects in a sandbox without network access, and never treat a shared build cache as evidence that the proofs are valid.
 
-For full details on handling private declarations, namespace scope stacks, eliminating synthetic axioms, `native_decide` / `Lean.ofReduceBool` caveats, the scanner's rule catalog and JSON schema, the statement review checklist, `leanchecker`, and the Comparator workflow, consult the comprehensive guide:
+For full details on handling private declarations, namespace scope stacks, eliminating synthetic axioms, the axioms that `native_decide` adds in each Lean version, the scanner's rule catalog and JSON schema, the statement review checklist, `leanchecker`, and the Comparator workflow, consult the comprehensive guide:
 
 - [Soundness and Axiom Audit Guide](references/soundness_and_axiom_audit.md)
 

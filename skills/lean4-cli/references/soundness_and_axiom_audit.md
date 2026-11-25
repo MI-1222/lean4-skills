@@ -1,6 +1,6 @@
 # Soundness and Axiom Audit Guide
 
-In formal mathematics with Lean 4, a proof is not complete merely because `lake build` succeeds. An agent or developer can inadvertently introduce shortcuts—such as leaving an unresolved `sorry` (which introduces `sorryAx`), postulating custom `axiom` declarations, or relying on code evaluation axioms like `Lean.ofReduceBool`.
+In formal mathematics with Lean 4, a proof is not complete merely because `lake build` succeeds. An agent or developer can inadvertently introduce shortcuts—such as leaving an unresolved `sorry` (which introduces `sorryAx`), postulating custom `axiom` declarations, or relying on native evaluation (`native_decide`), which adds axioms that trust compiled code.
 
 `#print axioms` catches those shortcuts, but it is only one layer. It cannot tell you whether the theorem **states what you think it states**, whether custom metaprograms bypassed the elaborator, whether the environment was manipulated, or whether the kernel that accepted the proof has known bugs.
 
@@ -23,17 +23,33 @@ Levels 1–2 are mandatory for every task. Apply levels 3–4 whenever the code 
 
 Lean 4 is based on the Calculus of Inductive Constructions (CIC). Mathlib accepts a minimal, standard set of classical axioms:
 
-| Axiom                            | Full Identifier                            | Mathematical Role                                      | Status in Mathlib                                                            |
-| :------------------------------- | :----------------------------------------- | :----------------------------------------------------- | :--------------------------------------------------------------------------- |
-| **Propositional Extensionality** | `propext`                                  | $(P \leftrightarrow Q) \to P = Q$                      | **Standard (Acceptable)**                                                    |
-| **Axiom of Choice**              | `Classical.choice`                         | Choice function for non-empty types                    | **Standard (Acceptable)**                                                    |
-| **Quotient Soundness**           | `Quot.sound` / `quot.sound`                | Equivalence classes definition                         | **Standard (Acceptable)**                                                    |
-| **Native Evaluation**            | `Lean.ofReduceBool` / `Lean.trustCompiler` | Added when using `native_decide` (trusts compiler/C++) | **Restricted**: Requires explicit user consent; avoid in foundational proofs |
-| **Residual Sorry**               | `sorryAx`                                  | Synthetic axiom introduced by `sorry` or `admit`       | **STRICTLY FORBIDDEN**                                                       |
-| **Synthetic Axiom**              | Any user-defined `axiom`                   | Postulated unproven facts                              | **STRICTLY FORBIDDEN**                                                       |
+| Axiom                            | Full Identifier                         | Mathematical Role                                              | Status in Mathlib                                                            |
+| :------------------------------- | :-------------------------------------- | :------------------------------------------------------------- | :--------------------------------------------------------------------------- |
+| **Propositional Extensionality** | `propext`                               | $(P \leftrightarrow Q) \to P = Q$                              | **Standard (Acceptable)**                                                    |
+| **Axiom of Choice**              | `Classical.choice`                      | Choice function for non-empty types                            | **Standard (Acceptable)**                                                    |
+| **Quotient Soundness**           | `Quot.sound` / `quot.sound`             | Equivalence classes definition                                 | **Standard (Acceptable)**                                                    |
+| **Native Evaluation**            | Depends on the Lean version (see below) | Added by `native_decide` and `bv_decide` (trusts compiler/C++) | **Restricted**: Requires explicit user consent; avoid in foundational proofs |
+| **Residual Sorry**               | `sorryAx`                               | Synthetic axiom introduced by `sorry` or `admit`               | **STRICTLY FORBIDDEN**                                                       |
+| **Synthetic Axiom**              | Any user-defined `axiom`                | Postulated unproven facts                                      | **STRICTLY FORBIDDEN**                                                       |
 
 > [!CAUTION]
-> **The `native_decide` Hazard**: While `decide` evaluates computations strictly inside the trusted Lean 4 kernel, `native_decide` (a synonym for `decide +native`) evaluates compiled executable code and adds the axiom `Lean.ofReduceBool`. In pure mathematical verification, prefer `decide` or `norm_num`. Only use `native_decide` if dealing with large combinatorial computations where kernel evaluation times out, and always declare this trade-off explicitly.
+> **The `native_decide` Hazard**: While `decide` evaluates computations strictly inside the trusted Lean 4 kernel, `native_decide` (a synonym for `decide +native`) evaluates compiled executable code and records the result as an axiom, so the proof also trusts the compiler. In pure mathematical verification, prefer `decide` or `norm_num`. Only use `native_decide` if dealing with large combinatorial computations where kernel evaluation times out, and always declare this trade-off explicitly.
+
+### Native Evaluation Axioms by Lean Version
+
+What `#print axioms` shows depends on the project's toolchain:
+
+| Lean version          | Tactic           | Axiom listed by `#print axioms`                                             |
+| :-------------------- | :--------------- | :-------------------------------------------------------------------------- |
+| `v4.29.0` and later   | `native_decide`  | `thm._native.native_decide.ax_1_1`                                          |
+| `v4.29.0` and later   | `decide +native` | `thm._native.decide.ax_1_1`                                                 |
+| `v4.29.0` and later   | `bv_decide`      | `thm._native.bv_decide.ax_1_5`; none if its preprocessing closes the goal   |
+| `v4.28.0` and earlier | `native_decide`  | `Lean.ofReduceBool`, and depending on the version also `Lean.trustCompiler` |
+
+- Since `v4.29.0` ([lean4#12217](https://github.com/leanprover/lean4/pull/12217)) each native computation is its own axiom, which states the computed equality. `#print thm._native.native_decide.ax_1_1` shows it (`decide (...) = true`). The numbers at the end vary. These names were checked on `v4.33.1`, `v4.35.0` and `v4.36.0`.
+- `thm` is the declaration in which the tactic ran. If `main` uses a helper `aux` that calls `native_decide`, `#print axioms main` lists `aux._native.native_decide.ax_1_1`.
+- `v4.35.0` removed `Lean.ofReduceBool`, `Lean.ofReduceNat` and `Lean.trustCompiler` ([lean4#14953](https://github.com/leanprover/lean4/pull/14953)). An audit that looks only for these names does not recognize native evaluation on a newer toolchain.
+- **The name alone proves nothing.** A hand-written `axiom Fake._native.native_decide.ax_1_1 : False` is accepted and listed under the same pattern. Before treating such an axiom as native evaluation, confirm that the named declaration calls the tactic, and that the scan (§5) reports no `axiom-declaration` and no metaprogram that adds the axiom (`environment-modification`).
 
 ---
 
@@ -592,8 +608,8 @@ graph TD
     Check -- "Yes" --> Review["Review warning findings<br/>and statement fidelity"]
     Review --> Sound["Certification: SOUND at the chosen level"]
     Check -- "Contains sorryAx" --> Sorry["Trace remaining sorry in proof body or helper lemmas"]
-    Check -- "Contains custom axiom" --> Custom["Identify synthetic axiom declaration"]
-    Check -- "Contains Lean.ofReduceBool" --> Native["Verify if native_decide was intended"]
+    Check -- "Contains another custom axiom" --> Custom["Identify synthetic axiom declaration"]
+    Check -- "Contains a native evaluation axiom (§1)" --> Native["Verify if native evaluation was intended"]
     Check -- "Kernel check bypass" --> Bypass["Remove debug.* options or unchecked declarations"]
 
     Sorry --> Repair["Fill sorry using lean4-interactive-proof / mathlib-search"]
@@ -620,7 +636,7 @@ Before marking any formalization task as complete:
 - [ ] Has `#print axioms <Theorem>` been executed for every primary mathematical declaration?
 - [ ] Is the resulting axiom set a subset of `[propext, Classical.choice, Quot.sound]`?
 - [ ] Is the proof completely free of `sorryAx`?
-- [ ] If `Lean.ofReduceBool` is present, has the decision to rely on `native_decide` been validated?
+- [ ] If a native evaluation axiom is present (`._native.` in its name, or `Lean.ofReduceBool` before `v4.29.0`; §1), has the decision to rely on it been validated?
 - [ ] Have all temporary `#print axioms` commands been cleaned up from source files?
 
 Additionally, for code you did not write entirely yourself in this session:

@@ -193,7 +193,8 @@ RULES: list[Rule] = [
             r"|\bLean\.reduce(?:Bool|Nat)\b"
             r"|\bdecide[ \t]*\+[ \t]*native\b"
         ),
-        "Trusts the compiler and native code (`Lean.ofReduceBool` / `Lean.trustCompiler`) instead of the kernel.",
+        "Trusts the compiler and native code instead of the kernel (an axiom named `*._native.*`; "
+        "`Lean.ofReduceBool` before Lean v4.29.0).",
         keywords=("native", "ofReduce", "trustCompiler", "reduceBool", "reduceNat"),
     ),
     Rule(
