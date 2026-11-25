@@ -7,6 +7,11 @@ environment modification, native evaluation, global notation changes, etc.) by t
 Comments and string literals are blanked out before matching, so words inside them
 do not produce false positives.
 
+Custom syntax (tactics, terms and commands defined with `elab`, `macro`, `syntax`,
+`elab_rules` or `macro_rules`) whose definition contains a traced construct is followed
+to every place that uses it, including through other macros and same-file helper `def`s,
+so that a construct hidden behind a new name is reported where it takes effect.
+
 A text search is not a proof. The results do not replace kernel replay
 (`leanchecker`, Comparator, ...); treat them as a first-pass filter that narrows
 down what a human reviewer must read.
@@ -21,7 +26,7 @@ import re
 import sys
 from collections.abc import Callable, Iterable
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 # Severity ordering; a larger value is more severe.
@@ -51,6 +56,46 @@ MASK_CANDIDATE_RE = re.compile(r"--|/-|«|\"|'|r#*\"")
 # Any character except a newline; used to blank out a range while keeping line numbers.
 NON_NEWLINE_RE = re.compile(r"[^\n]")
 
+# Start of a custom syntax definition (the unit that may hide a traced construct).
+SYNTAX_COMMAND_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?:@\[[^\]\n]*\][ \t]*)?"
+    r"(?:(?:local|scoped(?:\[[^\]\n]*\])?)[ \t]+)?"
+    r"(?P<kind>macro_rules|macro|syntax|elab_rules|elab)\b",
+    re.MULTILINE,
+)
+
+# Start of a helper definition (a metaprogram a custom tactic may call).
+DEF_COMMAND_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?:@\[[^\]\n]*\][ \t]*)?"
+    r"(?:(?:private|protected|noncomputable|unsafe|partial|nonrec)[ \t]+)*"
+    r"(?:def|abbrev)[ \t]+(?P<name>[^\s:({\[]+)",
+    re.MULTILINE,
+)
+
+# First string literal of a syntax definition header, i.e. its leading atom ("kexact ").
+STRING_LITERAL_RE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+
+# Head token of a match pattern in `elab_rules` / `macro_rules` (`| `(tactic| foo ...) =>`).
+# Only quotations right after an alternative's `|` are patterns; those after `=>` are expansions.
+QUOTATION_HEAD_RE = re.compile(
+    r"\|\s*`\((?:tactic|term|command|conv|doElem)\|\s*(?P<atom>[^\s$()\[\]]+)"
+)
+
+# Rules whose constructs are followed through custom syntax to the places that use it.
+TRACED_RULE_IDS = (
+    "sorry",
+    "admit",
+    "sorry-internals",
+    "native-evaluation",
+    "kernel-check-bypass",
+    "goal-assignment",
+    "environment-modification",
+)
+
+# Suffix of the derived rule that reports a use of custom syntax hiding a traced construct.
+VIA_SYNTAX_SUFFIX = "-via-syntax"
+
+
 @dataclass(frozen=True)
 class Rule:
     """
@@ -58,7 +103,8 @@ class Rule:
 
     :param rule_id: Rule identifier used in the output.
     :param severity: One of `critical`, `warning` or `info`.
-    :param pattern: Regex applied to the source after comments and strings are blanked out.
+    :param pattern: Regex applied to the source after comments and strings are blanked out;
+        `None` for a derived rule that is reported by syntax tracing instead.
     :param description: Why the construct is flagged and what a reviewer should check.
     :param accept: Optional extra predicate on a match; `None` accepts every match.
     :param keywords: Literal substrings, one of which every match contains. A file without
@@ -67,7 +113,7 @@ class Rule:
 
     rule_id: str
     severity: str
-    pattern: re.Pattern[str]
+    pattern: re.Pattern[str] | None
     description: str
     accept: Callable[[re.Match[str]], bool] | None = None
     keywords: tuple[str, ...] = ()
@@ -249,7 +295,48 @@ RULES: list[Rule] = [
     ),
 ]
 
-RULES_BY_ID = {rule.rule_id: rule for rule in RULES}
+# Derived rules: a use of custom syntax whose definition contains a traced construct.
+DERIVED_RULES: list[Rule] = [
+    Rule(
+        rule.rule_id + VIA_SYNTAX_SUFFIX,
+        rule.severity,
+        None,
+        f"Uses custom syntax defined in the scanned sources whose definition contains `{rule.rule_id}`; "
+        "the construct takes effect here under another name.",
+    )
+    for rule in RULES
+    if rule.rule_id in TRACED_RULE_IDS
+]
+
+# All rules, most severe first; this is the order of the census.
+ALL_RULES: list[Rule] = sorted(
+    RULES + DERIVED_RULES, key=lambda rule: -SEVERITY_RANK[rule.severity]
+)
+
+RULES_BY_ID = {rule.rule_id: rule for rule in ALL_RULES}
+
+
+@dataclass
+class SyntaxUnit:
+    """
+    A custom syntax definition found in one file.
+
+    :param file: File that contains the definition.
+    :param line: 1-indexed line of the definition.
+    :param start: Offset of the definition in the file.
+    :param end: Offset just past the definition.
+    :param atoms: Leading tokens that invoke the syntax (e.g. `kexact`).
+    :param body: Masked text of the definition, used to find references to other syntax.
+    :param sources: Traced rule IDs whose constructs the definition contains or reaches.
+    """
+
+    file: str
+    line: int
+    start: int
+    end: int
+    atoms: list[str]
+    body: str
+    sources: set[str] = field(default_factory=set)
 
 
 def _is_identifier_char(char: str) -> bool:
@@ -391,7 +478,7 @@ def scan_masked(source: str, masked: str, rules: list[Rule]) -> list[dict[str, A
 
     :param source: Full Lean source text, used for line text in the findings.
     :param masked: Output of `mask_comments_and_strings(source)`.
-    :param rules: Rules to apply.
+    :param rules: Rules to apply; derived rules without a pattern are skipped.
     :return: Findings with `line`, `column`, `rule`, `severity` and `text`.
     """
     line_starts = _line_starts(source)
@@ -400,7 +487,7 @@ def scan_masked(source: str, masked: str, rules: list[Rule]) -> list[dict[str, A
     findings: list[dict[str, Any]] = []
     seen: set[tuple[str, int]] = set()
     for rule in rules:
-        if not _rule_applies(rule, masked):
+        if rule.pattern is None or not _rule_applies(rule, masked):
             continue
         for match in rule.pattern.finditer(masked):
             if rule.accept is not None and not rule.accept(match):
@@ -437,12 +524,175 @@ def scan_source(source: str, rules: list[Rule]) -> list[dict[str, Any]]:
     Scan one file's source and return the locations matched by the rules.
 
     Multiple matches of the same rule on the same line are reported once.
+    Syntax tracing across files is not part of this function; see `build_report`.
 
     :param source: Full Lean source text.
     :param rules: Rules to apply.
     :return: Findings with `line`, `column`, `rule`, `severity` and `text`.
     """
     return scan_masked(source, mask_comments_and_strings(source), rules)
+
+
+def _command_end(masked: str, start: int, indent_width: int) -> int:
+    """
+    Return the end of the command that starts at `start`.
+
+    The command extends to the next non-blank line indented no deeper than the command itself.
+    Comment-only lines are blank in the masked text, so they never end a command.
+
+    :param masked: Masked source text.
+    :param start: Offset of the command's first character.
+    :param indent_width: Indentation (in characters) of the command's first line.
+    :return: Offset of the first character after the command.
+    """
+    newline = masked.find("\n", start)
+    while newline != -1:
+        line_start = newline + 1
+        line_end = masked.find("\n", line_start)
+        line = masked[line_start : len(masked) if line_end == -1 else line_end]
+        stripped = line.lstrip(" \t")
+        if stripped and len(line) - len(stripped) <= indent_width:
+            return line_start
+        newline = line_end
+    return len(masked)
+
+
+def _reference_pattern(token: str) -> re.Pattern[str]:
+    """
+    Build a regex that finds a syntax atom or identifier as a whole token.
+
+    Word boundaries are required only on sides where the token is identifier-like,
+    so symbolic atoms such as `kc%` are found as well. Internal whitespace matches any run.
+
+    :param token: Atom or identifier, without surrounding whitespace.
+    :return: Compiled regex.
+    """
+    body = r"\s+".join(re.escape(part) for part in token.split())
+    prefix = r"(?<![\w'])" if _is_identifier_char(token[0]) else ""
+    suffix = r"(?![\w'!?])" if _is_identifier_char(token[-1]) else ""
+    return re.compile(prefix + body + suffix)
+
+
+def _direct_sources(text: str) -> set[str]:
+    """
+    Return the traced rules whose constructs occur in a piece of masked text.
+
+    :param text: Masked text of one definition.
+    :return: Rule IDs from `TRACED_RULE_IDS`.
+    """
+    sources = set()
+    for rule_id in TRACED_RULE_IDS:
+        rule = RULES_BY_ID[rule_id]
+        assert rule.pattern is not None
+        if _rule_applies(rule, text) and rule.pattern.search(text):
+            sources.add(rule_id)
+    return sources
+
+
+def collect_syntax_units(
+    file_path: str, source: str, masked: str
+) -> list[SyntaxUnit]:
+    """
+    Find the custom syntax definitions of one file and what traced constructs they contain.
+
+    A definition's sources include those of helper `def`s in the same file that it refers to,
+    transitively. References to syntax from other files are resolved later by `trace_syntax`.
+
+    :param file_path: Path reported for the definitions.
+    :param source: Full Lean source text (for the atoms, which live in string literals).
+    :param masked: Output of `mask_comments_and_strings(source)`.
+    :return: Syntax definitions; empty if the file defines none.
+    """
+    if not any(k in masked for k in ("macro", "syntax", "elab")):
+        return []
+
+    # Helper definitions of this file and the traced constructs each contains.
+    helpers: list[tuple[re.Pattern[str], str, set[str]]] = []
+    for match in DEF_COMMAND_RE.finditer(masked):
+        end = _command_end(masked, match.start(), len(match.group("indent")))
+        body = masked[match.start() : end]
+        name = match.group("name").split(".")[-1]
+        if name:
+            helpers.append((_reference_pattern(name), body, _direct_sources(body)))
+    changed = True
+    while changed:
+        changed = False
+        for index, (_, body, sources) in enumerate(helpers):
+            for other, (pattern, _, other_sources) in enumerate(helpers):
+                if other != index and not other_sources <= sources and pattern.search(body):
+                    sources |= other_sources
+                    changed = True
+
+    line_starts = _line_starts(source)
+    units: list[SyntaxUnit] = []
+    for match in SYNTAX_COMMAND_RE.finditer(masked):
+        start = match.start() + len(match.group("indent"))
+        end = _command_end(masked, match.start(), len(match.group("indent")))
+        original = source[start:end]
+        if match.group("kind") in ("macro_rules", "elab_rules"):
+            atoms = [m.group("atom") for m in QUOTATION_HEAD_RE.finditer(original)]
+        else:
+            literal = STRING_LITERAL_RE.search(original)
+            atoms = [literal.group(1)] if literal else []
+        atoms = sorted({atom.strip() for atom in atoms if atom.strip()})
+        if not atoms:
+            continue
+        body = masked[start:end]
+        sources = _direct_sources(body)
+        for pattern, _, helper_sources in helpers:
+            if helper_sources and pattern.search(body):
+                sources |= helper_sources
+        units.append(
+            SyntaxUnit(
+                file=file_path,
+                line=bisect.bisect_right(line_starts, start),
+                start=start,
+                end=end,
+                atoms=atoms,
+                body=body,
+                sources=sources,
+            )
+        )
+    return units
+
+
+def trace_syntax(units: list[SyntaxUnit]) -> dict[str, dict[str, Any]]:
+    """
+    Propagate traced constructs through syntax that expands to other syntax.
+
+    A definition that refers to an atom of another tainted definition (e.g. a macro
+    expanding to a goal-assigning tactic) becomes tainted as well, until nothing changes.
+
+    :param units: Syntax definitions from all scanned files; their `sources` are updated.
+    :return: Tainted atoms, each mapped to its `sources` (rule IDs) and `definitions` (units).
+    """
+    patterns: dict[str, re.Pattern[str]] = {}
+    changed = True
+    while changed:
+        changed = False
+        tainted: dict[str, set[str]] = {}
+        for unit in units:
+            if unit.sources:
+                for atom in unit.atoms:
+                    tainted.setdefault(atom, set()).update(unit.sources)
+        for unit in units:
+            for atom, sources in tainted.items():
+                if atom in unit.atoms or sources <= unit.sources:
+                    continue
+                pattern = patterns.setdefault(atom, _reference_pattern(atom))
+                if pattern.search(unit.body):
+                    unit.sources |= sources
+                    changed = True
+
+    result: dict[str, dict[str, Any]] = {}
+    for unit in units:
+        if not unit.sources:
+            continue
+        for atom in unit.atoms:
+            entry = result.setdefault(atom, {"sources": set(), "definitions": []})
+            entry["sources"] |= unit.sources
+            entry["definitions"].append(unit)
+    return result
 
 
 def iter_lean_files(paths: list[str], excludes: list[str]) -> list[str]:
@@ -491,22 +741,52 @@ def _read_source(file_path: str) -> str:
 
 def _analyze_file(
     task: tuple[str, tuple[str, ...]],
-) -> tuple[str, list[dict[str, Any]], str | None]:
+) -> tuple[str, list[dict[str, Any]], list[SyntaxUnit], str | None]:
     """
-    Apply the pattern rules to one file.
+    First pass over one file: pattern findings and syntax definitions.
 
     :param task: File path and the IDs of the rules to apply.
-    :return: File path, findings, and an error message if the file is unreadable.
+    :return: File path, findings, syntax definitions, and an error message if the file is unreadable.
     """
     file_path, rule_ids = task
     try:
         source = _read_source(file_path)
     except OSError as error:
-        return file_path, [], str(error)
+        return file_path, [], [], str(error)
     masked = mask_comments_and_strings(source)
     rules = [RULES_BY_ID[rule_id] for rule_id in rule_ids]
     findings = [{"file": file_path, **f} for f in scan_masked(source, masked, rules)]
-    return file_path, findings, None
+    return file_path, findings, collect_syntax_units(file_path, source, masked), None
+
+
+def _find_atom_uses(
+    task: tuple[str, tuple[str, ...]],
+) -> tuple[str, list[tuple[str, int, int, int, str]]]:
+    """
+    Second pass over one file: where tainted syntax atoms are used.
+
+    :param task: File path and the tainted atoms.
+    :return: File path and uses as (atom, offset, 0-indexed line, 1-indexed column, line text).
+    """
+    file_path, atoms = task
+    try:
+        source = _read_source(file_path)
+    except OSError:
+        return file_path, []
+    present = [atom for atom in atoms if atom.split()[0] in source]
+    if not present:
+        return file_path, []
+    masked = mask_comments_and_strings(source)
+    line_starts = _line_starts(source)
+    original_lines = source.splitlines()
+    uses = []
+    for atom in present:
+        for match in _reference_pattern(atom).finditer(masked):
+            line_index = bisect.bisect_right(line_starts, match.start()) - 1
+            text = original_lines[line_index].strip() if line_index < len(original_lines) else ""
+            column = match.start() - line_starts[line_index] + 1
+            uses.append((atom, match.start(), line_index, column, text[:200]))
+    return file_path, uses
 
 
 def _map_tasks(
@@ -532,23 +812,77 @@ def build_report(
     """
     Scan all files and build the census and per-file findings.
 
+    The first pass applies the pattern rules and collects custom syntax definitions.
+    Syntax whose definition contains a traced construct is then followed to its uses
+    in a second pass, which reads only files that contain one of the tainted atoms.
+
     :param files: `.lean` files to scan.
-    :param rules: Rules to apply.
+    :param rules: Enabled rules (pattern rules and derived `*-via-syntax` rules).
     :param fail_on: Lowest severity that counts as a failure; `never` always passes.
     :param jobs: Number of worker processes; 1 scans in this process.
     :return: Report for JSON output.
     """
-    rule_ids = tuple(rule.rule_id for rule in rules)
+    rule_ids = tuple(rule.rule_id for rule in rules if rule.pattern is not None)
+    enabled = {rule.rule_id for rule in rules}
 
     findings: list[dict[str, Any]] = []
     unreadable: list[dict[str, str]] = []
-    for file_path, file_findings, error in _map_tasks(
+    units: list[SyntaxUnit] = []
+    for file_path, file_findings, file_units, error in _map_tasks(
         _analyze_file, [(f, rule_ids) for f in files], jobs
     ):
         if error is not None:
             unreadable.append({"file": file_path, "error": error})
             continue
         findings.extend(file_findings)
+        units.extend(file_units)
+
+    tainted = trace_syntax(units)
+    traced_syntax = []
+    if tainted:
+        atoms = tuple(sorted(tainted))
+        # A definition's own text (e.g. the quotation pattern of `elab_rules`) is not a use.
+        defining_spans: dict[tuple[str, str], list[tuple[int, int]]] = {}
+        for atom, entry in tainted.items():
+            for unit in entry["definitions"]:
+                defining_spans.setdefault((unit.file, atom), []).append((unit.start, unit.end))
+        use_counts = {atom: 0 for atom in atoms}
+        seen: set[tuple[str, str, int]] = set()
+        for file_path, uses in _map_tasks(_find_atom_uses, [(f, atoms) for f in files], jobs):
+            for atom, offset, line_index, column, text in uses:
+                spans = defining_spans.get((file_path, atom), [])
+                if any(start <= offset < end for start, end in spans):
+                    continue
+                use_counts[atom] += 1
+                definition = tainted[atom]["definitions"][0]
+                for source_rule in sorted(tainted[atom]["sources"]):
+                    rule_id = source_rule + VIA_SYNTAX_SUFFIX
+                    key = (file_path, rule_id, line_index)
+                    if rule_id not in enabled or key in seen:
+                        continue
+                    seen.add(key)
+                    findings.append(
+                        {
+                            "file": file_path,
+                            "line": line_index + 1,
+                            "column": column,
+                            "rule": rule_id,
+                            "severity": RULES_BY_ID[rule_id].severity,
+                            "text": text,
+                            "via": atom,
+                            "defined_at": f"{definition.file}:{definition.line}",
+                        }
+                    )
+        for atom in atoms:
+            traced_syntax.append(
+                {
+                    "atom": atom,
+                    "sources": sorted(tainted[atom]["sources"]),
+                    "defined_at": [f"{u.file}:{u.line}" for u in tainted[atom]["definitions"]],
+                    "use_count": use_counts[atom],
+                }
+            )
+    findings.sort(key=lambda f: (f["file"], f["line"], f["column"]))
 
     census = []
     for rule in rules:
@@ -583,6 +917,7 @@ def build_report(
             f"{counts['warning']} warning(s), {counts['info']} info(s)"
         ),
         "census": census,
+        "traced_syntax": traced_syntax,
         "findings": findings,
         "unreadable_files": unreadable,
     }
@@ -603,8 +938,17 @@ def format_text_report(report: dict[str, Any], max_findings: int) -> str:
     ]
     for entry in report["census"]:
         lines.append(
-            f"  [{entry['severity']:<8}] {entry['rule']:<26} {entry['count']:>7} / {entry['file_count']}"
+            f"  [{entry['severity']:<8}] {entry['rule']:<35} {entry['count']:>7} / {entry['file_count']}"
         )
+
+    if report["traced_syntax"]:
+        lines.append("")
+        lines.append("Custom syntax hiding traced constructs (atom: constructs; definitions; uses):")
+        for entry in report["traced_syntax"]:
+            lines.append(
+                f"  `{entry['atom']}`: {', '.join(entry['sources'])}; "
+                f"{', '.join(entry['defined_at'])}; {entry['use_count']} use(s)"
+            )
 
     findings = sorted(
         report["findings"],
@@ -615,8 +959,9 @@ def format_text_report(report: dict[str, Any], max_findings: int) -> str:
         lines.append("Findings:")
         shown = findings if max_findings == 0 else findings[:max_findings]
         for f in shown:
+            via = f"  (via `{f['via']}`, defined at {f['defined_at']})" if "via" in f else ""
             lines.append(
-                f"  {f['file']}:{f['line']}:{f['column']}: {f['severity']}: [{f['rule']}] {f['text']}"
+                f"  {f['file']}:{f['line']}:{f['column']}: {f['severity']}: [{f['rule']}] {f['text']}{via}"
             )
         if len(shown) < len(findings):
             lines.append(
@@ -640,7 +985,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Scan Lean 4 sources for constructs that need a soundness review "
-            "(sorry, axioms, native evaluation, elaborator bypass, environment hacking, global notation)."
+            "(sorry, axioms, native evaluation, elaborator bypass, environment hacking, global notation), "
+            "and follow custom syntax that hides them to the places that use it."
         ),
     )
     parser.add_argument(
@@ -696,8 +1042,8 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.list_rules:
-        for rule in RULES:
-            print(f"[{rule.severity:<8}] {rule.rule_id:<26} {rule.description}")
+        for rule in ALL_RULES:
+            print(f"[{rule.severity:<8}] {rule.rule_id:<35} {rule.description}")
         sys.exit(0)
 
     unknown_rules = [r for r in args.ignore_rule if r not in RULES_BY_ID]
@@ -712,7 +1058,7 @@ def main() -> None:
     if missing_paths:
         parser.error(f"path(s) not found: {', '.join(missing_paths)}")
 
-    rules = [rule for rule in RULES if rule.rule_id not in set(args.ignore_rule)]
+    rules = [rule for rule in ALL_RULES if rule.rule_id not in set(args.ignore_rule)]
     files = iter_lean_files(args.paths, args.exclude)
     if not files:
         parser.error("no .lean files found under the given path(s)")

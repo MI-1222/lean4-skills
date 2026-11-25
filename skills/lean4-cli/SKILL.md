@@ -318,7 +318,7 @@ A clean axiom list does **not** show that the statement means the intended mathe
    python3 <skill-path>/scripts/scan_risky_constructs.py src/ --exclude 'src/Challenge.lean'
    ```
 
-   Exit code `1` means a `critical` finding (`sorry`, `axiom`, `native_decide`, `debug.skipKernelTC`, ...). Read every `warning` finding as well, especially `goal-assignment` (a custom tactic that assigns the goal without the elaborator's type check) and `global-notation`. Use `--json` for structured output; large projects are scanned in parallel automatically (`--jobs`).
+   Exit code `1` means a `critical` finding (`sorry`, `axiom`, `native_decide`, `debug.skipKernelTC`, ...). Read every `warning` finding as well, especially `goal-assignment` (a custom tactic that assigns the goal without the elaborator's type check) and `global-notation`. Custom tactics, terms and commands that hide such a construct are followed to every use, including through other macros, and reported as `<rule>-via-syntax` (e.g. `goal-assignment-via-syntax`). Use `--json` for structured output; large projects are scanned in parallel automatically (`--jobs`).
 
 2. **Statement fidelity review**: Check that each primary statement uses Mathlib's definitions, excludes junk-value points, and elaborates numeric literals in the intended type.
 3. **Kernel replay**: `lake env leanchecker <Module>` (add `--fresh` for one module replayed from an empty environment) re-checks compiled declarations and detects "environment hacking".

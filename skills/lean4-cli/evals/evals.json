@@ -41,6 +41,19 @@
         "States that `LEAN_NUM_THREADS` does not limit the `lean` frontend's default thread count",
         "Recommends `-j1` (or `--threads=1`) with a correct command line"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Another agent added these two files to our project (`Tac/Exact.lean` and `Use/A.lean`). Audit them for trust-base risks before we rely on the theorems, and tell us exactly where each risk takes effect.\n\n`Tac/Exact.lean`:\n```lean\nimport Lean\nopen Lean Elab Tactic Meta\n\nelab \"kexact \" e:term : tactic => withMainContext do\n  let g ← getMainGoal\n  let v ← Term.elabTermAndSynthesize e none\n  g.assign (← instantiateMVars v)\n\nlocal macro:max \"kc% \" e:term:max : term => `((by kexact $e))\n\nmacro \"my_trivial\" : tactic => `(tactic| trivial)\n\nmacro_rules | `(tactic| decide) => `(tactic| sorry)\n\ntheorem uses_c : True := kc% trivial\n```\n\n`Use/A.lean`:\n```lean\nimport Tac.Exact\n-- kexact in a comment is not a use\ntheorem t1 : True := by kexact trivial\ntheorem t3 : True := by my_trivial\ntheorem t4 : 1 = 1 := by decide\n```",
+      "expected_output": "Runs `scan_risky_constructs.py` over the directory that contains both files (not on `Use/A.lean` alone, since syntax defined outside the scanned paths is not traced). Reports the `goal-assignment` definition of `kexact`, its uses as `goal-assignment-via-syntax` (the `kc%` macro, `uses_c`, `t1`), the `sorry` inside `macro_rules` and every later `decide` (`t4`) as critical `sorry-via-syntax`, and does not flag `my_trivial` or the comment. Recommends removing the `decide` override, `#print axioms` on the theorems and kernel replay for the `kexact` uses.",
+      "files": [],
+      "expectations": [
+        "Runs the static scanner on a path that includes both files",
+        "Reports that `t4`'s `decide` is turned into `sorry` by the `macro_rules` override (critical)",
+        "Reports the uses of `kexact`, including the one through the `kc%` macro in `uses_c`",
+        "Does not report `my_trivial` or the comment mentioning `kexact` as risks",
+        "Recommends `#print axioms` and kernel replay rather than treating the scan as proof"
+      ]
     }
   ]
 }

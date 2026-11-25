@@ -152,6 +152,7 @@ elab "kexact " e:term : tactic => withMainContext do
 - **Why flag it?** The proof now depends on the kernel alone. The elaborator's checks, readable error messages and position information are lost, and a reviewer cannot rely on "it elaborated" as evidence. Combined with a kernel bug, this is exactly the path an adversarial proof would take.
 - **The goal-closing helpers do not compare types either.** `MVarId.checkedAssign` runs only an occurs check, and `closeMainGoal` rejects unassigned metavariables before calling it, so a variant of `kexact` built on either one is just as unchecked. `closeMainGoalUsing` leaves the type check to its callback: `fun type _ => elabTermEnsuringType e type` performs it, `fun _ _ => elabTerm e none` does not.
 - **Action**: Treat any direct `MVarId.assign` or `MVarId.checkedAssign`, call to `closeMainGoal` or `closeMainGoalUsing`, `run_tac` block that assigns goals, or command that copies declarations via `addDecl` as a mandatory review item, and confirm the result with kernel replay (§7).
+- **Find the uses, not only the definition.** The definition is one line in one file, but the bypass takes effect wherever the tactic is used, often through small macros (`macro "kc% " e:term : term => `((by kexact $e))`). In one large submission, two such tactics, each defined once, were used 282 times directly and 624 more times through 12 macros built on them, in 78 files. `scan_risky_constructs.py` lists these uses (§5, "Tracing Custom Syntax to Its Uses").
 
 > [!NOTE]
 > Legitimate projects also use these APIs, for example to register names on a library-suggestion deny list via `run_cmd Lean.modifyEnv ...`. The goal of the audit is not to forbid metaprogramming, but to make every use of it visible and explained.
@@ -195,7 +196,7 @@ python3 <skill-path>/scripts/scan_risky_constructs.py --list-rules
 | `--json`             | Print the full report as JSON.                                                           |
 | `--list-rules`       | Print the rule catalog and exit.                                                         |
 
-**Scale**: a project of 175,187 files (about 1 GB of source) is scanned in about 10 seconds with automatic parallelism on 12 cores, using about 120 MB of memory. The report does not depend on `--jobs`.
+**Scale**: a project of 175,187 files (about 1 GB of source) is scanned in 10 to 20 seconds with automatic parallelism on 12 cores, using about 130 MB of memory. The report does not depend on `--jobs`.
 
 **Exit codes**: `0` = no finding at or above `--fail-on`; `1` = at least one such finding; `2` = usage error (unknown rule, missing path, no `.lean` files).
 
@@ -220,6 +221,9 @@ python3 <skill-path>/scripts/scan_risky_constructs.py --list-rules
 | **info**     | `lean-meta-import`         | `import Lean` / `import Lean.*` (metaprogramming API available)                                                  |
 | **info**     | `syntax-extension`         | `macro`, `macro_rules`, `syntax`, `elab`, `elab_rules`, `declare_syntax_cat`                                     |
 | **info**     | `opaque-declaration`       | `opaque` constants                                                                                               |
+| _as source_  | `<rule>-via-syntax`        | A use of custom syntax whose definition contains `<rule>` (see below)                                            |
+
+The `<rule>-via-syntax` rules exist for `sorry`, `admit`, `sorry-internals`, `native-evaluation`, `kernel-check-bypass` (all **critical**), `goal-assignment` and `environment-modification` (**warning**). Each has the severity of its source rule.
 
 **`goal-assignment` is not exhaustive.** It matches only the names listed above, and other metaprogramming APIs can change a goal without checking it. For example, `MVarId.replaceTargetDefEq` replaces the target without checking definitional equality:
 
@@ -241,6 +245,26 @@ theorem wrong : False := by
 
 A result without `goal-assignment` findings therefore does not show that every tactic checks its goals. For the correctness of the proofs, rely on the kernel: build with no `kernel-check-bypass` finding, and replay the declarations (§7).
 
+### Tracing Custom Syntax to Its Uses
+
+A construct hidden inside a custom tactic, term or command takes effect where that syntax is **used**, under a name the other rules do not know. The scanner therefore runs a second pass:
+
+1. **Definitions**: every `elab`, `macro`, `syntax`, `elab_rules` and `macro_rules` is read together with its indented body. Its **atom** is the leading string of the definition (`"kexact "` → `kexact`) or, for `elab_rules` / `macro_rules`, the head of each match pattern (``| `(tactic| decide) =>`` → `decide`).
+2. **Taint**: a definition is tainted if its body contains a traced construct, calls a `def` of the same file that contains one (transitively), or uses the atom of another tainted definition. The last step repeats until nothing changes, so chains such as `coef_cases` → `ksub` → `kexact` are followed across files.
+3. **Uses**: every occurrence of a tainted atom outside its own definition, ignoring comments and strings, is reported as `<rule>-via-syntax` with `via` (the atom) and `defined_at`.
+
+```text
+Custom syntax hiding traced constructs (atom: constructs; definitions; uses):
+  `kc%`: goal-assignment; Tac/Exact.lean:11; 1 use(s)
+  `kexact`: goal-assignment; Tac/Exact.lean:5; 2 use(s)
+
+Findings:
+  Use/A.lean:4:25: warning: [goal-assignment-via-syntax] theorem t1 : True := by kexact trivial  (via `kexact`, defined at Tac/Exact.lean:5)
+```
+
+- **Overriding existing syntax is caught too.** `macro_rules | `(tactic| decide) => `(tactic| sorry)` makes every later `decide` a `sorry`; each such `decide` is reported as `sorry-via-syntax` (critical).
+- **Limits**: atoms are matched by name across all scanned files, so a harmless `local` macro that reuses the name of a tainted one is reported as well (a false positive, never a miss). Helpers are followed only within the same file, and syntax produced by code generation or by syntax defined outside the scanned paths (e.g. in a dependency) is not traced.
+
 ### JSON Output Schema
 
 ```json
@@ -259,6 +283,14 @@ A result without `goal-assignment` findings therefore does not show that every t
       "description": "Assigns a metavariable directly. ..."
     }
   ],
+  "traced_syntax": [
+    {
+      "atom": "kexact",
+      "sources": ["goal-assignment"],
+      "defined_at": ["MathProof/Tactics.lean:5"],
+      "use_count": 1
+    }
+  ],
   "findings": [
     {
       "file": "MathProof/Tactics.lean",
@@ -267,6 +299,16 @@ A result without `goal-assignment` findings therefore does not show that every t
       "rule": "goal-assignment",
       "severity": "warning",
       "text": "g.assign (← instantiateMVars v)"
+    },
+    {
+      "file": "MathProof/Main.lean",
+      "line": 12,
+      "column": 25,
+      "rule": "goal-assignment-via-syntax",
+      "severity": "warning",
+      "text": "theorem t1 : True := by kexact trivial",
+      "via": "kexact",
+      "defined_at": "MathProof/Tactics.lean:5"
     }
   ],
   "unreadable_files": []
@@ -274,13 +316,24 @@ A result without `goal-assignment` findings therefore does not show that every t
 ```
 
 - `census` lists **every** rule, including zero counts, so the report doubles as a reproducible "nothing found" record.
-- `findings[].text` is the trimmed source line (up to 200 characters).
+- `traced_syntax` lists each tainted atom with the constructs it hides, its definitions and its number of uses.
+- `findings[].text` is the trimmed source line (up to 200 characters). `via` and `defined_at` are present only on `<rule>-via-syntax` findings.
 
 ### Triage by Severity
 
 1. **critical**: The proof is incomplete or trusts something beyond the kernel. Eliminate it (§9) or obtain explicit user consent (e.g. a deliberate `native_decide`). A challenge/statement file that intentionally ends in `sorry` should be excluded with `--exclude`, never silently ignored.
 2. **warning**: Read every occurrence. Record what each metaprogram does (which declarations it adds, which goals it closes, which names it registers). Confirm the affected theorems with kernel replay (§7).
 3. **info**: Inventory only. Read each custom `elab` / `macro` once; most are harmless, but a custom tactic is where an elaborator bypass lives.
+
+Typical `warning` findings and how to read them:
+
+| Finding                                                                                      | Usually                      | What to record                                                                                             |
+| :------------------------------------------------------------------------------------------- | :--------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| `run_cmd Lean.modifyEnv fun env => Lean.LibrarySuggestions.nameDenyListExt.addEntry env "X"` | Harmless                     | Hides every theorem with a name component `X` from `+suggestions` tactics; adds no declaration             |
+| `run_tac ... (fun g => do pure [← g.revertAll])); exact foo`                                 | Harmless                     | Reverts hypotheses, then a normal `exact` checks the term                                                  |
+| `run_tac` block that calls `assign` itself                                                   | Elaborator bypass            | Which goal is closed with which term; confirm with kernel replay                                           |
+| `elab ... => ... g.assign ...` and its `goal-assignment-via-syntax` uses                     | Elaborator bypass            | The tactic's name, the number of uses (`traced_syntax`), and that the affected theorems pass kernel replay |
+| `addDecl` in a custom command and its `environment-modification-via-syntax` uses             | Declarations copied or built | Which declarations are added under which names, at each use; the kernel checks each added declaration      |
 
 > [!WARNING]
 > **A text scan is not a proof.** The scanner works on text, so it can miss constructs produced by macros or code generation, and it can flag harmless identifiers. A clean scan narrows the review; only the kernel checks in §7–§8 establish correctness.
@@ -378,6 +431,7 @@ lake comparator --config "$CLEAN/comparator.json" \
 - **Compiling untrusted code runs it.** `initialize`, `run_cmd`, `elab` and `#eval` execute during the build. Build untrusted solutions in a sandbox with no network, export the challenge where no solution code was ever compiled, and treat everything the build wrote (including the solution export) as untrusted input.
 - **Do not trust shared build caches for verification.** Integrity checks on downloaded `.olean` files prove which bytes were published, not that the proofs are valid. Use a fresh build when the result must be trusted.
 - **Independent kernels** listed under `external_kernels` each judge the export; any non-zero exit is a rejection. Some checkers reject valid exports for reasons unrelated to correctness (unsupported inductive shapes, core-library changes between Lean versions), so test each checker on a small project with the same toolchain before relying on it.
+
 - **Limits**: Comparator compares challenge and solution against the same dependency versions, so it cannot detect a modified dependency. Pin Mathlib to an official tag and verify `lake-manifest.json` against upstream. A passing run still trusts the checkers, Mathlib's definitions, the exporter and the sandbox.
 
 ---
