@@ -68,7 +68,7 @@ MyProject/
 └── Main.lean                    -- imports all Proofs/*;                     theorem main
 ```
 
-Proof files import **only statements files** (and the definitions those need). They never import each other, so Lake can build them in parallel, and editing one proof does not rebuild the others.
+Proof files import **only statements files** (and the definitions those need). They never import each other, so Lake can build them in parallel, and editing one proof does not rebuild the others. §3.11 shows how to check this with the length of the longest import chain.
 
 ### Top-Level Statements and the Challenge File
 
@@ -591,6 +591,32 @@ Callers stop passing the argument, and the assembly shows one prerequisite fewer
 - **Count the overrides.** The option census of `scan_risky_constructs.py` lists every `set_option linter.unusedVariables false` with its number of files. In a statement-first development the count for proof files should be zero.
 - **A hypothesis passed on counts as used.** `#unused_hypotheses` cannot see that `core L := other L` depends on `L` only through `other`; it reports `other` if `other` ignores it. Run it on every theorem along the chain, not only on the assembly.
 
+### 3.11. Measure the Longest Import Chain
+
+Lake builds a module only after every module it imports is built. The modules on the longest chain of imports are therefore built one after another, however many cores the machine has, and each of them first loads its whole import closure. The length of that chain costs time in two ways:
+
+- **Cold builds.** With equal module times, a build can keep busy on average at most as many cores as the **parallelism**, the number of modules divided by the chain length. On a machine with more cores than that, the chain, not the core count, sets the build time.
+- **Rebuilds after an edit.** Editing a module near the start of the chain rebuilds every module after it on the chain, in sequence, before the assembly theorem can be checked again.
+
+Statement-first decomposition is meant to keep the chain short. Proofs import only statements and definitions (§1), so a chain contains the definitions, statements and cited results a proof needs, at most one proof, and the assembly. Every proof file that imports another proof file adds a step, so a chain that keeps growing with the number of proofs shows that proofs import proofs, whatever the directories are called.
+
+`import_depth.py` from `lean4-cli` reads the `import` lines of every source file (no build needed), prints the longest chain module by module, and fails with exit code `1` when the chain is longer than `--max-depth`:
+
+```bash
+python3 <skills-path>/lean4-cli/scripts/import_depth.py . --to MyProject.Main --max-depth 12
+```
+
+The argument is the source directory (the package's `srcDir`), and `--to` limits the measurement to the import closure of the assembly. Only the project's own modules are counted; Mathlib comes from the cache.
+
+In the formalization of about 175,000 modules mentioned above, the longest chain had 203 modules, from a module in `ReciprocityTheory` to `Main`. 150 of its 202 imports went from a file in a `Proofs` directory to another such file. 63 of its modules were `...Statement` glue modules (§3.9) that imported the proof of the same name, so each one added a step and separated nothing; without them the chain would still have had 141 modules. The chain did not limit a cold build there: with 175,188 modules the parallelism was 863, far more than any build machine has cores. It did limit rebuilds: an edit near the start of the chain had to pass through about 200 modules in sequence before `Main` could be checked again. For comparison, the import closure of `Mathlib` (`v4.35.0`) has 8,625 modules, a longest chain of 177 and a parallelism of about 49, so a long chain is not a defect in itself. Compare it with what the layers allow.
+
+**Rules**:
+
+- **Measure the chain from the first proof file, and cap it in CI.** Start `--max-depth` at the current length, or at the length the layers allow (definitions, statements, one proof, assembly), and lower it as the structure improves. Raising it is a design change to review, like adding a hypothesis (§3.3).
+- **Cut the chain where a proof imports a proof.** Read the chain the script prints. Each step from one proof file to another is an import to remove: move the shared lemma down to `Definitions` if it is basic API, or make it a milestone with its own `X.Statement` (§1, "Layered Directories for Larger Developments").
+- **Do not count glue modules as separation.** A statement module that imports its own proof adds a step to every chain through it (§3.9).
+- **Check the parallelism against the build machine.** If the number of modules divided by the chain length is below the number of cores, shortening the chain shortens every cold build.
+
 ---
 
 ## 4. Checklist
@@ -599,6 +625,7 @@ Callers stop passing the argument, and the assembly shows one prerequisite fewer
 - [ ] Does each `X.proof` take as hypotheses only the prerequisite statements listed in the plan?
 - [ ] Do proof files import statements files only, never other proof files?
 - [ ] In a layered layout, does CI check that `Definitions`, `Statements` and `Published` never import `Proofs`, and that nothing imports `Witnesses`?
+- [ ] Does CI measure the longest import chain with `import_depth.py` and fail when it exceeds the set `--max-depth`?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Does every premise bundle that statements quantify over have a non-degenerate `X.witness : ∃ x, Premises x` that a default build target compiles?
 - [ ] Is every proof connected to its contract by its own header, a plain term, or an explicit adaptation, with no catch-all `first | exact ... | apply ...` glue left?

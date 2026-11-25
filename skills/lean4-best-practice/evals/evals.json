@@ -132,6 +132,19 @@
         "Recommends splitting declarations over about 100 lines along the milestones of the argument",
         "Recommends #long_decls from lean4-cli/scripts/long_decls.lean with warningAsError to fail CI"
       ]
+    },
+    {
+      "id": 13,
+      "prompt": "We split our formalization statement-first: `Definitions/`, `Statements/`, `Proofs/` and a `Main.lean` assembly, now about 20,000 modules. When someone edits a lemma low in the development, CI takes hours before `Main` is checked again, even though the build machine has 64 cores and most of them sit idle near the end. Is the decomposition not doing its job, and how do we find out and keep it from getting worse?",
+      "expected_output": "Explains that Lake builds a module only after all of its imports, so the modules on the longest import chain build one after another regardless of the core count, each loading its import closure first, and that an edit near the start of the chain rebuilds every later module on it in sequence. Explains that in a statement-first layout proofs import only statements and definitions, so a chain should contain at most one proof plus the assembly, and that a chain growing with the number of proofs means proof files import other proof files (or statement glue modules import their own proofs, which adds steps without separating anything). Recommends measuring the chain with `lean4-cli/scripts/import_depth.py` (it reads import lines, needs no build, takes the source directory and `--to` the assembly module, and prints the chain module by module), comparing the parallelism (modules divided by chain length) with the 64 cores, cutting each proof-to-proof import on the printed chain by moving shared lemmas to `Definitions` or making them milestones, and capping the chain in CI with `--max-depth N`, which exits with code 1 when exceeded, starting at the current length and lowering it.",
+      "files": [],
+      "expectations": [
+        "Explains that modules on the longest import chain build sequentially regardless of the number of cores",
+        "States that in a statement-first layout a long chain means proofs import proofs (or glue modules import proofs)",
+        "Recommends import_depth.py from lean4-cli to measure and print the longest chain",
+        "Mentions comparing the parallelism (modules / chain length) with the core count",
+        "Recommends capping the chain in CI with --max-depth and cutting proof-to-proof imports on the chain"
+      ]
     }
   ]
 }
