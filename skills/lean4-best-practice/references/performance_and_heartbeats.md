@@ -20,7 +20,7 @@ Raising a limit hides the cause, slows every build, and breaks again when nearby
 
 ### The Rules
 
-1. **Fix the cause first.** Work through §6 (open `simp`, defeq unfolding, instance search, heavy automation) before touching any limit.
+1. **Fix the cause first.** Work through §6 (open `simp`, defeq unfolding, instance search, heavy automation, auto-generated lemmas) before touching any limit.
 2. **If a raise is genuinely needed, scope it to one declaration** with `set_option ... in`, and **explain why in a comment** right after `in`:
 
    ```lean
@@ -140,7 +140,7 @@ Remove `trace.*`, `profiler`, and `diagnostics` options after profiling; Mathlib
 
 ---
 
-## 6. The 4 Main Causes of Performance Explosions & Their Remedies
+## 6. The Main Causes of Performance Explosions & Their Remedies
 
 ### Cause 1: Open `simp` Scanning Too Many Lemmas
 
@@ -180,6 +180,32 @@ Using the frozen definition prevents the elaborator from expanding the internals
   - For linear integer/natural arithmetic: use `omega` (Lean 4.7+ Core) (vastly faster and complete for Presburger arithmetic).
   - Scope `linarith`: use `linarith only [h1, h2]` to avoid parsing irrelevant local hypotheses.
   - For `aesop`: configure rule sets strictly or replace with targeted `constructor`, `ext`, and `simp only`.
+
+### Cause 5: Auto-Generated Lemmas for Heavy Structures and Inductives
+
+- **Problem**: For every `structure` and `inductive`, Lean also generates and checks injectivity lemmas (`Foo.mk.inj`, `Foo.mk.injEq`, proved with `simp`) and `sizeOf` specification lemmas (`Foo.mk.sizeOf_spec`). With many fields whose types are large Mathlib terms (linear maps, modules over completions, matrices), this work can exceed the cost of the declaration itself. It shows up in `set_option profiler true in` as `congr simp thm` and `simp` entries on a command that contains no proof.
+- **Remedy**: When the lemmas are not needed, turn their generation off for that one declaration:
+
+  ```lean
+  set_option genInjectivity false in
+  set_option genSizeOfSpec false in
+  -- data bundle with heavy field types; constructor injectivity and `sizeOf` are never used
+  structure ConjLift where
+    mu   : (AE D)ˣ →* Circle
+    coef : (A.MtCSD i A.μ0).V →ₛₗ[σ] cV.W
+    ...
+  ```
+
+  Measured on a 14-field structure of this kind (Lean `v4.33.1`, profiler, four runs each): the `structure` command took **709–750 ms** with the lemmas and **277–286 ms** without them; `congr simp thm` and `simp` alone accounted for about 340 ms.
+
+- **What stops working** (verified on Lean `v4.33.1` and `v4.35.0`):
+
+  | Option off             | Lost                                                                                                                                                                                      | Still works                                                                  |
+  | :--------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------- |
+  | `genInjectivity false` | `Foo.mk.inj`, `Foo.mk.injEq`; `simp` no longer splits `Foo.mk a b = Foo.mk c d` (`simp made no progress`)                                                                                 | `injection h`, `cases h`, `congrArg Foo.a h`                                 |
+  | `genSizeOfSpec false`  | `Foo.mk.sizeOf_spec`; well-founded recursion measured by `sizeOf` fails, whether automatic (e.g. through a `List Foo` field: `fail to show termination`) or written as `termination_by t` | Structural recursion; `termination_by` with another measure (e.g. `t.depth`) |
+
+- **Rules**: use these options only with `in` on one declaration, with a comment, and only for data bundles that are never compared constructor by constructor or recursed over. Never set them in the lakefile or file-wide.
 
 ---
 

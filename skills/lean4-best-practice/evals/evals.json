@@ -42,6 +42,19 @@
         "Keeps `Main.lean` to one-line theorems with the challenge's exact names and types",
         "Recommends a mechanical check that the copied definitions are identical (e.g. in CI)"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "With `set_option profiler true in`, the `structure` command below takes about 0.7 s, mostly reported as `congr simp thm` and `simp`, although it contains no proofs. It has 14 fields whose types are large Mathlib terms (semilinear maps, modules over completions, matrices). The structure is only a data bundle: we never compare two values constructor by constructor and never recurse over it. How can we make it cheaper, and what do we give up?\n\n```lean\nstructure ConjLift where\n  mu   : (AE D)ˣ →* Circle\n  coef : (A.MtCSD i A.μ0).V →ₛₗ[σ] cV.W\n  -- 12 more fields of similar size\n```",
+      "expected_output": "Explanation that Lean generates injectivity lemmas (`ConjLift.mk.inj`, `.injEq`, proved with `simp`) and `sizeOf` specification lemmas for the structure, and the recommendation `set_option genInjectivity false in` / `set_option genSizeOfSpec false in` on this one declaration with a comment. States what is lost: `simp` no longer splits equalities of constructors (while `injection` / `cases` still work) and well-founded recursion measured by `sizeOf` fails; never set the options file-wide or in the lakefile.",
+      "files": [],
+      "expectations": [
+        "Attributes the cost to auto-generated injectivity and `sizeOf` lemmas",
+        "Uses `set_option genInjectivity false in` and `set_option genSizeOfSpec false in` scoped to the declaration",
+        "Mentions that `simp` loses constructor injectivity but `injection` or `cases` still work",
+        "Mentions that `sizeOf`-based well-founded recursion stops working",
+        "Advises against setting the options file-wide or project-wide"
+      ]
     }
   ]
 }

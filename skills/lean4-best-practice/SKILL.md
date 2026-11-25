@@ -95,16 +95,16 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 
 For in-depth explanations, code templates, and antipattern corrections, consult the specialized references:
 
-| Topic                         | Key Focus & Techniques                                               | Guide                                                                                 |
-| :---------------------------- | :------------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
-| **Header Fence & Docstrings** | Signature immutability, preventing goal drift, Docstring Rules A/B/C | [header_fence_and_docstrings.md](references/header_fence_and_docstrings.md)           |
-| **Top-Down Proving**          | Sorry-driven development, helper extraction, hardest-case-first      | [sorry_driven_development.md](references/sorry_driven_development.md)                 |
-| **Statement-First at Scale**  | `X.Statement` / `X.proof` split, assembly, universes, challenge file | [statement_first_decomposition.md](references/statement_first_decomposition.md)       |
-| **`simp` Hygiene**            | Non-terminal `simp` hazards, `simp only`, `dsimp`, `simp_rw`, simpNF | [simp_discipline.md](references/simp_discipline.md)                                   |
-| **Mathlib Naming**            | Naming formula, head-symbol rules, connectives, dot notation         | [mathlib_naming_conventions.md](references/mathlib_naming_conventions.md)             |
-| **Performance**               | Limit catalog, scoping policy, lakefile options, `@[irreducible]`    | [performance_and_heartbeats.md](references/performance_and_heartbeats.md)             |
-| **Documentation & Style**     | File headers, docstrings, `calc` layout, line length, formatting     | [documentation_and_style.md](references/documentation_and_style.md)                   |
-| **Proof Simplification**      | Redundant step fusion, term vs tactic mode, automation solvers       | [proof_simplification_and_golfing.md](references/proof_simplification_and_golfing.md) |
+| Topic                         | Key Focus & Techniques                                                | Guide                                                                                 |
+| :---------------------------- | :-------------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
+| **Header Fence & Docstrings** | Signature immutability, preventing goal drift, Docstring Rules A/B/C  | [header_fence_and_docstrings.md](references/header_fence_and_docstrings.md)           |
+| **Top-Down Proving**          | Sorry-driven development, helper extraction, hardest-case-first       | [sorry_driven_development.md](references/sorry_driven_development.md)                 |
+| **Statement-First at Scale**  | `X.Statement` / `X.proof` split, assembly, universes, challenge file  | [statement_first_decomposition.md](references/statement_first_decomposition.md)       |
+| **`simp` Hygiene**            | Non-terminal `simp` hazards, `simp only`, `dsimp`, `simp_rw`, simpNF  | [simp_discipline.md](references/simp_discipline.md)                                   |
+| **Mathlib Naming**            | Naming formula, head-symbol rules, connectives, dot notation          | [mathlib_naming_conventions.md](references/mathlib_naming_conventions.md)             |
+| **Performance**               | Limits, scoping, lakefile options, `@[irreducible]`, generated lemmas | [performance_and_heartbeats.md](references/performance_and_heartbeats.md)             |
+| **Documentation & Style**     | File headers, docstrings, `calc` layout, line length, formatting      | [documentation_and_style.md](references/documentation_and_style.md)                   |
+| **Proof Simplification**      | Redundant step fusion, term vs tactic mode, automation solvers        | [proof_simplification_and_golfing.md](references/proof_simplification_and_golfing.md) |
 
 ---
 
