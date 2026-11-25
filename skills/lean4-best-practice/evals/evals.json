@@ -119,6 +119,19 @@
         "Gives a way to find local values below the lakefile value",
         "Warns that removing the lakefile raise requires rebuilding and fixing the declarations that relied on it"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "One theorem in my project has grown to about 8,000 lines of tactics, built from dozens of `have` steps. It needs `set_option maxHeartbeats 4000000 in`, and its file is always the last to finish in `lake build`. Is there a size limit I should aim for, and how can CI stop this from happening again?",
+      "expected_output": "Explains that a declaration is one command, so the whole proof shares one heartbeat budget and one elaboration task: since Lean v4.19.0 (#7084) the proofs of different theorems elaborate in parallel, but one proof does not, so splitting the `have` steps into separate lemmas lets each step have its own budget and lets the build use several cores. Gives Mathlib as a reference: almost all of its declarations are under 50 lines, only about 0.04% reach 100 lines, and its longest theorem has a few hundred lines. Recommends aiming for under 50 lines, splitting anything over 100 lines along the milestones of the argument, and enforcing a limit in CI with `#long_decls` from `lean4-cli/scripts/long_decls.lean`, run with `lake env lean --stdin` under `set_option warningAsError true in` so that a declaration over the limit makes `lean` exit with code 1, starting from the current longest length and lowering the limit as theorems are split.",
+      "files": [],
+      "expectations": [
+        "Explains that one declaration shares one heartbeat budget and is elaborated as one task",
+        "Mentions that proofs of different theorems elaborate in parallel since Lean v4.19.0, so splitting shortens the build",
+        "Uses Mathlib's distribution of declaration lengths as a reference for the limit",
+        "Recommends splitting declarations over about 100 lines along the milestones of the argument",
+        "Recommends #long_decls from lean4-cli/scripts/long_decls.lean with warningAsError to fail CI"
+      ]
     }
   ]
 }

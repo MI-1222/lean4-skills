@@ -64,7 +64,7 @@ Before submitting or completing any Lean 4 proof, verify against this checklist:
 ### Stage A: Architecture & Strategy
 
 - [ ] **Header Fence Respected**: Is the declaration header and type signature before `:= by` completely untouched? Have you refrained from adding convenient premises or custom axioms?
-- [ ] **Top-Down Decomposition**: Is the main theorem broken down into modular `have` steps or standalone helper lemmas rather than a 100-line monolithic tactic block?
+- [ ] **Top-Down Decomposition**: Is the main theorem broken down into standalone helper lemmas rather than a monolithic tactic block, with every declaration under 100 lines (checked with `#long_decls` in CI)?
 - [ ] **Hardest Case First**: If doing case analysis or induction, is the most difficult branch solved or planned first before doing routine base cases?
 - [ ] **Statement-First at Scale**: For multi-file or multi-agent work, does each milestone have a `def X.Statement : Prop` contract, and is the soundness audit run on a hypothesis-free assembly theorem rather than on conditional `X.proof` declarations?
 - [ ] **One Project Root**: Are all of the project's declarations under one root namespace and all of its modules under one module root, with nothing declared directly in Mathlib's namespaces?

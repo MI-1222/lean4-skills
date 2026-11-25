@@ -47,6 +47,7 @@ This skill provides operational workflows and automated tools for managing Lean 
 | `#unused_hypotheses <Prefix>`   | Find `Prop` hypotheses a proof never uses  | Conditional proofs whose types may misreport their dependencies      |
 | `#duplicate_fields <Bundle>`    | Find bundle fields with the same type      | Bundles of cited results that may cite one proposition twice         |
 | `#duplicate_decls <Prefix>`     | Find copies of theorems and definitions    | Projects with copied files or retried lemmas (`foo_alt`, `foo_bis`)  |
+| `#long_decls <N> <Prefix>`      | Find declarations longer than `N` lines    | CI limits on proof size; finding monolithic theorems to split        |
 | `lake env leanchecker <Module>` | Replay compiled declarations in the kernel | High-stakes results; detecting "environment hacking"                 |
 | `elan show`                     | Show current active toolchain and override | When inspecting Lean version consistency or environment issues       |
 

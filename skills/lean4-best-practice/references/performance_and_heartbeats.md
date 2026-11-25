@@ -340,3 +340,37 @@ If a theorem remains slow after tactic tuning:
 2. Break each milestone into a separate `private lemma` or `local lemma`.
 3. Verify each helper lemma independently.
    Lean elaborates declarations in separate tasks; modularizing proofs allows the compiler to parallelize work across CPU cores and keeps individual declaration heartbeats under 20,000.
+
+### How Long a Declaration Should Be
+
+A declaration is one command, so its size sets three things at once. Measured with Lean `v4.33.1` and `v4.35.0`:
+
+- **One heartbeat budget.** `maxHeartbeats` counts the whole declaration. A theorem made of eight `have` steps of about 100,000 heartbeats each timed out at the default `200000`, although each step alone was well within it. As eight theorems, each step gets its own budget.
+- **One elaboration task.** Since `v4.19.0` ([#7084](https://github.com/leanprover/lean4/pull/7084)), the proofs of different theorems in a file are elaborated in parallel. The proof of one theorem is a single task. Eight theorems of about 300,000 heartbeats each took 3.3–5.9 s of wall time, and one theorem with the same eight steps as `have`s took 14.7–17.8 s, for the same CPU time on 12 cores.
+- **One unit of review.** A reader, a reviewer or an agent has to hold the whole proof in mind to check or change it.
+
+Mathlib keeps declarations short. In the Mathlib release used with Lean `v4.35.0`, Lean stored source ranges for 334,143 declarations:
+
+| Length            | Mathlib declarations |
+| :---------------- | :------------------- |
+| 50 lines or more  | 963 (0.29%)          |
+| 100 lines or more | 124 (0.04%)          |
+| 200 lines or more | 5                    |
+
+The longest theorem had 258 lines (`isCompact_setOfPred_finiteMeasure_mass_le_compl_isCompact_le`), and the longest declaration of any kind, a metaprogram, had 369 lines.
+
+In the formalization of about 175,000 modules described in §2, a text scan of the sources found about 9,500 declarations over 100 lines, 656 over 200 lines and 10 over 1,000 lines, all 10 in one directory. `#long_decls` confirmed the longest ones: a single theorem of 8,001 lines, followed by theorems of 2,649, 2,432, 1,364 and 1,054 lines.
+
+Use these numbers as limits:
+
+- **Aim for under 50 lines** per declaration. That covers 99.7% of Mathlib.
+- **Split anything over 100 lines** along the milestones of the argument (steps 1–3 above), unless there is a reason to keep it whole, such as a case analysis with many short branches. Record that reason in a comment.
+- **Enforce a limit in CI.** Start at the length of the current longest declaration, or at 200 lines, and lower it as declarations are split. `#long_decls` from the `lean4-cli` skill (`scripts/long_decls.lean`) reads the stored source ranges, so it also covers declarations in compiled modules. Under `set_option warningAsError true in`, every declaration over the limit is an error and `lean` exits with code 1:
+
+  ```bash
+  { echo "import MyProject.Main"; cat <skills-path>/lean4-cli/scripts/long_decls.lean
+    echo "set_option warningAsError true in"; echo "#long_decls 200 MyProject"; } \
+    | lake env lean --stdin
+  ```
+
+  The length counts every line from the first attribute or docstring line to the end of the declaration, including comments and blank lines inside it.
