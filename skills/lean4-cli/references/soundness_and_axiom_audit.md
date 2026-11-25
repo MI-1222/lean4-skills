@@ -4,7 +4,7 @@ In formal mathematics with Lean 4, a proof is not complete merely because `lake 
 
 `#print axioms` catches those shortcuts, but it is only one layer. It cannot tell you whether the theorem **states what you think it states**, whether custom metaprograms bypassed the elaborator, whether the environment was manipulated, or whether the kernel that accepted the proof has known bugs.
 
-This guide establishes the protocols for auditing the **soundness** of completed proofs, from the axiom check up to the statement review:
+This guide establishes the protocols for auditing the **soundness** of completed proofs, from the axiom check up to kernel replay:
 
 | Level | Check                                    | What it establishes                                                             | Section |
 | :---- | :--------------------------------------- | :------------------------------------------------------------------------------ | :------ |
@@ -12,8 +12,9 @@ This guide establishes the protocols for auditing the **soundness** of completed
 | **2** | `#print axioms <Theorem>`                | No `sorryAx`, custom axioms, or native-evaluation axioms in the dependency cone | §2      |
 | **3** | Static scan (`scan_risky_constructs.py`) | Lists elaborator bypasses, environment hacking and global notation to review    | §5      |
 | **4** | Statement fidelity review                | The formal statement means the intended mathematical claim                      | §6      |
+| **5** | Kernel replay (`leanchecker`)            | The compiled `.olean` declarations re-check in a clean environment              | §7      |
 
-Levels 1–2 are mandatory for every task. Apply levels 3–4 whenever the code was not written entirely by you in this session (another agent, a contributor, an external submission).
+Levels 1–2 are mandatory for every task. Apply levels 3–4 whenever the code was not written entirely by you in this session (another agent, a contributor, an external submission). Level 5 is for high-stakes or untrusted results.
 
 ---
 
@@ -126,10 +127,10 @@ A clean axiom list proves only that the kernel-accepted proof term depends on no
 | :------------------------- | :-------------------------------------------------------------------------------------------------------- | :--------------------------- | :------------- |
 | **Wrong statement**        | Theorem proves a weaker claim, a junk-value edge case, or a redefined notion with the same name           | No                           | §6             |
 | **Global notation**        | A non-`local` `notation` / `infix` changes what a statement means when read                               | No                           | §5, §6         |
-| **Elaborator bypass**      | A custom tactic assigns the goal without the elaborator checking the term's type                          | No (kernel still checks)     | §5             |
-| **Environment hacking**    | `addDecl` / `modifyEnv` / `run_cmd` add or alter declarations; `debug.skipKernelTC` skips kernel checking | Partially                    | §5             |
-| **Kernel or runtime bugs** | The build toolchain predates a kernel soundness fix                                                       | No                           | —              |
-| **Untrusted artifacts**    | Prebuilt `.olean` files from a shared cache were produced by someone else's machine                       | No                           | —              |
+| **Elaborator bypass**      | A custom tactic assigns the goal without the elaborator checking the term's type                          | No (kernel still checks)     | §5, §7         |
+| **Environment hacking**    | `addDecl` / `modifyEnv` / `run_cmd` add or alter declarations; `debug.skipKernelTC` skips kernel checking | Partially                    | §5, §7         |
+| **Kernel or runtime bugs** | The build toolchain predates a kernel soundness fix                                                       | No                           | §7             |
+| **Untrusted artifacts**    | Prebuilt `.olean` files from a shared cache were produced by someone else's machine                       | No                           | §7             |
 
 ### Elaborator Bypass Pattern
 
@@ -149,7 +150,7 @@ elab "kexact " e:term : tactic => withMainContext do
 - **Is it unsound?** Not by itself. The kernel type-checks every declaration that is added to the environment, so an ill-typed proof is still rejected at that point.
 - **Why flag it?** The proof now depends on the kernel alone. The elaborator's checks, readable error messages and position information are lost, and a reviewer cannot rely on "it elaborated" as evidence. Combined with a kernel bug, this is exactly the path an adversarial proof would take.
 - **The goal-closing helpers do not compare types either.** `MVarId.checkedAssign` runs only an occurs check, and `closeMainGoal` rejects unassigned metavariables before calling it, so a variant of `kexact` built on either one is just as unchecked. `closeMainGoalUsing` leaves the type check to its callback: `fun type _ => elabTermEnsuringType e type` performs it, `fun _ _ => elabTerm e none` does not.
-- **Action**: Treat any direct `MVarId.assign` or `MVarId.checkedAssign`, call to `closeMainGoal` or `closeMainGoalUsing`, `run_tac` block that assigns goals, or command that copies declarations via `addDecl` as a mandatory review item, and confirm the result with kernel replay.
+- **Action**: Treat any direct `MVarId.assign` or `MVarId.checkedAssign`, call to `closeMainGoal` or `closeMainGoalUsing`, `run_tac` block that assigns goals, or command that copies declarations via `addDecl` as a mandatory review item, and confirm the result with kernel replay (§7).
 
 > [!NOTE]
 > Legitimate projects also use these APIs, for example to register names on a library-suggestion deny list via `run_cmd Lean.modifyEnv ...`. The goal of the audit is not to forbid metaprogramming, but to make every use of it visible and explained.
@@ -234,7 +235,7 @@ theorem wrong : False := by
   trivial
 ```
 
-A result without `goal-assignment` findings therefore does not show that every tactic checks its goals. For the correctness of the proofs, rely on the kernel: build with no `kernel-check-bypass` finding, and replay the declarations.
+A result without `goal-assignment` findings therefore does not show that every tactic checks its goals. For the correctness of the proofs, rely on the kernel: build with no `kernel-check-bypass` finding, and replay the declarations (§7).
 
 ### JSON Output Schema
 
@@ -273,12 +274,12 @@ A result without `goal-assignment` findings therefore does not show that every t
 
 ### Triage by Severity
 
-1. **critical**: The proof is incomplete or trusts something beyond the kernel. Eliminate it (§7) or obtain explicit user consent (e.g. a deliberate `native_decide`). A challenge/statement file that intentionally ends in `sorry` should be excluded with `--exclude`, never silently ignored.
-2. **warning**: Read every occurrence. Record what each metaprogram does (which declarations it adds, which goals it closes, which names it registers). Confirm the affected theorems with kernel replay.
+1. **critical**: The proof is incomplete or trusts something beyond the kernel. Eliminate it (§8) or obtain explicit user consent (e.g. a deliberate `native_decide`). A challenge/statement file that intentionally ends in `sorry` should be excluded with `--exclude`, never silently ignored.
+2. **warning**: Read every occurrence. Record what each metaprogram does (which declarations it adds, which goals it closes, which names it registers). Confirm the affected theorems with kernel replay (§7).
 3. **info**: Inventory only. Read each custom `elab` / `macro` once; most are harmless, but a custom tactic is where an elaborator bypass lives.
 
 > [!WARNING]
-> **A text scan is not a proof.** The scanner works on text, so it can miss constructs produced by macros or code generation, and it can flag harmless identifiers. A clean scan narrows the review; only a kernel check establishes correctness.
+> **A text scan is not a proof.** The scanner works on text, so it can miss constructs produced by macros or code generation, and it can flag harmless identifiers. A clean scan narrows the review; only the kernel check in §7 establishes correctness.
 
 ---
 
@@ -302,7 +303,29 @@ The kernel certifies that the proof proves **the formal statement**. Whether the
 
 ---
 
-## 7. Axiom Elimination Workflow
+## 7. Kernel Replay with `leanchecker`
+
+Lean toolchains ship `leanchecker`, which replays the declarations stored in compiled `.olean` files through the kernel:
+
+```bash
+# Replay every module whose name starts with MyProject.Main (parallel)
+lake env leanchecker MyProject.Main
+
+# Replay one module and all of its imports into a fresh environment
+lake env leanchecker --fresh MyProject.Main
+```
+
+- **Default mode** replays the declarations of each target module into the environment as it was at the beginning of that module.
+- **`--fresh`** replays every constant (imported and local) into an empty environment. It accepts exactly one module and takes far longer, but it does not trust any previously loaded state.
+- According to its own documentation, `leanchecker` **"is not an external verifier, simply a tool to detect 'environment hacking'"**: it reuses Lean's own kernel. It catches declarations that entered the environment without being checked (e.g. via `modifyEnv` or `debug.skipKernelTC`), but not bugs in the kernel itself.
+- [lean4lean](https://github.com/digama0/lean4lean) is an independent kernel implementation with a matching CLI (`lake env lean4lean --fresh MyProject.Main`), built against the same Lean version as the project.
+
+> [!IMPORTANT]
+> **The build toolchain's kernel version matters.** A successful build is evidence from that toolchain's kernel only. If kernel soundness fixes were released after the project's pinned Lean version, a build by that version is limited evidence. Check the Lean release notes for kernel fixes newer than the pinned version and, for high-stakes results, judge the proof with a newer toolchain.
+
+---
+
+## 8. Axiom Elimination Workflow
 
 When an audit reveals non-standard axioms, `sorryAx`, or critical scan findings:
 
@@ -319,7 +342,7 @@ graph TD
     Sorry --> Repair["Fill sorry using lean4-interactive-proof / mathlib-search"]
     Custom --> Inline["Replace axiom with theorem and formalize proof"]
     Native --> Kernel["Switch to decide or norm_num if feasible"]
-    Bypass --> Replay["Rebuild"]
+    Bypass --> Replay["Rebuild, then replay with leanchecker"]
 
     Repair --> Audit
     Inline --> Audit
@@ -329,11 +352,11 @@ graph TD
 
 1. **Eliminating `sorryAx`**: Search for `sorry` or `admit` across all dependencies of the theorem. Often a helper lemma defined earlier in the file or imported from a local module still contains a `sorry`. `scan_risky_constructs.py` lists every location at once.
 2. **Eliminating Custom Axioms**: If a colleague or past session declared `axiom my_helper : ...`, convert `axiom` to `theorem`, provide a `by sorry` placeholder, and systematically eliminate the `sorry` using Mathlib search and interactive tactics.
-3. **Eliminating Kernel-Check Bypasses**: Delete `set_option debug.skipKernelTC` (and other `debug.*` options) and any `addDeclWithoutChecking`, then rebuild.
+3. **Eliminating Kernel-Check Bypasses**: Delete `set_option debug.skipKernelTC` (and other `debug.*` options) and any `addDeclWithoutChecking`, rebuild, and confirm with `leanchecker` that every declaration re-checks.
 
 ---
 
-## 8. Verification Checklist
+## 9. Verification Checklist
 
 Before marking any formalization task as complete:
 
@@ -348,3 +371,8 @@ Additionally, for code you did not write entirely yourself in this session:
 - [ ] Has `scan_risky_constructs.py` reported no critical findings (with intentional `sorry` files excluded explicitly)?
 - [ ] Has every warning finding (goal assignment, environment modification, global notation, ...) been read and explained?
 - [ ] Has each primary statement passed the statement fidelity review (§6)?
+
+For high-stakes or untrusted results:
+
+- [ ] Have the compiled modules been replayed with `leanchecker` (and `--fresh` for the main module)?
+- [ ] Have known kernel soundness fixes after the pinned Lean version been considered?

@@ -1,6 +1,6 @@
 ---
 name: lean4-cli
-description: Manage Lean 4 and Lake CLI workflows, build targets, fetch pre-built Mathlib caches, execute fast file-level verification, audit proof soundness and axioms via `#print axioms`, scan sources for trust-base risks (`sorry`, custom axioms, `native_decide`, elaborator bypass via direct goal assignment, environment hacking, global notation) with `scan_risky_constructs.py`, and parse compiler diagnostic logs into structured JSON. Use whenever running `lake build`, `lake env lean`, or `lake exe cache get`, verifying proof soundness without `sorryAx`, reviewing proofs written by other agents or contributors, diagnosing compilation errors, checking Lean/Elan toolchain health, or automating project build pipelines.
+description: Manage Lean 4 and Lake CLI workflows, build targets, fetch pre-built Mathlib caches, execute fast file-level verification, audit proof soundness and axioms via `#print axioms`, scan sources for trust-base risks (`sorry`, custom axioms, `native_decide`, elaborator bypass via direct goal assignment, environment hacking, global notation) with `scan_risky_constructs.py`, replay proofs through the kernel with `leanchecker`, and parse compiler diagnostic logs into structured JSON. Use whenever running `lake build`, `lake env lean`, or `lake exe cache get`, verifying proof soundness without `sorryAx`, reviewing proofs written by other agents or contributors, diagnosing compilation errors, checking Lean/Elan toolchain health, or automating project build pipelines.
 compatibility: Target Lean 4.14.0+ / Lake build system (Verified on Lean v4.35.0 and contemporary Mathlib). Requires Python 3.10+ for parse_diagnostics.py and scan_risky_constructs.py.
 metadata:
   target-lean-version: '>=4.14.0'
@@ -11,7 +11,7 @@ metadata:
 
 # Lean 4 CLI and Lake Build Management
 
-This skill provides operational workflows and automated tools for managing Lean 4 projects using Lake (the Lean build tool) and Elan (the Lean version manager). It guides agents in fetching pre-compiled Mathlib caches, executing fast file-level type checks, running incremental or full project builds, auditing proof soundness via `#print axioms`, static risk scans, and parsing compiler diagnostics into structured JSON.
+This skill provides operational workflows and automated tools for managing Lean 4 projects using Lake (the Lean build tool) and Elan (the Lean version manager). It guides agents in fetching pre-compiled Mathlib caches, executing fast file-level type checks, running incremental or full project builds, auditing proof soundness via `#print axioms`, static risk scans and kernel replay, and parsing compiler diagnostics into structured JSON.
 
 ---
 
@@ -33,16 +33,17 @@ This skill provides operational workflows and automated tools for managing Lean 
 
 ## 1. Quick Reference: Common Commands
 
-| Command                    | Purpose                                    | When to Use                                                          |
-| :------------------------- | :----------------------------------------- | :------------------------------------------------------------------- |
-| `lake exe cache get`       | Fetch Mathlib pre-compiled `.olean` cache  | **Mandatory** on fresh workspace setup or after modifying `lakefile` |
-| `lake exe cache get!`      | Force re-download of Mathlib cache         | When `.olean` files are corrupted or type errors occur in Mathlib    |
-| `lake env lean <file>`     | Fast single-file type checking             | **Primary verification loop** while actively editing Lean code       |
-| `lake build <Module>`      | Build specific library module or target    | After cross-file modifications or adding new imports                 |
-| `lake build`               | Full project verification                  | Checkpoint gate or before completing the proof task                  |
-| `#print axioms <theorem>`  | Audit proof soundness and axioms           | **Final gate** to ensure no `sorryAx` or custom axioms exist         |
-| `scan_risky_constructs.py` | Static scan for trust-base risks           | Reviewing code written by other agents, contributors or submissions  |
-| `elan show`                | Show current active toolchain and override | When inspecting Lean version consistency or environment issues       |
+| Command                         | Purpose                                    | When to Use                                                          |
+| :------------------------------ | :----------------------------------------- | :------------------------------------------------------------------- |
+| `lake exe cache get`            | Fetch Mathlib pre-compiled `.olean` cache  | **Mandatory** on fresh workspace setup or after modifying `lakefile` |
+| `lake exe cache get!`           | Force re-download of Mathlib cache         | When `.olean` files are corrupted or type errors occur in Mathlib    |
+| `lake env lean <file>`          | Fast single-file type checking             | **Primary verification loop** while actively editing Lean code       |
+| `lake build <Module>`           | Build specific library module or target    | After cross-file modifications or adding new imports                 |
+| `lake build`                    | Full project verification                  | Checkpoint gate or before completing the proof task                  |
+| `#print axioms <theorem>`       | Audit proof soundness and axioms           | **Final gate** to ensure no `sorryAx` or custom axioms exist         |
+| `scan_risky_constructs.py`      | Static scan for trust-base risks           | Reviewing code written by other agents, contributors or submissions  |
+| `lake env leanchecker <Module>` | Replay compiled declarations in the kernel | High-stakes results; detecting "environment hacking"                 |
+| `elan show`                     | Show current active toolchain and override | When inspecting Lean version consistency or environment issues       |
 
 ---
 
@@ -104,15 +105,15 @@ lake exe cache get
 
 To maintain fast turnaround times and guarantee strict mathematical rigor, follow this multi-tier verification ladder (from lightest to full verification):
 
-| Tier                               | Tool / Command                              | Dependency Handling                        | Target `.olean` Written | Speed      | Best For                                                      |
-| :--------------------------------- | :------------------------------------------ | :----------------------------------------- | :---------------------- | :--------- | :------------------------------------------------------------ |
-| **Tier 0: Per-Edit**               | `lean_goal.py` / LSP diagnostics            | In-memory LSP server state                 | No                      | Sub-second | Interactive goal inspection after each tactic line            |
-| **Tier 1: Fast File Gate**         | `lake env lean <path/to/File.lean>`         | Reads **existing pre-built `.olean`** only | No                      | Seconds    | Fast syntax/type check when upstream imports are unchanged    |
-| **Tier 1b: Dependency-Aware Gate** | `lake lean <path/to/File.lean>` (Lean 4.8+) | **Builds stale imports**, then checks file | No                      | Fast       | File check after editing upstream imports in the same session |
-| **Tier 2: Module Build**           | `lake build <Module>`                       | Rebuilds dependencies + target             | **Yes**                 | Moderate   | Writing module `.olean` artifacts for downstream consumers    |
-| **Tier 3: Project Gate**           | `lake build`                                | Full workspace build graph                 | **Yes**                 | Minutes    | Pre-commit checkpoint and whole-project validation            |
-| **Tier 4: Soundness Gate**         | `#print axioms <Theorem>`                   | Kernel check on environment                | N/A                     | Sub-second | Mandatory audit: eliminate `sorryAx` and synthetic axioms     |
-| **Tier 5: Trust Gate**             | `scan_risky_constructs.py`                  | Source scan                                | No                      | Seconds    | Code from other agents, contributors or external submissions  |
+| Tier                               | Tool / Command                              | Dependency Handling                               | Target `.olean` Written | Speed            | Best For                                                      |
+| :--------------------------------- | :------------------------------------------ | :------------------------------------------------ | :---------------------- | :--------------- | :------------------------------------------------------------ |
+| **Tier 0: Per-Edit**               | `lean_goal.py` / LSP diagnostics            | In-memory LSP server state                        | No                      | Sub-second       | Interactive goal inspection after each tactic line            |
+| **Tier 1: Fast File Gate**         | `lake env lean <path/to/File.lean>`         | Reads **existing pre-built `.olean`** only        | No                      | Seconds          | Fast syntax/type check when upstream imports are unchanged    |
+| **Tier 1b: Dependency-Aware Gate** | `lake lean <path/to/File.lean>` (Lean 4.8+) | **Builds stale imports**, then checks file        | No                      | Fast             | File check after editing upstream imports in the same session |
+| **Tier 2: Module Build**           | `lake build <Module>`                       | Rebuilds dependencies + target                    | **Yes**                 | Moderate         | Writing module `.olean` artifacts for downstream consumers    |
+| **Tier 3: Project Gate**           | `lake build`                                | Full workspace build graph                        | **Yes**                 | Minutes          | Pre-commit checkpoint and whole-project validation            |
+| **Tier 4: Soundness Gate**         | `#print axioms <Theorem>`                   | Kernel check on environment                       | N/A                     | Sub-second       | Mandatory audit: eliminate `sorryAx` and synthetic axioms     |
+| **Tier 5: Trust Gate**             | `scan_risky_constructs.py` → `leanchecker`  | Source scan, then kernel replay of `.olean` files | No                      | Seconds to hours | Code from other agents, contributors or external submissions  |
 
 ```mermaid
 graph TD
@@ -134,8 +135,8 @@ graph TD
     L -- "No (sorryAx or axiom)" --> F
     L -- "Yes" --> N{"Untrusted or high-stakes code?"}
     N -- "No" --> M["Proof Verified & Sound"]
-    N -- "Yes" --> O["Level 5: Trust Gate<br/>static scan"]
-    O -- "Findings" --> F
+    N -- "Yes" --> O["Level 5: Trust Gate<br/>static scan, leanchecker"]
+    O -- "Findings or rejection" --> F
     O -- "Clean" --> M
 ```
 
@@ -210,10 +211,10 @@ Lean 4 identifiers follow standard language grammar: hyphens (`-`) are parsed as
 - **Characteristics**: Verifies that the completed proof depends strictly on Lean 4 / Mathlib's legitimate foundation and contains no illicit shortcuts or unproven premises.
 - **Use case**: **Mandatory** before concluding any formalization task.
 
-### Level 5: Trust Gate (Static Scan)
+### Level 5: Trust Gate (Static Scan, Kernel Replay)
 
-- **Commands**: `python3 <skill-path>/scripts/scan_risky_constructs.py`.
-- **Characteristics**: Goes beyond the axiom list. Flags elaborator bypasses, environment manipulation and global notation in the source.
+- **Commands**: `python3 <skill-path>/scripts/scan_risky_constructs.py`, then `lake env leanchecker <Module>`.
+- **Characteristics**: Goes beyond the axiom list. Flags elaborator bypasses, environment manipulation and global notation in the source, and re-checks compiled declarations in the kernel.
 - **Use case**: Code written by other agents, contributors or external submissions, and any result that must be trusted without trusting its author. See "Beyond `#print axioms`" in §5.
 
 ---
@@ -272,8 +273,12 @@ A clean axiom list does **not** show that the statement means the intended mathe
    Exit code `1` means a `critical` finding (`sorry`, `axiom`, `native_decide`, `debug.skipKernelTC`, ...). Read every `warning` finding as well, especially `goal-assignment` (a custom tactic that assigns the goal without the elaborator's type check) and `global-notation`. Use `--json` for structured output.
 
 2. **Statement fidelity review**: Check that each primary statement uses Mathlib's definitions, excludes junk-value points, and elaborates numeric literals in the intended type.
+3. **Kernel replay**: `lake env leanchecker <Module>` (add `--fresh` for one module replayed from an empty environment) re-checks compiled declarations and detects "environment hacking".
 
-For full details on handling private declarations, namespace scope stacks, eliminating synthetic axioms, `native_decide` / `Lean.ofReduceBool` caveats, the scanner's rule catalog and JSON schema, and the statement review checklist, consult the comprehensive guide:
+> [!WARNING]
+> Compiling untrusted Lean code runs its metaprograms (`initialize`, `run_cmd`, `elab`, `#eval`). Build untrusted projects in a sandbox without network access, and never treat a shared build cache as evidence that the proofs are valid.
+
+For full details on handling private declarations, namespace scope stacks, eliminating synthetic axioms, `native_decide` / `Lean.ofReduceBool` caveats, the scanner's rule catalog and JSON schema, the statement review checklist and `leanchecker`, consult the comprehensive guide:
 
 - [Soundness and Axiom Audit Guide](references/soundness_and_axiom_audit.md)
 
