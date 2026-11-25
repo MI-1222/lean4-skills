@@ -205,6 +205,53 @@ In the formalization of about 175,000 modules mentioned above, the published res
 - **Keep adapters next to the statement.** Corollaries that restate a cited result in the form the development needs (`KawamataViehweg.twist (h : KawamataViehweg) ...`) belong in the statement's file, so that each consumer does not derive them again.
 - **Shrink the bundle, never hide it.** Progress means proving a `Published.X`, plugging the proof into the assembly, and deleting the field. If some citations stay unproven, the top-level theorem must show them in its type (`theorem main (L : Literature) : Main.Statement`) and be reported as conditional. An `axiom` would hide them from the type, and Comparator rejects any axiom its config does not allow.
 
+### Layered Directories for Larger Developments
+
+When a development also has its own definitions, cited results (previous section) and witnesses (§3.8), give each kind of file its own directory and fix which directory may import which:
+
+```text
+MyProject/
+├── Definitions/   -- def, structure, instance, plus the basic API lemmas about them
+├── Statements/    -- def X.Statement : Prop, and nothing else
+├── Published/     -- def Published.X : Prop, adapters, satisfiability examples
+├── Proofs/        -- theorem X.proof, theorem Published.X.proof
+├── Witnesses/     -- theorem X.witness, tests; built by a test target, imported by nothing
+└── Main.lean      -- assembly theorems
+```
+
+| Layer         | May import                                        | Must never import                                |
+| :------------ | :------------------------------------------------ | :----------------------------------------------- |
+| `Definitions` | Mathlib, `Definitions`                            | `Statements`, `Published`, `Proofs`, `Witnesses` |
+| `Statements`  | Mathlib, `Definitions`, `Statements`, `Published` | `Proofs`, `Witnesses`                            |
+| `Published`   | Mathlib, `Definitions`, `Statements`, `Published` | `Proofs`, `Witnesses`                            |
+| `Proofs`      | Mathlib, `Definitions`, `Statements`, `Published` | `Proofs`, `Witnesses`                            |
+| `Witnesses`   | any layer                                         | nothing; but no layer imports `Witnesses`        |
+| `Main.lean`   | `Statements`, `Proofs`                            | `Witnesses`                                      |
+
+The rule that matters most is that **nothing above `Proofs` imports `Proofs`**. Then reading a definition or a statement never requires reading a proof, editing a proof never rebuilds a statement, and the proof files build in parallel.
+
+**Directory names do not enforce anything.** In the formalization of about 175,000 modules mentioned above, one library had directories named `Definitions`, `Statements`, `PublishedTheorems`, `Proofs` and `Counterexamples`. Its import lines went against that order on a large scale:
+
+- `Definitions` imported `Proofs` 1,968 times, and held 30,863 theorems.
+- `Statements` imported `Proofs` 94 times.
+- `PublishedTheorems` imported `Proofs` 307 times.
+- `Proofs` imported `Counterexamples` 510 times.
+
+So the names described the intent, not the dependency graph. Check the order in CI from the first commit. The following check assumes the layer directories sit directly under `MyProject/`. It prints every import that goes against the table and fails if there is one:
+
+```bash
+! grep -rEo --include='*.lean' '^import MyProject\.[A-Za-z]+' MyProject \
+  | awk -F'[:/.]' '{ print $2, "->", $NF, "(" $0 ")" }' \
+  | grep -E '^Definitions -> (Statements|Published)|^(Definitions|Statements|Published|Proofs) -> (Proofs|Witnesses)|^Main -> Witnesses'
+```
+
+**Rules**:
+
+- **Keep `Definitions` light.** Basic API lemmas about a definition (`simp` lemmas, unfolding lemmas, the instances it needs) belong next to it. Anything with a real argument goes to `Proofs` as a milestone.
+- **Put shared lemmas in `Definitions`, not in another proof file.** When two proofs need the same lemma, the "proofs never import proofs" rule leaves two options: move the lemma down to `Definitions` if it is basic API, or make it a milestone with its own `X.Statement`.
+- **Keep witnesses out of the main import closure.** List the `Witnesses` library in `defaultTargets` so that every build checks it (§3.8), but never import it from `Proofs` or `Main.lean`.
+- **Add the layer check before the first proof file.** Fixing the order after the fact means moving declarations between thousands of files.
+
 ---
 
 ## 2. Why It Helps
@@ -414,6 +461,7 @@ In the formalization of about 175,000 modules mentioned above, `Counterexamples/
 - [ ] Does every milestone have a `def X.Statement : Prop` with a docstring, in a file that contains no proofs?
 - [ ] Does each `X.proof` take as hypotheses only the prerequisite statements listed in the plan?
 - [ ] Do proof files import statements files only, never other proof files?
+- [ ] In a layered layout, does CI check that `Definitions`, `Statements` and `Published` never import `Proofs`, and that nothing imports `Witnesses`?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Does every premise bundle that statements quantify over have a non-degenerate `X.witness : ∃ x, Premises x` that a default build target compiles?
 - [ ] Is the novel argument stated as one core statement in a Mathlib-only statements file, with each top-level claim derived from it by a short reduction that uses only library lemmas?
