@@ -112,6 +112,43 @@ While inline tactics are powerful and direct, keep these two critical constraint
      - Narrower imports shrink the search, but they also hide lemmas from modules that are not imported (item 1 above). Choose imports for the file's purpose (`lean4-mathlib-use` → `minimal_imports_and_shake.md` §1), not for the search.
      - Never leave unresolved `exact?`, `apply?`, or `rw?` calls in a saved file; if they do not produce a suggestion within a few seconds, delete them and query `search_loogle.py` via CLI.
 
+### Library Suggestions (`+suggestions`) and Deny Lists (Lean 4.26+)
+
+Since Lean `v4.26.0`, some tactics ask a library suggestion engine (premise selection) for relevant theorems and add them to their own search: `grind +suggestions`, `simp? +suggestions`, `simp_all? +suggestions`, `solve_by_elim +suggestions` (Lean `v4.27.0`+), and `try?`, which tries `grind? +suggestions`. The default engine comes with `import Lean.LibrarySuggestions.Default`, and every file that imports Mathlib has it through `Mathlib.Init`. `exact?`, `apply?` and `rw?` do not use this engine.
+
+The engine returns at most 100 theorems by default (`maxSuggestions`). In a large development, the project's own theorems can fill those places and push out the Mathlib lemmas a goal needs. Deny lists remove theorems from the suggestions:
+
+| Extension               | An entry `"X"` removes                                                                      |
+| :---------------------- | :------------------------------------------------------------------------------------------ |
+| `nameDenyListExt`       | Every theorem whose name has a component equal to `X` (`X.foo` and `A.X.foo`, not `Xs.foo`) |
+| `moduleDenyListExt`     | Every theorem from a module whose name has a component equal to `X`                         |
+| `typePrefixDenyListExt` | Every theorem whose conclusion's head constant has the name prefix `X`                      |
+
+The components `Lake`, `Lean`, `Internal` and `Tactic` are denied for names and modules out of the box, so a project lemma named `MyLib.Tactic.foo` is never suggested.
+
+An entry is added with a command and stored in the module's `.olean`:
+
+```lean
+import Lean.LibrarySuggestions.Basic
+import Lean.Elab.Command
+
+-- Hides every theorem with a name component `Scratch` from library suggestions.
+run_cmd Lean.modifyEnv fun env =>
+  Lean.LibrarySuggestions.nameDenyListExt.addEntry env "Scratch"
+```
+
+The entry applies to the rest of the same file and to every module that imports it, directly or transitively. A separate small module per denied name lets each file choose what to hide. One formalization of about 175,000 modules had five such modules, each denying one of its own libraries.
+
+Measured on Lean `v4.35.0`, in a file that imports a module denying `"Secret"`:
+
+| Goal closed by             | `grind +suggestions` | `exact?` |
+| :------------------------- | :------------------- | :------- |
+| `Secret.p_all : P n`       | Fails                | Succeeds |
+| `Outer.Secret.q_all : Q n` | Fails                | —        |
+| `Open.r_all : R n`         | Succeeds             | —        |
+
+A deny list only changes what is suggested. The denied theorems can still be named explicitly (`exact Secret.p_all 3`), and the command adds no declaration, so it does not affect soundness (`lean4-cli` → `soundness_and_axiom_audit.md`).
+
 ---
 
 ## 3. Strategy 2: Type Signature Search via Loogle (`search_loogle.py`)
