@@ -454,6 +454,64 @@ In the formalization of about 175,000 modules mentioned above, `Counterexamples/
 - **Treat a short proof by contradiction from the premises as a red flag.** If `X.proof` closes with `absurd`, `exfalso` or `False.elim` from its premises without the expected argument, try to build the witness before accepting the proof. If the negation of the witness is provable (`¬ ∃ x, Premises x`), the premises are broken.
 - **A witness does not check the conclusion.** It shows only that the statement has content. Also check that the conclusion is not false for the witness, as in §3.2. The witness is the natural first test case.
 
+### 3.9. Do Not Bridge Proofs and Contracts with Catch-All Tactics
+
+When a proof ends up under a different name or a slightly different signature than its contract, it is tempting to connect the two with a generic tactic that tries several forms:
+
+```lean
+theorem contract_name : <contract type> := by
+  first | exact @proof_name | exact proof_name | (intros; apply proof_name <;> assumption)
+```
+
+The type in the header still fixes what is proved, so this is sound. But it hides how the proof differs from the contract:
+
+```lean
+theorem double_pos (n : Nat) (h : 0 < n) : 0 < 2 * n := by omega
+
+-- ❌ Compiles: the third branch drops the premise `n ≠ 5` without a trace.
+theorem pos_glue : ∀ n : Nat, 0 < n → n ≠ 5 → 0 < 2 * n := by
+  first
+    | exact @double_pos
+    | exact double_pos
+    | (intros; apply double_pos <;> assumption)
+
+-- A direct term shows the difference:
+-- "Type mismatch: double_pos has type ∀ (n : Nat), 0 < n → 0 < 2 * n
+--  but is expected to have type ∀ (n : Nat), 0 < n → n ≠ 5 → 0 < 2 * n"
+theorem pos_direct : ∀ n : Nat, 0 < n → n ≠ 5 → 0 < 2 * n := @double_pos
+
+-- ❌ When every branch fails, only the last branch's error is reported:
+-- "Tactic `apply` failed: could not unify the conclusion of `double_pos`"
+theorem neg_glue : ∀ n : Nat, 0 < 3 * n := by
+  first
+    | exact @double_pos
+    | exact double_pos
+    | (intros; apply double_pos <;> assumption)
+```
+
+```lean
+def Pos.Statement : Prop := ∀ n : Nat, 0 < n → 0 < 2 * n
+def PosNe.Statement : Prop := ∀ n : Nat, 0 < n → n ≠ 5 → 0 < 2 * n
+
+-- ✅ Same type: a term is checked once, and a mismatch prints both types.
+theorem Pos.proof : Pos.Statement := double_pos
+
+-- ✅ Different type: write the adaptation out, so the dropped premise is visible as `_`.
+theorem PosNe.proof : PosNe.Statement := fun n h _ => double_pos n h
+```
+
+If the unused premise is given a name (`fun n h hne => ...`), `linter.unusedVariables` warns about it. Note also that `intros` does not unfold `def X.Statement`, while `intro n h` does, so the third branch does nothing useful against a statement-first contract.
+
+The formalization of about 175,000 modules mentioned above did this on a large scale. It had 46,610 files named `...Statement.lean`, about a quarter of all its modules, and 44,387 of them contained exactly this three-branch `first`. 45,641 of them raised `maxHeartbeats`. In a sample of 932, 915 imported the proof file of the same name, so the "statement" files depended on proofs and separated nothing in the build. In four files checked by hand, the contract type matched the proof's type up to binder names: the glue was only a rename, at the cost of one extra module and one extra name per theorem.
+
+**Rules**:
+
+- **Prefer no glue.** Write the proof under the contract's name and type (`theorem X.proof : X.Statement := by ...`).
+- **For a rename, use a term.** When an existing lemma already proves the contract, write `theorem X.proof : X.Statement := Y`. It is checked once, and a mismatch is reported with both types.
+- **For a real difference, write the adaptation out.** Name dropped premises `_`, and pass arguments explicitly (`fun n h _ => Y n h`). A premise that the proof does not need is a point for the contract review: either the contract is weaker than it could be, or the planned argument was expected to need it (§3.3).
+- **Collapse generated glue before merging.** If an agent produces `first | ... | ...` glue while signatures are still moving, replace each one with the single alternative that works, starting with the plain term. Treat any case that needs the `intros; apply ... <;> assumption` branch as a contract mismatch to review.
+- **Keep any remaining glue in the proof file.** A separate glue module that imports the proof adds a module and a second name, and decouples nothing.
+
 ---
 
 ## 4. Checklist
@@ -464,6 +522,7 @@ In the formalization of about 175,000 modules mentioned above, `Counterexamples/
 - [ ] In a layered layout, does CI check that `Definitions`, `Statements` and `Published` never import `Proofs`, and that nothing imports `Witnesses`?
 - [ ] Has each statement been sanity-checked against boundary values before others build on it?
 - [ ] Does every premise bundle that statements quantify over have a non-degenerate `X.witness : ∃ x, Premises x` that a default build target compiles?
+- [ ] Is every proof connected to its contract by its own header, a plain term, or an explicit adaptation, with no catch-all `first | exact ... | apply ...` glue left?
 - [ ] Is the novel argument stated as one core statement in a Mathlib-only statements file, with each top-level claim derived from it by a short reduction that uses only library lemmas?
 - [ ] Is each cited published result a `def Published.X : Prop` with a citation and a satisfiability `example`, collected in a `structure ... : Prop` bundle with descriptive field names, and does the top-level theorem either discharge the bundle or show it in its type?
 - [ ] Is there an assembly theorem whose `#check @...` shows no remaining statement hypotheses?
