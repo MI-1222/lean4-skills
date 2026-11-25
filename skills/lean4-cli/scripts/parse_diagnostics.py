@@ -17,12 +17,20 @@ from typing import Any
 # Regex pattern to strip ANSI color escape sequences.
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
+# Severity keyword, optionally followed by the name of a named error in parentheses.
+# Since Lean v4.22.0, `lean` (and `lake env lean`) print named errors as `error(lean.unknownIdentifier):`.
+# `lake build` prints the same diagnostic without the name.
+SEVERITY_PATTERN = r"(?P<severity>error|warning|info)(?:\((?P<error_name>[^()\s]+)\))?"
+
 # Regex pattern matching direct Lean 4 compiler output (path:line:col: severity: message).
 # Handles Windows absolute paths with drive letters (e.g. C:\path\to\File.lean:12:4: error: ...).
 # e.g.: /path/to/File.lean:12:4: error: type mismatch
+# e.g.: /path/to/File.lean:3:17: error(lean.unknownIdentifier): Unknown identifier `foo`
 # e.g.: C:\path\to\File.lean:12:4: warning: unused variable `x`
 DIAGNOSTIC_HEADER_LEAN_RE = re.compile(
-    r"^\s*(?P<file>(?:[a-zA-Z]:)?[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s+(?P<severity>error|warning|info):\s*(?P<message>.*)$",
+    r"^\s*(?P<file>(?:[a-zA-Z]:)?[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s+"
+    + SEVERITY_PATTERN
+    + r":\s*(?P<message>.*)$",
     re.IGNORECASE,
 )
 
@@ -31,7 +39,9 @@ DIAGNOSTIC_HEADER_LEAN_RE = re.compile(
 # e.g.: warning: MathProof/Algebra/Group.lean:32:2: `simp` is a flexible tactic
 # e.g.: error: C:\path\to\Basic.lean:10:4: type mismatch
 DIAGNOSTIC_HEADER_LAKE_RE = re.compile(
-    r"^\s*(?P<severity>error|warning|info):\s+(?P<file>(?:[a-zA-Z]:)?[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s*(?P<message>.*)$",
+    r"^\s*"
+    + SEVERITY_PATTERN
+    + r":\s+(?P<file>(?:[a-zA-Z]:)?[^:\n\r]+):(?P<line>\d+):(?P<col>\d+):\s*(?P<message>.*)$",
     re.IGNORECASE,
 )
 
@@ -39,7 +49,7 @@ DIAGNOSTIC_HEADER_LAKE_RE = re.compile(
 # e.g.: error: build failed
 # e.g.: error: > lean --make ... failed
 LAKE_GENERIC_ERROR_RE = re.compile(
-    r"^\s*(?P<severity>error|warning|info):\s*(?P<message>.*)$",
+    r"^\s*" + SEVERITY_PATTERN + r":\s*(?P<message>.*)$",
     re.IGNORECASE,
 )
 
@@ -96,6 +106,8 @@ def parse_build_output(raw_text: str) -> tuple[list[dict[str, Any]], list[str]]:
         if current_diag is not None:
             # Strip trailing whitespace and newlines from the message.
             current_diag["message"] = current_diag["message"].strip()
+            # Diagnostics created outside a header line (e.g. panics) carry no name.
+            current_diag.setdefault("error_name", None)
             diagnostics.append(current_diag)
             current_diag = None
 
@@ -124,6 +136,7 @@ def parse_build_output(raw_text: str) -> tuple[list[dict[str, Any]], list[str]]:
                 "line": int(lean_match.group("line")),
                 "column": int(lean_match.group("col")),
                 "severity": lean_match.group("severity").lower(),
+                "error_name": lean_match.group("error_name"),
                 "message": lean_match.group("message"),
             }
             continue
@@ -138,6 +151,7 @@ def parse_build_output(raw_text: str) -> tuple[list[dict[str, Any]], list[str]]:
                 "line": int(lake_file_match.group("line")),
                 "column": int(lake_file_match.group("col")),
                 "severity": lake_file_match.group("severity").lower(),
+                "error_name": lake_file_match.group("error_name"),
                 "message": lake_file_match.group("message"),
             }
             continue
@@ -152,6 +166,7 @@ def parse_build_output(raw_text: str) -> tuple[list[dict[str, Any]], list[str]]:
                 "line": None,
                 "column": None,
                 "severity": lake_generic_match.group("severity").lower(),
+                "error_name": lake_generic_match.group("error_name"),
                 "message": lake_generic_match.group("message"),
             }
             continue

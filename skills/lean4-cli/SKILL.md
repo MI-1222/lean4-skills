@@ -376,6 +376,7 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
       "line": 15,
       "column": 4,
       "severity": "error",
+      "error_name": null,
       "message": "type mismatch\n  has type\n    Nat\n  but is expected to have type\n    String"
     }
   ]
@@ -395,6 +396,7 @@ python3 <skill-path>/scripts/parse_diagnostics.py build.log
   - `line`: 1-indexed line number (`null` if file-level or general).
   - `column`: 1-indexed column number (`null` if file-level or general).
   - `severity`: `"error"`, `"warning"`, or `"info"`.
+  - `error_name`: Name of a named error (e.g. `"lean.unknownIdentifier"`), or `null`. Since Lean `v4.22.0`, `lean` and `lake env lean` print such errors as `File.lean:3:17: error(lean.unknownIdentifier): ...`; `lake build` prints the same error without the name, so this field is `null` for build logs.
   - `message`: Diagnostic message, including multi-line indentation details.
 - `prints`: (Optional) List of non-diagnostic top-level command output strings (such as `#print axioms` results, `#check` types, or `#eval` values), cleanly separated from compiler warnings and errors.
 
