@@ -18,6 +18,172 @@
       "prompt": "The following Lean 4 proof is slow and requires increasing heartbeats to compile. Identify the performance antipattern, optimize the proof to run efficiently without `set_option maxHeartbeats`, and explain why the original proof was problematic:\n\n```lean\nset_option maxHeartbeats 500000 in\ntheorem slow_arithmetic (a b c d : ℕ) (h1 : a + 2 * b ≤ c) (h2 : c + 3 * d ≤ 10) : a ≤ 10 := by\n  have h_trans : a ≤ c := by\n    have : a + 0 ≤ a + 2 * b := by simp\n    linarith\n  have h_trans2 : c ≤ 10 := by\n    have : c + 0 ≤ c + 3 * d := by simp\n    linarith\n  linarith\n```",
       "expected_output": "Identification of the antipatterns (unnecessary `maxHeartbeats`, slow subproofs with non-terminal `simp` and manual transitivity), followed by a streamlined 1-line or 2-line solution using `omega` that compiles in a few milliseconds without increased heartbeats.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "We split a formalization into statements and conditional proofs. The assembly theorem at the end fails with `declaration `small` contains universe level metavariables at the expression`. How do we fix it, and how do we avoid this in the rest of the project?\n\n```lean\nuniverse u\n\ndef Pointed.Statement : Prop := ∀ (K : Type u) [Inhabited K], ∃ _ : K, True\ndef Small.Statement : Prop := ∀ K : Type, Nonempty K → True\n\ntheorem Pointed.proof : Pointed.Statement := by\n  intro K _\n  exact ⟨default, trivial⟩\n\ntheorem Small.proof (h : Pointed.Statement) : Small.Statement := fun _ _ => trivial\n\ntheorem small : Small.Statement := Small.proof Pointed.proof\n```",
+      "expected_output": "Explanation that each theorem header gets a fresh universe parameter for a universe-polymorphic statement mentioned without explicit levels, so the universe of `Pointed.Statement` in `Small.proof` is a phantom that the assembly cannot determine. Fix by pinning the level, e.g. `(h : Pointed.Statement.{0})` in `Small.proof` or `Small.proof.{0} Pointed.proof.{0}` in the assembly, and a project rule to write explicit universe arguments (`.{0}` / `.{u}`) on every universe-polymorphic statement in `X.proof` headers.",
+      "files": [],
+      "expectations": [
+        "Identifies the universe parameter of `Pointed.Statement` in `Small.proof` as the cause (it does not occur in `Small.Statement`)",
+        "Gives a fix that compiles: `Pointed.Statement.{0}` in the hypothesis of `Small.proof`, or `Small.proof.{0} Pointed.proof.{0}` in the assembly",
+        "Recommends writing explicit universe arguments on universe-polymorphic statements in conditional proof headers",
+        "Does not weaken `Pointed.Statement` (e.g. by changing `Type u` to `Type`) as the main fix"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Our formalization will be judged with Comparator against a challenge file. The main results use a few Prop-valued definitions such as `def MainClaim : Prop := ...` that are built from Mathlib definitions only. How should we lay out the statement definitions, `Challenge.lean` and `Main.lean` so that the challenge stays trustworthy and the two cannot drift apart?",
+      "expected_output": "A layout with `Statements.lean` (imports only Mathlib, definitions only), `Challenge.lean` containing the same definitions byte for byte plus the theorems with `:= by sorry`, and `Main.lean` importing the statements and the assemblies with one-line theorems of the challenge's names and types. Explains why the definitions are copied rather than imported, and recommends a CI check that builds `Challenge` alone with Mathlib's cache and compares the definition blocks.",
+      "files": [],
+      "expectations": [
+        "States that the statements file and the challenge import only Mathlib, never project files",
+        "Explains that the challenge cannot import the project and the solution cannot import the challenge (it contains `sorry`), so the definitions are duplicated",
+        "Keeps `Main.lean` to one-line theorems with the challenge's exact names and types",
+        "Recommends a mechanical check that the copied definitions are identical (e.g. in CI)"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "With `set_option profiler true in`, the `structure` command below takes about 0.7 s, mostly reported as `congr simp thm` and `simp`, although it contains no proofs. It has 14 fields whose types are large Mathlib terms (semilinear maps, modules over completions, matrices). The structure is only a data bundle: we never compare two values constructor by constructor and never recurse over it. How can we make it cheaper, and what do we give up?\n\n```lean\nstructure ConjLift where\n  mu   : (AE D)ˣ →* Circle\n  coef : (A.MtCSD i A.μ0).V →ₛₗ[σ] cV.W\n  -- 12 more fields of similar size\n```",
+      "expected_output": "Explanation that Lean generates injectivity lemmas (`ConjLift.mk.inj`, `.injEq`, proved with `simp`) and `sizeOf` specification lemmas for the structure, and the recommendation `set_option genInjectivity false in` / `set_option genSizeOfSpec false in` on this one declaration with a comment. States what is lost: `simp` no longer splits equalities of constructors (while `injection` / `cases` still work) and well-founded recursion measured by `sizeOf` fails; never set the options file-wide or in the lakefile.",
+      "files": [],
+      "expectations": [
+        "Attributes the cost to auto-generated injectivity and `sizeOf` lemmas",
+        "Uses `set_option genInjectivity false in` and `set_option genSizeOfSpec false in` scoped to the declaration",
+        "Mentions that `simp` loses constructor injectivity but `injection` or `cases` still work",
+        "Mentions that `sizeOf`-based well-founded recursion stops working",
+        "Advises against setting the options file-wide or project-wide"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Elaboration is slow because `Carrier` keeps unfolding, so I tried to freeze it locally, but Lean rejects the attribute with: failed to set `[local irreducible]`, `Carrier` is currently `[reducible]`, `[semireducible]`, `[implicit_reducible]` nor `[instance_reducible]` expected. Should I just add `set_option allowUnsafeReducibility true`?\n\n```lean\nabbrev Carrier : Type := Nat\n\nsection\nattribute [local irreducible] Carrier\ntheorem slow_lemma (a b : Carrier) : a + b = b + a := Nat.add_comm a b\nend\n```",
+      "expected_output": "Explanation that `abbrev` is reducible on purpose and that instances reach `Nat` through it, so making it irreducible breaks instance search (`a + b` on `Carrier` fails to synthesize), which is why Lean requires `allowUnsafeReducibility`. Recommends a frozen `@[irreducible] def` wrapper or a `def` with explicit instances; if the option is still used, scope it with `in` inside a section with a comment and note that review tools flag it. Contrasts with ordinary `def`s, which accept `attribute [local irreducible]` or `seal` without the option.",
+      "files": [],
+      "expectations": [
+        "Explains that reducible-to-irreducible changes are rejected because `abbrev` is meant to unfold (e.g. for instances)",
+        "Warns that the statement `a + b` on `Carrier` would fail to find `Nat`'s instance if `Carrier` were irreducible",
+        "Prefers an `@[irreducible]` wrapper definition or a `def` over enabling the option globally",
+        "If the option is used, scopes it with `set_option ... in` inside a `section` and documents why"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "In my statement-first development, a reviewer counts which results are still conditional on the cited literature by reading the types of the theorems that take `(L : Literature)`. One of them is\n\n```lean\ntheorem Core.of_literature : Literature → Core.Statement := by\n  intro L n\n  exact core_closed n\n```\n\nwhere `core_closed` is an unconditional theorem. The build shows no warning for this file. Is the dependency list correct, and how should I check the whole project for this?",
+      "expected_output": "Explains that the proof never uses `L`, so the type claims a dependency on the literature that does not exist and the result should be stated without the hypothesis. Explains that `linter.unusedVariables` misses the `by intro L ...` form (and `_`, `_L`), so the absence of a warning proves nothing, and recommends running `#unused_hypotheses` from `lean4-cli/scripts/unused_hypotheses.lean` on the project namespace. Recommends deleting the hypothesis rather than renaming it to `_L` or disabling the linter, failing the build on `linter.unusedVariables` in proof files with `parse_diagnostics.py --fail-on-linter`, and checking with the option census that no proof file sets `linter.unusedVariables false`.",
+      "files": [],
+      "expectations": [
+        "States that the proof does not use `L`, so the type misreports the dependency",
+        "Explains that `linter.unusedVariables` is silent for the `intro L` form",
+        "Recommends `#unused_hypotheses` from `lean4-cli/scripts/unused_hypotheses.lean`",
+        "Recommends deleting the hypothesis instead of renaming it to `_L` or disabling the linter",
+        "Recommends failing CI on `linter.unusedVariables` in proof files, e.g. with `parse_diagnostics.py --fail-on-linter`"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "My development is conditional on a bundle of cited results that are still open:\n\n```lean\nstructure OpenLiterature : Prop where\n  caraianiLocalGlobal : Published.LocalGlobalRow\n  galoisRepOfPolarizedPair : Published.LocalGlobalRow\n  localLanglands : Published.LocalLanglandsExists\n```\n\nThe final assembly is `main_of_literature ⟨h, recTExists, h⟩`. A reviewer reports that three published results remain open. Is that right, and how do I check my other bundles for the same problem?",
+      "expected_output": "Explains that the first two fields have the same type, so the bundle cites one proposition under two names and only two different results remain open, which the assembly confirms by filling both fields with the same `h`. Explains that at least one of the two fields does not state the result its name refers to, so it must be restated to match its source (and sanity-checked), or, if the same result is cited twice, merged into one field whose docstring names both sources. Recommends running `#duplicate_fields` from `lean4-cli/scripts/duplicate_fields.lean` on every bundle, noting that it expands nested bundles and parents and also reports definitionally equal types such as a `def` that renames another statement, and that definitional matches should be read before merging.",
+      "files": [],
+      "expectations": [
+        "States that the two fields have the same type, so only two different results remain open",
+        "Points out that filling both fields with the same `h` confirms the duplication",
+        "Recommends restating the misstated field to match its source, or merging a genuine double citation into one field",
+        "Recommends `#duplicate_fields` from `lean4-cli/scripts/duplicate_fields.lean` for the other bundles",
+        "Mentions that definitionally equal types (e.g. a renaming `def`) are reported too"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "My Lean project has grown to thousands of files. Modules live under top-level folders like `Lemmata/`, `Development/` and `Formalism/`, files under `Development/` mostly declare in `namespace GlobalTheory`, and some files add lemmas directly as `Complex.foo` or `Nat.bar` so I can use dot notation. To keep my own lemmas out of `+suggestions`, I add one `nameDenyListExt` entry per namespace, but new namespaces keep appearing. Should I change anything?",
+      "expected_output": "Recommends putting every declaration under one root namespace and every module under one module root, both named after the package (for example `MyProject`), with areas as sub-namespaces such as `MyProject.GlobalTheory`. Explains that a single deny list entry `\"MyProject\"` then hides the whole project because `nameDenyListExt` matches name components, and that generic roots cannot be denied safely when Mathlib uses the same component (for example `Rep` or `Rel`). Explains that declarations placed directly in Mathlib's namespaces can collide when Mathlib later adds the same name (`has already been declared`, or `environment already contains ... from ...` in a module that imports both), and that generic module roots such as `Lemmata.Basic` can collide with a dependency (`could not disambiguate the module`). Shows that dot notation still works for `MyProject.Complex.foo` after `open MyProject`, including inside `namespace MyProject` once it is opened, and advises the full name when a bare name may also exist in Mathlib.",
+      "files": [],
+      "expectations": [
+        "Recommends one root namespace and one module root named after the package, with areas as sub-namespaces",
+        "Explains that one nameDenyListExt entry then covers the whole project because entries match name components",
+        "Warns that declarations in Mathlib's namespaces can collide with names Mathlib adds later",
+        "Warns that generic module roots can collide with modules of a dependency",
+        "Explains that dot notation still works for MyProject.Complex.foo after open MyProject"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Our lakefile has `maxHeartbeats = 4000000` in `[leanOptions]`, and over the years people added `set_option maxHeartbeats 1000000 in` above tens of thousands of slow proofs. Now a proof that builds fine without that line fails under `lake build` once someone adds it, while other proofs only pass `lake env lean` because of it. What is going on, and how do we clean this up?",
+      "expected_output": "Explains that `set_option maxHeartbeats N in` replaces the limit rather than adding to it or taking the maximum, so under `lake build` (and `lake lean`), which apply the lakefile's 4000000, a local 1000000 lowers the limit, while under `lake env lean`, which ignores `leanOptions` and starts from Lean's default 200000, the same line raises it. Concludes that the meaning of each local line depends on the entry point. Recommends raising the limit in one place only: either keep Lean's default in the lakefile and raise per declaration with a measured value (`#count_heartbeats in`) and a comment, or raise it for a library in the lakefile and drop the local lines; if both are kept, local values must exceed the lakefile value. Suggests finding lowering lines with a search such as `grep -rnoE 'set_option maxHeartbeats [0-9]+' --include='*.lean' . | awk '$NF < 4000000'`, and warns that removing the lakefile raise exposes declarations that relied on it, so `lake build` must be rerun and each failure fixed or given a measured local raise.",
+      "files": [],
+      "expectations": [
+        "States that a local set_option maxHeartbeats replaces the lakefile value instead of adding to it",
+        "Explains that the same line lowers the limit under lake build but raises it under lake env lean",
+        "Recommends raising the limit in one place only, or keeping local values above the lakefile value",
+        "Gives a way to find local values below the lakefile value",
+        "Warns that removing the lakefile raise requires rebuilding and fixing the declarations that relied on it"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "One theorem in my project has grown to about 8,000 lines of tactics, built from dozens of `have` steps. It needs `set_option maxHeartbeats 4000000 in`, and its file is always the last to finish in `lake build`. Is there a size limit I should aim for, and how can CI stop this from happening again?",
+      "expected_output": "Explains that a declaration is one command, so the whole proof shares one heartbeat budget and one elaboration task: since Lean v4.19.0 (#7084) the proofs of different theorems elaborate in parallel, but one proof does not, so splitting the `have` steps into separate lemmas lets each step have its own budget and lets the build use several cores. Gives Mathlib as a reference: almost all of its declarations are under 50 lines, only about 0.04% reach 100 lines, and its longest theorem has a few hundred lines. Recommends aiming for under 50 lines, splitting anything over 100 lines along the milestones of the argument, and enforcing a limit in CI with `#long_decls` from `lean4-cli/scripts/long_decls.lean`, run with `lake env lean --stdin` under `set_option warningAsError true in` so that a declaration over the limit makes `lean` exit with code 1, starting from the current longest length and lowering the limit as theorems are split.",
+      "files": [],
+      "expectations": [
+        "Explains that one declaration shares one heartbeat budget and is elaborated as one task",
+        "Mentions that proofs of different theorems elaborate in parallel since Lean v4.19.0, so splitting shortens the build",
+        "Uses Mathlib's distribution of declaration lengths as a reference for the limit",
+        "Recommends splitting declarations over about 100 lines along the milestones of the argument",
+        "Recommends #long_decls from lean4-cli/scripts/long_decls.lean with warningAsError to fail CI"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "We split our formalization statement-first: `Definitions/`, `Statements/`, `Proofs/` and a `Main.lean` assembly, now about 20,000 modules. When someone edits a lemma low in the development, CI takes hours before `Main` is checked again, even though the build machine has 64 cores and most of them sit idle near the end. Is the decomposition not doing its job, and how do we find out and keep it from getting worse?",
+      "expected_output": "Explains that Lake builds a module only after all of its imports, so the modules on the longest import chain build one after another regardless of the core count, each loading its import closure first, and that an edit near the start of the chain rebuilds every later module on it in sequence. Explains that in a statement-first layout proofs import only statements and definitions, so a chain should contain at most one proof plus the assembly, and that a chain growing with the number of proofs means proof files import other proof files (or statement glue modules import their own proofs, which adds steps without separating anything). Recommends measuring the chain with `lean4-cli/scripts/import_depth.py` (it reads import lines, needs no build, takes the source directory and `--to` the assembly module, and prints the chain module by module), comparing the parallelism (modules divided by chain length) with the 64 cores, cutting each proof-to-proof import on the printed chain by moving shared lemmas to `Definitions` or making them milestones, and capping the chain in CI with `--max-depth N`, which exits with code 1 when exceeded, starting at the current length and lowering it.",
+      "files": [],
+      "expectations": [
+        "Explains that modules on the longest import chain build sequentially regardless of the number of cores",
+        "States that in a statement-first layout a long chain means proofs import proofs (or glue modules import proofs)",
+        "Recommends import_depth.py from lean4-cli to measure and print the longest chain",
+        "Mentions comparing the parallelism (modules / chain length) with the core count",
+        "Recommends capping the chain in CI with --max-depth and cutting proof-to-proof imports on the chain"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "To make our Lean 4 build faster, an agent proposes moving every theorem into its own file so that Lake can check them in parallel. About a third of our modules are already under 25 lines. Is this a good idea, and when should a proof get its own file?",
+      "expected_output": "Explains that since Lean v4.19.0 (#7084) the proofs of different theorems in one file already elaborate in parallel, while every module has a fixed cost (a separate lean process that loads the import closure, and a `.setup.json` listing it), so one module per short theorem makes the build slower. States the limits of in-file parallelism: `def`s, `instance`s, `example`s and `mutual` blocks elaborate one after another, and the kernel checks the declarations of a module one at a time. Gives the reasons for a separate module: kernel (`type checking`) time that is large compared with import time and spread over several declarations, measured with `-Dprofiler=true`; independent or frequent edits, since an edit rebuilds the whole module; and an interface boundary that keeps definitions and statements apart from proofs. Suggests stating a slow proof as a `theorem` when it sits in an `instance`, and reviewing the small modules before merging: remove catch-all glue first, then merge modules with a single importer, and keep shared interface files.",
+      "files": [],
+      "expectations": [
+        "States that proofs of different theorems in one file elaborate in parallel since Lean v4.19.0, so a module per short theorem is not needed for parallelism and adds per-module cost",
+        "States that kernel type checking is sequential within a module, so splitting helps when kernel time is large",
+        "Mentions that defs, instances, examples or mutual blocks do not get in-file parallel elaboration",
+        "Lists independent or frequent edits and interface boundaries as reasons to split",
+        "Recommends reviewing the existing small modules (glue, single importer, interface files) rather than applying a line-count minimum"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Our Lean 4 project has five `[[lean_lib]]` blocks in `lakefile.toml` (Core, Algebra, Analysis, Applications, Main) so that the lower ones can be built alone. Lately `lake build Core` compiles hundreds of modules from Applications, although the lake build never complains. Doesn't Lake stop a library from importing a higher one? How do we get the order back and keep it?",
+      "expected_output": "Explains that Lake orders builds by module, not by library: libraries may import each other as long as the modules have no cycle, `lake build Core` also builds whatever Core's modules import from other libraries, and `lean_lib` has no setting that restricts imports; splitting into packages of one workspace does not enforce a direction either. Recommends running `library_dag.py` from `lean4-cli` (reads lakefile.toml and import lines, needs no build): without options it reports the imports between libraries and fails on cycles, and with `--allow` and a JSON file listing for every library the other libraries it may import (not transitive, no cycle) it fails with exit code 1 on each forbidden import and names the importing file. Advises moving declarations that Core needs down into Core or a library below, not adding entries just to make the check pass, noting that the script keeps no list of tolerated imports so existing violations must be removed, and then running the check with `--allow` in CI, since a cycle-only check passes a first reverse import.",
+      "files": [],
+      "expectations": [
+        "States that Lake does not forbid or warn about libraries importing each other, and that building one library builds what it imports from others",
+        "Recommends library_dag.py from lean4-cli with a JSON file of allowed imports passed to --allow",
+        "Explains that a cycle check alone misses a reverse import when nothing imports in the other direction",
+        "Advises moving shared declarations to a lower library rather than extending the allowed list",
+        "Recommends running the check in CI, using its exit code"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Our `Main.lean` proves the main theorems, and it also imports a few files of corollaries that those theorems do not use. Many folders have an `Imports.lean` that only imports other files. An agent says that moving the corollaries out of `Main` will make our Comparator export and kernel time much smaller, and that replacing each `import X.Imports` with imports of all the files it lists will stop the wide rebuilds and shrink the `.setup.json` files. Is that right, and what should we do?",
+      "expected_output": "Explains that Comparator exports only the named theorems, definitions, permitted axioms and primitives with their dependencies, so modules that the theorems do not use change neither the export nor the kernel time; they cost build time, exporter memory and time for loading, and `leanchecker --fresh` time, while `lake check` follows `defaultTargets`. Advises keeping any corollary that must be judged in the import closure of the solution module and naming it in `theorem_names` and the challenge file, moving the others to a library of their own that a default target builds, and measuring the closure difference first, for example with `import_depth.py --to`. Explains that an aggregate adds only itself to a closure and that replacing its import with all its members gains next to nothing; the cost is that an importer gets members it does not use, so each file should import only the modules it uses. Mentions `lake shake --fix` for files with `module` headers, marking an aggregate that is kept for users with `module -- shake: keep-all`, and that `lake shake` does not run without the headers.",
+      "files": [],
+      "expectations": [
+        "States that unused imports in the solution module do not change the Comparator export or the kernel time of judging it",
+        "Names what the unused imports do cost: build time, exporter loading memory or time, or `leanchecker --fresh`",
+        "Advises that results which must be judged be listed in `theorem_names`, with other results in a separate library that is still built",
+        "States that replacing an aggregate import with all of its members changes next to nothing, and that the gain comes from importing only what each file uses",
+        "Mentions `lake shake` and its requirement of `module` headers"
+      ]
     }
   ]
 }

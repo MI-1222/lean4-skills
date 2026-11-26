@@ -18,6 +18,30 @@
       "prompt": "Explain why this nested `have` tactic causes `unexpected token 'have'; expected command` in Lean 4, and provide the fixed code:\n```lean\ntheorem test (p : Prop) (hp : p) : p := by\n  have h : p := by\n  exact hp\n  exact h\n```",
       "expected_output": "Explain Lean 4's offside rule and that tactics inside `:= by` must be indented deeper than the `have` keyword; provide the fixed code with at least 2-space deeper indentation for `exact hp`.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "This file gives `Unknown identifier 'hn'` in `uses_hn` and the warning `automatically included section variable(s) unused in theorem `add_zero'`: [Tame n]`. A colleague suggests adding `set_option linter.unusedSectionVars false` at the top. Fix the file properly.\n\n```lean\nclass Tame (n : Nat) : Prop where\n  pos : 0 < n\n\nvariable (n : Nat) [Tame n] (hn : n ≠ 7)\n\ntheorem uses_hn : n ≠ 7 ∧ n + 0 = n := by\n  exact ⟨hn, by omega⟩\n\ntheorem add_zero' : n + 0 = n := by omega\n```",
+      "expected_output": "Explanation that section variables enter a theorem only when its statement mentions them (instance variables come along), so `hn` is unavailable in the proof and `[Tame n]` is included but unused. Fix with `include hn in` (and `omit [Tame n] in`) before `uses_hn` and `omit [Tame n] in` before `add_zero'`, and rejects disabling the linter because the unused instance would remain a hypothesis in the theorem's signature.",
+      "files": [],
+      "expectations": [
+        "Adds `include hn in` before `uses_hn`",
+        "Adds `omit [Tame n] in` before `add_zero'` (and before `uses_hn`, where the instance is also unused)",
+        "Explains that disabling `linter.unusedSectionVars` leaves an unnecessary hypothesis in the signature",
+        "Does not set `linter.unusedSectionVars false`"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "I introduced a notation for the maximal ideal and used it in a `variable` declaration, but Lean reports `don't know how to synthesize implicit argument` at the `variable` line and `internal exception #3` at the theorem. The same notation works fine in theorem statements. Why, and what is the idiomatic fix?\n\n```lean\nimport Mathlib.RingTheory.LocalRing.MaximalIdeal.Defs\n\nvariable (R : Type*) [CommRing R] [IsLocalRing R]\nlocal notation \"𝔪\" => IsLocalRing.maximalIdeal R\n\nvariable (h : 𝔪 = ⊥)\ninclude h in\ntheorem via_variable : IsLocalRing.maximalIdeal R = ⊥ := h\n```",
+      "expected_output": "Explanation that with hygiene on, the `R` inside the notation is a hygienic reference to the section variable, which does not resolve inside a `variable` binder (for other terms the result can even be a silent `sorry`). Fix with `set_option hygiene false in` directly before the `local notation`, keeping it local, or a notation that takes the ring as an argument (`𝔪[R]`). Recommends checking `#check @via_variable` and `#print axioms` when such notation is used in `variable` declarations, and warns that without hygiene a binder named `R` at the use site captures the notation.",
+      "files": [],
+      "expectations": [
+        "Identifies notation hygiene as the cause",
+        "Fixes it with `set_option hygiene false in` before a `local` notation, or with a notation taking `R` as an argument",
+        "Mentions that the hygienic form can silently become `sorry` in other cases, and recommends `#print axioms` or `#check` to confirm",
+        "Warns about capture by a same-named binder when hygiene is off"
+      ]
     }
   ]
 }

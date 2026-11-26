@@ -18,6 +18,79 @@
       "prompt": "Our CI or local build started failing with corrupted olean errors inside Mathlib files during lake build. How do we verify our toolchain health and force-refresh the pre-compiled Mathlib cache?",
       "expected_output": "Guidance on checking toolchains with `elan show`, executing `lake exe cache get!` to force re-download the cache, and cleaning artifacts with `lake clean` if necessary.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "I am independently verifying a Lean project downloaded from someone else. Its lakefile.toml contains a `[[lean_exe]]` named `cache`. I ran `lake exe cache get` and then `lake build Main`, and the build finished in seconds without compiling anything. What happened, and which commands and environment settings should I use instead?",
+      "expected_output": "Explanation that `lake exe cache` runs the root package's own `cache` executable, which shadows Mathlib's and here also downloaded the project's prebuilt modules, so nothing was compiled. Recommends `lake exe mathlib/cache get` to fetch only Mathlib's cache, `LAKE_ARTIFACT_CACHE=false` so that Lake does not reuse artifacts from its local artifact cache, a fresh clone, and notes that `lake build --no-build` (exit code 3 when something needs building) can check whether a cache covers the build.",
+      "files": [],
+      "expectations": [
+        "Explains that the root package's `cache` executable takes precedence over Mathlib's",
+        "Recommends `lake exe mathlib/cache get`",
+        "Mentions `LAKE_ARTIFACT_CACHE=false` or a clean checkout to avoid reusing prebuilt artifacts",
+        "Does not treat the downloaded artifacts as evidence that the proofs are valid"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Four agents on the same 16-core machine each run `lake env lean <file>` on different files in parallel, and a helper script runs a dozen more checks at once. The machine becomes extremely slow. Setting `LEAN_NUM_THREADS=1` did not help. What is going on and how should the checks be run?",
+      "expected_output": "Explanation that each `lean` process starts one worker thread per hardware thread by default (Lean.Shell.defaultNumThreads), so N parallel processes oversubscribe the CPU, and that `LEAN_NUM_THREADS` does not change this default for the `lean` frontend. Recommends passing `-j1` / `--threads=1` to each process (`lake env lean -j1 <file>` or `lake lean <file> -- -j1`) and getting parallelism from the number of processes.",
+      "files": [],
+      "expectations": [
+        "Identifies thread oversubscription from many `lean` processes as the cause",
+        "States that `LEAN_NUM_THREADS` does not limit the `lean` frontend's default thread count",
+        "Recommends `-j1` (or `--threads=1`) with a correct command line"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Another agent added these two files to our project (`Tac/Exact.lean` and `Use/A.lean`). Audit them for trust-base risks before we rely on the theorems, and tell us exactly where each risk takes effect.\n\n`Tac/Exact.lean`:\n```lean\nimport Lean\nopen Lean Elab Tactic Meta\n\nelab \"kexact \" e:term : tactic => withMainContext do\n  let g ← getMainGoal\n  let v ← Term.elabTermAndSynthesize e none\n  g.assign (← instantiateMVars v)\n\nlocal macro:max \"kc% \" e:term:max : term => `((by kexact $e))\n\nmacro \"my_trivial\" : tactic => `(tactic| trivial)\n\nmacro_rules | `(tactic| decide) => `(tactic| sorry)\n\ntheorem uses_c : True := kc% trivial\n```\n\n`Use/A.lean`:\n```lean\nimport Tac.Exact\n-- kexact in a comment is not a use\ntheorem t1 : True := by kexact trivial\ntheorem t3 : True := by my_trivial\ntheorem t4 : 1 = 1 := by decide\n```",
+      "expected_output": "Runs `scan_risky_constructs.py` over the directory that contains both files (not on `Use/A.lean` alone, since syntax defined outside the scanned paths is not traced). Reports the `goal-assignment` definition of `kexact`, its uses as `goal-assignment-via-syntax` (the `kc%` macro, `uses_c`, `t1`), the `sorry` inside `macro_rules` and every later `decide` (`t4`) as critical `sorry-via-syntax`, and does not flag `my_trivial` or the comment. Recommends removing the `decide` override, `#print axioms` on the theorems and kernel replay for the `kexact` uses.",
+      "files": [],
+      "expectations": [
+        "Runs the static scanner on a path that includes both files",
+        "Reports that `t4`'s `decide` is turned into `sorry` by the `macro_rules` override (critical)",
+        "Reports the uses of `kexact`, including the one through the `kc%` macro in `uses_c`",
+        "Does not report `my_trivial` or the comment mentioning `kexact` as risks",
+        "Recommends `#print axioms` and kernel replay rather than treating the scan as proof"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "`lake comparator --paranoid` (Lean v4.36.0) on our export exits 1. Lean's kernel, leanchecker-paranoid and nanoda accept, but con-leche and con-ron both exit 2 with `declined: in-process model of A: reflexive member A`. Our project has a mutual inductive block in which `A` has a constructor `lim : (Nat → A) → B → A`. Is our proof wrong? What should we do?",
+      "expected_output": "Explanation that con-leche and con-ron decline mutual blocks with a reflexive member, which says nothing about correctness, while a non-mutual reflexive inductive is accepted. Recommends reproducing the refusal on a small project with the same feature, listing the checkers explicitly in `external_kernels` instead of `--paranoid` (keeping an independent design such as nanoda, since leanchecker-paranoid is a hardened build of Lean's own kernel), and recording which checker was left out and why.",
+      "files": [],
+      "expectations": [
+        "States that the refusal comes from an unsupported feature (mutual block with a reflexive member), not from an invalid proof",
+        "Recommends reproducing the refusal on a minimal example before dropping the checkers",
+        "Recommends naming checkers explicitly in `external_kernels` and keeping at least one independent kernel such as nanoda",
+        "Recommends documenting which checker was excluded and why"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "My `lake build` log for a large project has thousands of warnings. I want CI to fail only when `linter.unusedVariables` fires in files under `MyProject/Proofs`, and still see how many warnings each linter produces everywhere. How do I do that with the bundled scripts?",
+      "expected_output": "Shows piping `lake build 2>&1` into `parse_diagnostics.py` with `--fail-on-linter linter.unusedVariables --fail-path-prefix MyProject/Proofs` (optionally `--summary-only`), explains that `linter_counts` reports the number of diagnostics per linter for every file, that the `linter` field of each diagnostic is read from Lean's `set_option ... false` note, and that `success` becomes false with exit code 1 when `linter_failure_count` is non-zero. Mentions that Lake replays the warnings of up-to-date modules, so the check also works on incremental builds.",
+      "files": [],
+      "expectations": [
+        "Uses `--fail-on-linter linter.unusedVariables` together with `--fail-path-prefix MyProject/Proofs`",
+        "Explains `linter_counts` as the per-linter warning count",
+        "Explains that a match sets `success` to false and the exit code to 1",
+        "Notes that replayed warnings of up-to-date modules are also checked"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Several agents work on my Lean project. When a proof gets stuck they often start over under a new name, so I now have `exists_lift`, `exists_lift_alt` and `exists_lift_alt_bis`, and some files were copied to new folders with the declarations renamed. The proofs and `open` lines differ between the copies, so `diff` and text search do not line them up. How can I find which declarations are really the same, from the command line?",
+      "expected_output": "Recommends running `#duplicate_decls` from `lean4-cli/scripts/duplicate_decls.lean` with `lake env lean --stdin`, prepending an import that brings the declarations into scope and passing the project namespace as the prefix. Explains that it compares elaborated declarations rather than source text: theorems are duplicates when their statements are the same expression up to bound variable names, whatever their proofs, and definitions when their types and values match; binder annotations are ignored and private declarations are included. Explains that each group of duplicates is a warning listing names and modules, followed by an info summary. Mentions the limits: statements equal only after unfolding a definition are not reported, and copies of definitions by pattern matching are missed across modules. Advises keeping one copy and deleting or deprecating the others, and naming real variants by how their statements differ instead of `_alt` or `_bis`.",
+      "files": [],
+      "expectations": [
+        "Recommends #duplicate_decls from lean4-cli/scripts/duplicate_decls.lean run with lake env lean --stdin and a prefix",
+        "Explains that theorems are compared by elaborated statement, regardless of proof, and definitions by type and value",
+        "Mentions that statements equal only after unfolding a definition are not reported",
+        "Advises keeping one copy and deleting or deprecating the others",
+        "Advises naming real variants by how their statements differ rather than _alt or _bis"
+      ]
     }
   ]
 }

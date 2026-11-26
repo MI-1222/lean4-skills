@@ -98,6 +98,8 @@ theorem cauchy_schwarz ... := by
 - Keeps elaboration time for the main theorem small.
 - Allows independent verification and parallel proof development.
 
+To move a goal to another file or hand it to another agent, where `open`, local notation and `variable` declarations no longer apply, see §5.
+
 ### Step 5: Fill Sorries One by One with `done`
 
 When tackling a specific `sorry`:
@@ -121,3 +123,83 @@ When managing a project with numerous sorries:
    lake env lean path/to/File.lean
    ```
    Confirm that closing the sorry did not alter variable names or types relied upon downstream.
+
+---
+
+## 4. Scaling Beyond One File
+
+When the skeleton spans many files, several agents, or a long-running effort, open sorries start to contaminate every `#print axioms` audit downstream, and proof files end up importing each other in a long chain. At that point, switch from `sorry` placeholders to **statement-first decomposition**: write each milestone as a `def X.Statement : Prop` contract, prove it as `X.proof` conditional on its prerequisite statements, and discharge everything in a hypothesis-free assembly theorem.
+
+See [statement_first_decomposition.md](statement_first_decomposition.md) for the pattern, file layout, and its pitfalls (in particular: conditional proofs report no axioms, so audit only the assembly theorem).
+
+---
+
+## 5. Handing a Goal to Another File or Agent
+
+A goal inside a proof is printed relative to its context: `open` namespaces, local notation, `variable` declarations, local instances and the coercions the elaborator inserted. Pasted into another file, the printed goal can fail to elaborate or, worse, elaborate to a different statement without any error. To move a hard goal out of its context, print it in **fully explicit form** and check it against the original goal before proving it.
+
+### 5.1. What Goes Wrong with the Default Printout
+
+Mathlib's `extract_goal` prints the current goal as a standalone `theorem`:
+
+```lean
+open Real in
+example {ι : Type*} [Fintype ι] (f : ι → ℝ) (n m : ℕ) (h : ∀ i, 0 ≤ f i)
+    (hnm : (n : ℝ) + 1 ≤ m) : (n : ℝ) + 1 ≤ m ∧ 0 ≤ ∑ i, f i * (2 * π) := by
+  extract_goal
+  sorry
+```
+
+Output (line breaks adjusted):
+
+```text
+theorem _example.extracted_1.{u_1} {ι : Type u_1} [inst : Fintype ι] (f : ι → ℝ) (n m : ℕ)
+    (h : ∀ (i : ι), 0 ≤ f i) (hnm : ↑n + 1 ≤ ↑m) :
+    ↑n + 1 ≤ ↑m ∧ 0 ≤ ∑ i, f i * (2 * π) := sorry
+```
+
+Pasting this output into a new file gave the following results (Lean `v4.33.1`, Mathlib `v4.33.1`):
+
+| Variant                                                                                                      | Result                                                                                                       |
+| :----------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------- |
+| Pasted after `open Real`                                                                                     | ❌ Compiles, but `hnm` becomes `n + 1 ≤ m` in `ℕ`: the type ascription to `ℝ` is lost                        |
+| Pasted without `open Real`, `autoImplicit` on (Lean's default)                                               | ❌ Compiles, but `π` becomes an auto-bound variable `{π : ℝ}`                                                |
+| Pasted without `open Real`, `autoImplicit false`                                                             | Error: `Unknown identifier 'π'`                                                                              |
+| Printed with `pp.universes`, `pp.fullNames`, `pp.numericTypes`, `pp.notation false` and `pp.coercions false` | Error: the `0` in front of `∑` defaults to `ℕ` (`Type mismatch`), because implicit arguments are not printed |
+
+The first two cases are the dangerous ones: the file compiles, and a proof of the pasted statement proves something else. Remember also that `lake env lean` ignores the lakefile's `leanOptions`, so a project-wide `autoImplicit = false` does not protect a file checked that way (see [performance_and_heartbeats.md](performance_and_heartbeats.md)).
+
+### 5.2. The Fully Explicit Form
+
+`pp.all` prints every implicit argument, every instance and every universe level, with full names and no notation:
+
+```lean
+  set_option pp.all true in
+  extract_goal
+```
+
+An excerpt of the output for the goal above:
+
+```lean
+  (hnm :
+    @LE.le.{0} Real Real.instLE
+      (@HAdd.hAdd.{0, 0, 0} Real Real Real (@instHAdd.{0} Real Real.instAdd)
+        (@Nat.cast.{0} Real Real.instNatCast n)
+        (@OfNat.ofNat.{0} Real (nat_lit 1) (@One.toOfNat1.{0} Real Real.instOne)))
+      (@Nat.cast.{0} Real Real.instNatCast m)) :
+```
+
+Nothing in this text depends on `open`, notation, coercion insertion or numeral defaulting, so it elaborates to the same term in any file that imports the same definitions.
+
+### 5.3. Workflow
+
+1. **Print** the goal with `set_option pp.all true in extract_goal`.
+2. **Paste** it into a new file that imports only what the definitions need, with `set_option autoImplicit false` and no `open`. Rename `_example.extracted_1` to a descriptive name, and leave the proof as `sorry`.
+3. **Check** that it closes the original goal: replace the original `sorry` with `exact Extracted.goal1 f n m h hnm`. This is the test that the meaning did not change. The default printout from §5.1, pasted after `open Real`, fails this step with `Application type mismatch: ... has type ↑n + 1 ≤ ↑m but is expected to have type n + 1 ≤ m`.
+4. **Prove** the extracted lemma separately. Because its file imports nothing from the proof it came from, it can be built in parallel and handed to another agent.
+
+**Rules**:
+
+- Never skip step 3. An extracted statement that no one has plugged back in is a guess about what the goal was.
+- Treat the explicit form as a hand-off format, not a final one. It is hard to read and names instances such as `Real.instLE` that can change between Mathlib versions. Once the lemma is proved, restate it in readable form, check that the readable version still closes the original goal, and keep that version.
+- Name extracted lemmas after their content. In one formalization of about 175,000 modules, 164 of 167 directories in a lemma library held such extracted goals under names like `Bl.FirstBlockLemmaA.goal1`, referenced from 611 files, and the names said nothing about what they proved.

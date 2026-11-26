@@ -6,7 +6,7 @@ Writing Lean 4 proofs is not just about satisfying the type checker; formal proo
 
 ## 1. File Header & Module Layout
 
-Lean 4 supports two module header styles: the **Classic Style** (standard across existing Mathlib and legacy projects) and the **Modern Module System** (introduced in Lean 4.16+). Understanding both is essential for navigating existing codebases and adopting modern visibility features.
+Lean 4 supports two module header styles: the **Classic Style** (standard across existing Mathlib and legacy projects) and the **Modern Module System** (experimental in Lean `v4.22.0`, stable since `v4.27.0`). Understanding both is essential for navigating existing codebases and adopting modern visibility features.
 
 ---
 
@@ -52,9 +52,9 @@ Explain the mathematical concepts, prerequisites, and main contributions.
 
 ---
 
-### 1.2 Modern Module System Layout (Lean 4.16+)
+### 1.2 Modern Module System Layout (Lean `v4.27.0`+)
 
-Starting in Lean 4.16+, Lean introduced a dedicated module system with explicit visibility controls (`module`, `public import`, `public section`). This enables finer encapsulation and reduced transitive dependency leakage:
+Lean `v4.22.0` introduced a dedicated module system as an experimental feature, and `v4.27.0` declared it stable (the `experimental.module` option became a no-op). It provides explicit visibility controls (`module`, `public import`, `public section`). This enables finer encapsulation and reduced transitive dependency leakage:
 
 ```lean
 /-
@@ -93,11 +93,11 @@ end
 
 ### 1.3 Usage & Migration Guidance: Which Style to Use?
 
-| Context                         | Recommended Style | Rationale                                                                                                                      |
-| :------------------------------ | :---------------- | :----------------------------------------------------------------------------------------------------------------------------- |
-| **Contributing to Mathlib**     | **Classic Style** | Mathlib currently adheres to the classic header format across its library. Always follow the surrounding codebase conventions. |
-| **Existing Community Projects** | **Classic Style** | Unless the project explicitly configured modern module syntax, maintain consistency with the existing headers.                 |
-| **New Projects (Lean 4.16+)**   | **Modern Style**  | Take advantage of `public import` vs. `import` to minimize transitive imports and improve modular compilation boundaries.      |
+| Context                            | Recommended Style | Rationale                                                                                                                      |
+| :--------------------------------- | :---------------- | :----------------------------------------------------------------------------------------------------------------------------- |
+| **Contributing to Mathlib**        | **Classic Style** | Mathlib currently adheres to the classic header format across its library. Always follow the surrounding codebase conventions. |
+| **Existing Community Projects**    | **Classic Style** | Unless the project explicitly configured modern module syntax, maintain consistency with the existing headers.                 |
+| **New Projects (Lean `v4.27.0`+)** | **Modern Style**  | Take advantage of `public import` vs. `import` to minimize transitive imports and improve modular compilation boundaries.      |
 
 ---
 

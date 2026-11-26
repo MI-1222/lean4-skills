@@ -6,7 +6,7 @@ metadata:
   target-lean-version: '>=4.14.0'
   tested-lean-version: 'v4.35.0'
   tested-mathlib-version: 'v4.35.0'
-  version: '1.3.0'
+  version: '1.4.0'
 ---
 
 # Lean 4 Mathlib Search
@@ -106,11 +106,48 @@ While inline tactics are powerful and direct, keep these two critical constraint
    - **Rule**: If an inline tactic fails on a standard mathematical fact, **do not assume Mathlib lacks the lemma**. Switch immediately to **Strategy 2 (Loogle)** to search the entire global Mathlib index.
 
 2. **Computational Overhead & Heartbeat Exhaustion**:
-   - Searching via `rw?` or `apply?` in files with broad imports (e.g. `import Mathlib`) initiates higher-order unification against tens of thousands of candidate lemmas.
-   - This can cause language server freezes, long compilation hangs, or `(deterministic) timeout at ... maximum heartbeat count exceeded` errors.
+   - Inline search tactics try candidates from every imported module. Under `import Mathlib` the environment holds about 770,000 imported constants, against about 230,000 in a file that imports only `Mathlib.Data.Real.Basic` and `Mathlib.Tactic.Positivity` (Mathlib `v4.33.1`).
+   - A long search can freeze the language server or end with `(deterministic) timeout at ... maximum heartbeat count exceeded`.
    - **Remedy**:
-     - Maintain granular imports (e.g. `import Mathlib.Data.Nat.Basic`) rather than monolithic ones.
+     - Narrower imports shrink the search, but they also hide lemmas from modules that are not imported (item 1 above). Choose imports for the file's purpose (`lean4-mathlib-use` → `minimal_imports_and_shake.md` §1), not for the search.
      - Never leave unresolved `exact?`, `apply?`, or `rw?` calls in a saved file; if they do not produce a suggestion within a few seconds, delete them and query `search_loogle.py` via CLI.
+
+### Library Suggestions (`+suggestions`) and Deny Lists (Lean 4.26+)
+
+Since Lean `v4.26.0`, some tactics ask a library suggestion engine (premise selection) for relevant theorems and add them to their own search: `grind +suggestions`, `simp? +suggestions`, `simp_all? +suggestions`, `solve_by_elim +suggestions` (Lean `v4.27.0`+), and `try?`, which tries `grind? +suggestions`. The default engine comes with `import Lean.LibrarySuggestions.Default`, and every file that imports Mathlib has it through `Mathlib.Init`. `exact?`, `apply?` and `rw?` do not use this engine.
+
+The engine returns at most 100 theorems by default (`maxSuggestions`). In a large development, the project's own theorems can fill those places and push out the Mathlib lemmas a goal needs. Deny lists remove theorems from the suggestions:
+
+| Extension               | An entry `"X"` removes                                                                      |
+| :---------------------- | :------------------------------------------------------------------------------------------ |
+| `nameDenyListExt`       | Every theorem whose name has a component equal to `X` (`X.foo` and `A.X.foo`, not `Xs.foo`) |
+| `moduleDenyListExt`     | Every theorem from a module whose name has a component equal to `X`                         |
+| `typePrefixDenyListExt` | Every theorem whose conclusion's head constant has the name prefix `X`                      |
+
+The components `Lake`, `Lean`, `Internal` and `Tactic` are denied for names and modules out of the box, so a project lemma named `MyLib.Tactic.foo` is never suggested.
+
+An entry is added with a command and stored in the module's `.olean`:
+
+```lean
+import Lean.LibrarySuggestions.Basic
+import Lean.Elab.Command
+
+-- Hides every theorem with a name component `Scratch` from library suggestions.
+run_cmd Lean.modifyEnv fun env =>
+  Lean.LibrarySuggestions.nameDenyListExt.addEntry env "Scratch"
+```
+
+The entry applies to the rest of the same file and to every module that imports it, directly or transitively. A separate small module per denied name lets each file choose what to hide. One formalization of about 175,000 modules had five such modules, each denying one of its own libraries.
+
+Measured on Lean `v4.35.0`, in a file that imports a module denying `"Secret"`:
+
+| Goal closed by             | `grind +suggestions` | `exact?` |
+| :------------------------- | :------------------- | :------- |
+| `Secret.p_all : P n`       | Fails                | Succeeds |
+| `Outer.Secret.q_all : Q n` | Fails                | —        |
+| `Open.r_all : R n`         | Succeeds             | —        |
+
+A deny list only changes what is suggested. The denied theorems can still be named explicitly (`exact Secret.p_all 3`), and the command adds no declaration, so it does not affect soundness (`lean4-cli` → `soundness_and_axiom_audit.md`).
 
 ---
 
@@ -223,7 +260,7 @@ Whenever you find a candidate lemma via Loogle, execute this 3-step workflow bef
    import Mathlib.Analysis.Complex.Trigonometric
    ```
 
-   > **Note on Granular Imports**: Prefer importing the specific module (e.g. `import Mathlib.Analysis.Complex.Trigonometric`) rather than the monolithic `import Mathlib`. Granular imports drastically reduce compile times and memory consumption during build and language server elaboration.
+   > **Note on Imports**: Importing the specific module (e.g. `import Mathlib.Analysis.Complex.Trigonometric`) makes the lemma available without loading all of Mathlib, which lowers the memory and load time of every process that checks the file. It does not change rebuild times. Whether to use targeted imports or `import Mathlib` is a per-file choice; see `lean4-mathlib-use` → `minimal_imports_and_shake.md` §1.
 
 3. **Verify declaration resolution**:
    Confirm the lemma is accessible in your environment (e.g. via `#check Real.sin` or checking diagnostics with `lean_goal.py`) before attempting to close proof goals with it.
@@ -325,7 +362,7 @@ Matched 2 declaration(s):
 ### Anti-Patterns to Avoid
 
 - **Assuming inline tactic failure means Mathlib lacks the lemma**: `exact?` and `rw?` only inspect transitively imported modules in the current file. If an inline search fails on a reasonable mathematical step, do not assume the theorem does not exist in Mathlib; transition to Loogle (`search_loogle.py`) to search the global library.
-- **Leaving expensive inline search tactics active under broad imports**: Inserting `rw?` or `apply?` into a file that imports monolithic modules (such as `import Mathlib`) triggers unbounded unification across tens of thousands of declarations, causing severe language server lag or heartbeat exhaustion errors.
+- **Leaving expensive inline search tactics active under broad imports**: In a file that imports all of Mathlib, every `rw?` or `apply?` considers candidates from hundreds of thousands of imported constants and is re-run on each re-elaboration, which can cause language server lag or heartbeat exhaustion. Remove search tactics as soon as they have answered.
 - **Forgetting to import the lemma's module**: Loogle searches the entire Mathlib corpus across all unimported modules. Finding a lemma like `Real.sin` or `Real.sqrt_le_sqrt` does NOT mean it is currently in scope. Always extract the `Module` attribute from the result and add `import <Module>` to your file header before using it.
 - **Never guess lemma names without checking**: Hallucinating identifiers (e.g., `Mathlib.Theorem.pythagorean`) causes `unknown identifier` compilation errors.
 - **Do not overload Loogle queries**: Writing overly complex signatures with 10 type variables causes Loogle timeouts. Start with key constants or subexpressions (e.g., `_ * (_ ^ _)`), then refine.

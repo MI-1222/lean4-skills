@@ -85,17 +85,24 @@ Lean knows an instance exists for a canonical type, but type inference hasn't de
 
 ### Scenario 5: Typeclass Resolution Loop / Timeout
 
-- **Symptom**: `maximum synthInstance heartbeats exceeded`.
+- **Symptom**: `failed to synthesize ...` followed by `(deterministic) timeout at 'typeclass', maximum number of heartbeats (20000) has been reached`.
 - **Prescription**:
-  - Check for cyclic instance definitions or redundant overlapping instances.
-  - Temporarily raise the limit to confirm if it terminates:
+  - Check for cyclic instance definitions or redundant overlapping instances (`set_option trace.Meta.synthInstance true in` shows the search).
+  - Temporarily raise the limit (default `20000`) for one declaration to confirm whether the search terminates:
     ```lean
-    set_option synthInstance.maxHeartbeats 40000
+    set_option synthInstance.maxHeartbeats 40000 in
+    theorem my_thm : ... := by ...
     ```
+    If it is kept, add a comment after `in` explaining why, as for `maxHeartbeats`.
   - Provide the instance explicitly using term mode or `@` notation:
     ```lean
     @lemma_name _ inst_var ...
     ```
+
+#### Related limits that fail silently
+
+- **`synthInstance.maxSize`** (default `128`) bounds how many instances one solution may use. When it is exceeded, Lean reports a plain `failed to synthesize instance of type class` **without naming the limit**, exactly like a missing instance. Suspect it when an instance clearly exists but the type is deeply nested (large towers of structures, long `Fin`/`Prod` chains). Confirm with `set_option synthInstance.maxSize 256 in`.
+- **`maxSynthPendingDepth`** (Lean default `1`) bounds nested typeclass problems created while solving unification constraints. Mathlib builds with `3` (in its lakefile `leanOptions`), so a snippet that elaborates inside a Mathlib build can fail in a project or a `lake env lean` run that uses Lean's default. Match the setting before debugging further; some projects lower it back to `1` in individual files where deeper search is too slow.
 
 ---
 
